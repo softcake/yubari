@@ -1,0 +1,1 @@
+typeSearchIndex = [{"p":"org.softcake.yubari.connect","l":"Connect"},{"p":"org.softcake.yubari.transport","l":"Transport"}]
