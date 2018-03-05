@@ -53,10 +53,6 @@ subprojects { subProject ->
 
             javadoc {
 
-                options.addStringOption('-module-path', classpath.asPath)
-
-
-
                 afterEvaluate {
                     options.header = "${project.description} of ${rootProject.description}."
                 }
