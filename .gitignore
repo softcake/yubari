@@ -1,0 +1,26 @@
+# Gradle
+.gradle
+build/
+
+# Eclipse
+/.classpath
+/.settings/
+/.project
+/bin/
+
+# IntelliJ
+.idea
+*.iml
+*.ipr
+*.iws
+/out/
+/.idea/
+# Misc
+*.log
+
+# lazybones
+.lazybones/
+lazybones.groovy
+
+# key files Files #
+*.gpg

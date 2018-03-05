@@ -1,0 +1,115 @@
+/*
+ *
+ * Copyright 2018 softcake.org.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+afterEvaluate {
+  assert description: "Project $project.path is published, must have a description"
+}
+allprojects { subProject ->
+
+    if (subProject in publishedModules) {
+        apply plugin: 'maven-publish'
+        apply plugin: 'ru.vyarus.pom'
+
+        publishing {
+            publications {
+                nebula(MavenPublication) {
+                    from components.java
+//            artifact project.tasks.javadocJar
+//            artifact project.tasks.sourceJar
+                }
+            }
+        }
+
+        uploadArchives.enabled = false
+
+        pom {
+            name "${project.group}:${project.name}"
+            description "Module \"${project.name}\" of softcake ${rootProject.name}."
+            inceptionYear project.buildYear
+            packaging 'jar'
+            developers {
+                developer {
+                    id 'softcake'
+                    name 'Rene Neubert'
+                    email 'rene.neubert@softcake.org'
+                    roles {
+                        role 'owner'
+                    }
+                }
+            }
+        }
+
+        Javadoc javadocTask = (Javadoc) project.tasks.getByName('javadoc')
+
+        tasks.create('javadocJar', Jar) {
+            dependsOn javadocTask
+            from javadocTask.destinationDir
+            classifier 'javadoc'
+            extension 'jar'
+            group 'build'
+        }
+
+        tasks.create('sourceJar', Jar) {
+            dependsOn project.tasks.getByName('classes')
+            from project.sourceSets.main.allSource
+            classifier 'sources'
+            extension 'jar'
+            group 'build'
+        }
+
+        tasks.withType(Jar) {
+            group 'Jars'
+            from(rootProject.projectDir) {
+                include 'LICENSE.md'
+                into 'META-INF'
+            }
+        }
+
+        compileJava.doLast {
+            rootProject.generateManifest = true
+        }
+
+        afterEvaluate {
+            jar {
+                onlyIf {
+                    rootProject.generateManifest
+                }
+                manifest {
+                    attributes(
+                            'Created-By': "${System.properties['java.version']} (" +
+                                    "${System.properties['java.vendor']} " +
+                                    "${System.properties['java.vm.version']})".toString(),
+                            'Built-By': builtByValue,
+                            'Build-Date': project.buildDate,
+                            'Build-Time': project.buildTime,
+                            'Build-Revision': project.buildRevision,
+                            'Built-Gradle': gradle.gradleVersion,
+                            'Specification-Title': project.name,
+                            'Specification-Version': project.normalizeVersion(project.version),
+                            'Specification-Vendor': project.domain,
+                            'Implementation-Title': project.name,
+                            'Implementation-Version': project.version,
+                            'Implementation-Vendor': project.domain,
+                            'Automatic-Module-Name': project.javaModule.name)
+
+                }
+            }
+        }
+    }
+
+}
+

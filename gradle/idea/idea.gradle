@@ -1,0 +1,309 @@
+/*
+ *
+ * Copyright 2018 softcake.org.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+
+if (!isCi) {
+    apply plugin: "idea"
+
+    idea {
+        module {
+            excludeDirs += [file(".gradle"), file('.idea')]
+            iml {
+                //if you like to keep *.iml in a secret folder
+                generateTo = file("${rootDir}/.idea")
+
+            }
+        }
+        project {
+
+            jdkName rootProject.javacRelease
+            languageLevel "1.8"
+            vcs = "Git"
+
+           setupIDEA()
+        }
+    }
+
+}
+
+void setupIDEA(){
+    def ideaFolderPath = "${rootDir}/.idea"
+    def ideaFolder = new File(ideaFolderPath)
+
+    if (!ideaFolder.exists()) {
+        return
+    }
+
+    createCopyright()
+    createCodeStyle()
+    createCheckStyle()
+    setupGitFlow()
+    setupGradle()
+    setupSonarLint("develop")
+
+}
+
+
+
+void createCopyright() {
+    def copyrightFolderPath = "${rootDir}/.idea/copyright"
+    def copyrightFolder = new File(copyrightFolderPath)
+
+    if (!copyrightFolder.exists()) {
+        copyrightFolder.mkdirs()
+    }
+
+    def copyrightFile = new File(copyrightFolderPath + "/ASL2.xml")
+
+    if (!copyrightFile.exists()) {
+        String xml = "<component name=\"CopyrightManager\">\n" +
+                "<copyright>\n" +
+                "<option name=\"notice\" value=\"Copyright \$today.year softcake.org.&#10;&#10;Licensed under the Apache License, Version 2.0 (the &quot;License&quot;).&#10;you may not use this file except in compliance with the License.&#10;You may obtain a copy of the License at&#10;&#10;   http://www.apache.org/licenses/LICENSE-2.0&#10;&#10;Unless required by applicable law or agreed to in writing, software&#10;distributed under the License is distributed on an &quot;AS IS&quot; BASIS,&#10;WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.&#10;See the License for the specific language governing permissions and&#10;limitations under the License.\" />\n" +
+                "<option name=\"keyword\" value=\"Copyright\" />\n" +
+                "<option name=\"allowReplaceKeyword\" value=\"\" />\n" +
+                "<option name=\"myName\" value=\"ASL2\" />\n" +
+                "<option name=\"myLocal\" value=\"true\" />\n" +
+                "</copyright>\n" +
+                "</component>"
+
+        printXml(new XmlParser().parseText(xml), copyrightFile)
+    }
+
+    def profileSettings = new File(copyrightFolderPath + "/profiles_settings.xml")
+
+    if (profileSettings.exists()) {
+
+        def copyrightManager = new XmlParser().parse(profileSettings)
+
+        def copyrightManagerSettings = copyrightManager.children().find {
+
+            it.name() == "settings"
+
+        }
+
+        copyrightManagerSettings.@default = "ASL2"
+
+        def module2copyright = copyrightManagerSettings.module2copyright
+
+        def productionCodeModule = module2copyright.element.find {
+
+            it.@module == "Production" && it.@copyright == "ASL2"
+
+        }
+
+        if (!module2copyright) {
+            String xml = "<module2copyright>\n" +
+                    "<element module=\"Production\" copyright=\"ASL2\"/>\n" +
+                    "</module2copyright>"
+
+            copyrightManagerSettings.append(new XmlParser().parseText(xml))
+
+        } else if (productionCodeModule == null) {
+            String xml = "<element module=\"Production\" copyright=\"ASL2\" />"
+            module2copyright.first().append(new XmlParser().parseText(xml))
+        }
+        printXml(copyrightManager, profileSettings)
+
+    } else {
+        String xml = "<component name=\"CopyrightManager\">\n" +
+                "<settings default=\"ASL2\">\n" +
+                "<module2copyright>\n" +
+                "<element module=\"Production\" copyright=\"ASL2\" />\n" +
+                "</module2copyright>\n" +
+                "</settings>\n" +
+                "</component>"
+
+        printXml(new XmlParser().parseText(xml), profileSettings)
+    }
+}
+
+
+void createCodeStyle() {
+    def codeStyleTargetPath = "${rootDir}/.idea/codeStyles"
+    def codeStyleFolder = new File(codeStyleTargetPath)
+
+    if (!codeStyleFolder.exists()) {
+        codeStyleFolder.mkdirs()
+    }
+    def codeStyleSourcePath = "${rootDir}/gradle/idea"
+    copyFile(codeStyleSourcePath + "/Project.xml", codeStyleTargetPath + "/Project.xml")
+    copyFile(codeStyleSourcePath + "/codeStyleConfig.xml", codeStyleTargetPath + "/codeStyleConfig.xml")
+
+}
+
+static void copyFile(String sourcePath, String targetPath) {
+    java.nio.file.Path source = new File(sourcePath).toPath()
+    java.nio.file.Path target = new File(targetPath).toPath()
+    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+
+}
+
+
+void createCheckStyle() {
+    def checkStyleTargetPath = "${rootDir}/.idea"
+
+    def checkStyleFile = new File(checkStyleTargetPath + "/checkstyle-idea.xml")
+    if (!checkStyleFile.exists()) {
+
+        def checkStyleSourcePath = "${rootDir}/gradle/idea"
+        copyFile(checkStyleSourcePath + "/checkstyle-idea.xml", checkStyleTargetPath + "/checkstyle-idea.xml")
+        return
+
+    }
+    Node node = new XmlParser().parse(checkStyleFile)
+
+    Node checkStyleConfiguration = node.component.find {
+        it.@name == "CheckStyle-IDEA"
+    }
+
+    if (checkStyleConfiguration) {
+        String xml =
+                "<component name=\"CheckStyle-IDEA\">\n" +
+                        "<option name=\"configuration\">\n" +
+                        "<map>\n" +
+                        "<entry key=\"active-configuration\" value=\"PROJECT_RELATIVE:\$PRJ_DIR\$/config/checkstyle/softcake_checks.xml:The default softcake rules\" />\n" +
+                        "<entry key=\"checkstyle-version\" value=\"8.8\" />\n" +
+                        "<entry key=\"location-0\" value=\"CLASSPATH:/sun_checks.xml:The default Checkstyle rules\" />\n" +
+                        "<entry key=\"location-1\" value=\"PROJECT_RELATIVE:\$PRJ_DIR\$/config/checkstyle/softcake_checks.xml:The default softcake rules\" />\n" +
+                        "<entry key=\"property-1.basedir\" value=\"softcake_suppressions.xml\" />\n" +
+                        "<entry key=\"scan-before-checkin\" value=\"false\" />\n" +
+                        "<entry key=\"scanscope\" value=\"JavaOnlyWithTests\" />\n" +
+                        "<entry key=\"suppress-errors\" value=\"false\" />\n" +
+                        "<entry key=\"thirdparty-classpath\" value=\"\" />\n" +
+                        "</map>\n" +
+                        "</option>\n" +
+                        "</component>"
+
+
+        checkStyleConfiguration.replaceNode(new XmlParser().parseText(xml))
+        printXml(node, checkStyleFile)
+    }
+
+}
+
+void setupGradle() {
+    def gradleFolderPath = "${rootDir}/.idea"
+
+    def gradleFile = new File(gradleFolderPath + "/gradle.xml")
+    if (gradleFile.exists()) {
+        Node node = new XmlParser().parse(gradleFile)
+        findAndSet("createEmptyContentRootDirectories", node, true)
+        findAndSet("distributionType", node, "WRAPPED")
+        findAndSet("useAutoImport", node, true)
+        findAndSet("resolveModulePerSourceSet", node, true)
+        findAndSet("gradleJvm", node, javacRelease)
+        printXml(node, gradleFile)
+    }
+}
+
+void findAndSet(String name, Node node, Object value) {
+    Node object = node.component.option.GradleProjectSettings.option.find {
+        it.@name == name
+
+    }
+    if (object != null) {
+        object.@value = value
+    } else {
+        String xml = "<option name=\"$name\" value=\"$value\" />"
+        Node settings = node.depthFirst().find {
+            it.name() == "GradleProjectSettings"
+
+        }
+        if (settings != null) {
+            settings.append(new XmlParser().parseText(xml))
+        }
+    }
+}
+
+void setupGitFlow() {
+    def gradleFolderPath = "${rootDir}/.idea"
+
+    def gradleFile = new File(gradleFolderPath + "/workspace.xml")
+    if (gradleFile.exists()) {
+        Node node = new XmlParser().parse(gradleFile)
+        findAndSetGitFlow("Gitflow.featureFetchOrigin", node, true)
+        findAndSetGitFlow("Gitflow.featureKeepRemote", node, false)
+        findAndSetGitFlow("Gitflow.featureKeepLocal", node, false)
+        findAndSetGitFlow("Gitflow.featureNoFastForward", node, true)
+        findAndSetGitFlow("Gitflow.releaseFetchOrigin", node, true)
+        findAndSetGitFlow("Gitflow.pushOnFinishRelease", node, true)
+        findAndSetGitFlow("Gitflow.dontTagRelease", node, true)
+        findAndSetGitFlow("Gitflow.useCustomTagCommitMessage", node, false)
+        findAndSetGitFlow("Gitflow.hotfixFetchOrigin", node, true)
+        findAndSetGitFlow("Gitflow.pushOnFinishHotfix", node, true)
+        findAndSetGitFlow("Gitflow.dontTagHotfix", node, true)
+
+        printXml(node, gradleFile)
+    }
+}
+
+void findAndSetGitFlow(String name, Node node, Object value) {
+
+    Node propertiesComponent = node.component.find {
+        if (it.@name == "PropertiesComponent")
+            return it
+    }
+    if (propertiesComponent == null) {
+        return
+    }
+
+    Node property = propertiesComponent.property.find {
+        if (it.@name == name) {
+            it.@value = value
+            return it
+        }
+    }
+}
+
+void printXml(Node node, File file) {
+    def printer = new XmlNodePrinter(new PrintWriter(new FileWriter(file)))
+    printer.preserveWhitespace = true
+    printer.print(node)
+}
+
+void setupSonarLint(String branch) {
+    def sonarTargetPath = "${rootDir}/.idea"
+
+    def sonarFile = new File(sonarTargetPath + "/sonarlint.xml")
+    if (!sonarFile.exists()) {
+
+        def sonarSourcePath = "${rootDir}/gradle/idea"
+        copyFile(sonarSourcePath + "/sonarlint.xml", sonarTargetPath + "/sonarlint.xml")
+        return
+
+    }
+    Node node = new XmlParser().parse(sonarFile)
+
+    Node sonarConfiguration = node.component.find {
+        it.@name == "SonarLintProjectSettings"
+    }
+
+    if (sonarConfiguration) {
+        String xml =
+                "<component name=\"SonarLintProjectSettings\">\n" +
+                        "<option name=\"bindingEnabled\" value=\"true\" />\n" +
+                        "<option name=\"projectKey\" value=\"${rootProject.group}:${branch}\" />\n" +
+                        "<option name=\"serverId\" value=\"sonar.aldeso.com\" />\n" +
+                        "</component>"
+
+
+        sonarConfiguration.replaceNode(new XmlParser().parseText(xml))
+        printXml(node, sonarFile)
+    }
+}

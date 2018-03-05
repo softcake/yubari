@@ -1,0 +1,126 @@
+/*
+ *
+ * Copyright 2018 softcake.org.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import groovyx.net.http.RESTClient
+
+import static groovyx.net.http.ContentType.JSON
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'org.codehaus.groovy.modules.http-builder:http-builder:0.7.1'
+    }
+}
+allprojects { subProject ->
+
+    if (subProject in publishedModules) {
+        apply plugin: 'com.jfrog.bintray'
+
+        bintrayUpload {
+            doFirst {
+                createBintrayRepository(rootProject.name, project)
+            }
+            onlyIf {
+                project.publishArtifacts && !project.isSnapshot && project.hasTravisSecEnv && project.isValidBranch
+            }
+        }
+
+//noinspection GroovyAssignabilityCheck
+        bintray {
+
+            user = project.bintrayUser
+            key = project.bintrayKey
+            dryRun = project.isSnapshot
+            publish = true
+            publications = ['nebula']
+
+            pkg {
+
+                repo = rootProject.name
+                name = project.name
+                userOrg = project.bintrayUserOrg
+                desc = description
+                labels = ['softcake', 'lemon', 'java']
+                publicDownloadNumbers = true
+                licenses = ['Apache-2.0']
+
+
+                version {
+
+                    released = new Date()
+                    name = project.version.toString()
+                    vcsTag = project.version.toString()
+                    attributes = ['softcake': [project.group, project.name].join(':')]
+
+                    gpg {
+                        sign = true
+                    }
+
+                    mavenCentralSync {
+                        sync = project.mavenSync
+                        def ossUser = project.sonatypeOssUsername
+                        def ossPass = project.sonatypeOssPassword
+                        user = ossUser
+                        password = ossPass
+                        close = '1'
+
+                    }
+                }
+            }
+        }
+    }
+}
+/**
+ * Create a Bintray repository.
+ *
+ */
+def createBintrayRepository(String reponame, Project project) {
+
+    def response
+    try {
+        String user = project.bintrayUser
+        String pass = project.bintrayKey
+
+        RESTClient rest = new RESTClient("https://api.bintray.com/repos/")
+        rest.auth.basic(user, pass)
+        response = rest.post(path: "$github.user/${reponame}",
+                contentType: JSON,
+                body: [name             : reponame,
+                       type             : "maven",
+                       private          : false,
+                       desc             : project.description,
+                       gpg_sign_metadata: true,
+                       gpg_sign_files   : true,
+                       gpg_use_owner_key: false]
+        )
+        if (response.status == 201) {
+
+            logger.debug("Bintray repository \"${project.name}\" successfully created.")
+
+        } else {
+
+            logger.debug("Error!... creating Bintray repository \"${project.name}\".")
+        }
+    }
+
+    catch (ex) {
+        logger.debug("Bintray repository \"${project.name}\" exists already!")
+
+    }
+}

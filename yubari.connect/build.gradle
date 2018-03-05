@@ -1,0 +1,11 @@
+plugins {
+    id 'java-library'
+}
+
+javaModule.name = "org.softcake.yubari.connect"  
+description = " The Connect module of the Yubari project."
+
+dependencies {
+    //api project(':yubari.___')
+    //implemetation project(':yubari.___')
+}

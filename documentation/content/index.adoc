@@ -1,0 +1,40 @@
+
+= {projectName}  - User Guide & Examples
+Rene Neubert - @softcake.org
+:revnumber: {project-version}
+
+link:api/index.html[API Docs]
+
+== Introduction
+
+
+=== Benefits of Project
+
+=== Getting Started
+
+=== Content
+
+.Demo class example
+[source,java]
+----
+include::{mainDir}/org/softcake/yubari/documentation/Documentation.java[tags=exampleDemo]
+----
+
+IMPORTANT: Important Note!
+
+== Change Log
+
+include::{changelogDir}/changelog.md[]
+
+== About This Project
+
+
+=== Maintainers
+
+* https://github.com/softcake[Softcake Team]
+
+=== Contributors
+
+* https://github.com/ReneNeubert[Rene Neubert]
+
+

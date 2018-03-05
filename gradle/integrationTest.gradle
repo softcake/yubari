@@ -1,0 +1,74 @@
+/*
+ *
+ * Copyright 2018 softcake.org.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+apply plugin: 'idea'
+sourceSets {
+    integrationTest {
+        java {
+            compileClasspath += main.output + test.output
+            runtimeClasspath += main.output + test.output
+            srcDir file('src/integrationTest/java')
+
+            integrationTest.runtimeClasspath += integrationTest.output
+        }
+        resources.srcDir file('src/integrationTest/resources')
+    }
+}
+
+configurations {
+    integrationTestImplementation.extendsFrom testImplementation
+    integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+idea {
+    module {
+        testSourceDirs += file('src/integrationTest/java')
+        scopes.TEST.plus += [configurations.integrationTestRuntimeClasspath, configurations.integrationTestCompileClasspath]
+    }
+}
+
+task integrationTest(type: Test) {
+    group = JavaBasePlugin.VERIFICATION_GROUP
+
+    testClassesDirs += sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
+
+    mustRunAfter test
+
+    reports {
+        junitXml.enabled = true
+        html.enabled = false
+    }
+
+    if (project.plugins.hasPlugin(JacocoPlugin)) {
+
+        jacoco {
+            destinationFile = file("$buildDir/jacoco/integrationTest.exec")
+        }
+    }
+
+    useJUnitPlatform {
+    }
+    filter {
+        //include all integration tests
+        includeTestsMatching "*IntegTest*"
+        includeTestsMatching "*IntegrationTest*"
+        failOnNoMatchingTests true
+    }
+}
+
+check.dependsOn(integrationTest)

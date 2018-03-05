@@ -1,0 +1,148 @@
+/*
+ *
+ * Copyright 2018 softcake.org.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+import org.gradle.api.tasks.wrapper.Wrapper.DistributionType
+
+task cleanRoot(type: Delete) {
+    delete "$buildDir"
+    followSymlinks = true
+    group JavaBasePlugin.BUILD_TASK_NAME
+}
+
+task wrapper(type: Wrapper) {
+    description = 'Generates gradlew[.bat] scripts'
+    distributionType = DistributionType.BIN
+    gradleVersion = '4.6'
+
+}
+
+subprojects { subProject ->
+    apply plugin: "com.zyxist.chainsaw"
+    apply plugin: "org.junit.platform.gradle.plugin"
+    if (subProject.plugins.hasPlugin(JavaPlugin)) {
+
+
+
+        ext.javacRelease = rootProject.javacRelease
+
+
+
+        subProject.afterEvaluate { evaluatedProject ->
+            evaluatedProject.tasks.withType(JavaCompile) {
+
+                sourceCompatibility = javacRelease
+                targetCompatibility = javacRelease
+
+                options.compilerArgs += ['--release', javacRelease]
+                options.encoding = 'UTF-8'
+
+            }
+
+            javadoc {
+
+                options.addStringOption('-module-path', classpath.asPath)
+
+
+
+                afterEvaluate {
+                    options.header = "${project.description} of ${rootProject.description}."
+                }
+                options.memberLevel = JavadocMemberLevel.PROTECTED
+                options.author = true
+                options.header = project.name
+                options.addStringOption('Xdoclint:html,syntax', '-quiet')
+                options.addMultilineStringsOption('tag').setValue(['apiNote:a:API Note:', 'implSpec:a:Implementation Requirements:', 'implNote:a:Implementation Note:'])
+                options.encoding = 'UTF-8'
+                options.links('http://docs.oracle.com/javase/9/docs/api/',
+                        'http://google.github.io/guava/releases/21.0/api/docs/')
+            }
+
+
+            test {
+                useJUnitPlatform {
+                }
+                testLogging.exceptionFormat = 'full'
+                reports {
+                    junitXml.enabled = true
+                    junitXml.destination(file('build/test-results/folder'))
+                }
+            }
+
+            junitPlatformTest {
+                if (project.plugins.hasPlugin(JacocoPlugin)) {
+
+                    jacoco {
+                        append = false
+                        destinationFile = file("$buildDir/jacoco/test.exec")
+                    }
+                }
+
+            }
+
+        }
+        // See: https://docs.oracle.com/javase/9/tools/javac.htm#JSWOR627
+
+        compileJava.options.compilerArgs += [
+                '-Xlint:cast',
+                '-Xlint:classfile',
+                '-Xlint:deprecation',
+                '-Xlint:dep-ann',
+                '-Xlint:divzero',
+                '-Xlint:empty',
+                '-Xlint:fallthrough',
+                '-Xlint:finally',
+                '-Xlint:overrides',
+                '-Xlint:path',
+                '-Xlint:processing',
+                '-Xlint:rawtypes',
+                '-Xlint:serial',
+                '-Xlint:static',
+                '-Xlint:try',
+                '-Xlint:unchecked',
+                '-Xlint:varargs',
+                '-Xlint:-options',
+                '-Werror'
+        ]
+
+        // See: https://docs.oracle.com/javase/9/tools/javac.htm#JSWOR627
+
+        compileTestJava.options.compilerArgs += [
+                '-Xlint:cast',
+                '-Xlint:classfile',
+                '-Xlint:deprecation',
+                '-Xlint:dep-ann',
+                '-Xlint:divzero',
+                '-Xlint:empty',
+                '-Xlint:fallthrough',
+                '-Xlint:finally',
+                '-Xlint:path',
+                '-Xlint:processing',
+                '-Xlint:rawtypes',
+                '-Xlint:serial',
+                '-Xlint:static',
+                '-Xlint:try',
+                '-Xlint:unchecked',
+                '-Xlint:varargs',
+                '-Xlint:-options',
+                '-Xlint:-overrides'
+        ]
+
+        compileTestJava {
+            options.encoding = 'UTF-8'
+            options.compilerArgs += '-parameters'
+        }
+    }
+}

@@ -1,0 +1,33 @@
+<!--
+  ~
+  ~ Copyright 2018 softcake.org.
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License").
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<project version="4">
+  <component name="CheckStyle-IDEA">
+    <option name="configuration">
+      <map>
+        <entry key="active-configuration" value="PROJECT_RELATIVE:$PRJ_DIR$/config/checkstyle/softcake_checks.xml:The default softcake rules"/>
+        <entry key="checkstyle-version" value="8.8"/>
+        <entry key="location-2" value="PROJECT_RELATIVE:$PRJ_DIR$/config/checkstyle/softcake_checks.xml:The default softcake rules"/>
+        <entry key="property-2.basedir" value="softcake_suppressions.xml"/>
+        <entry key="scan-before-checkin" value="false"/>
+        <entry key="scanscope" value="JavaOnlyWithTests"/>
+        <entry key="suppress-errors" value="false"/>
+        <entry key="thirdparty-classpath" value=""/>
+      </map>
+    </option>
+  </component>
+</project>
