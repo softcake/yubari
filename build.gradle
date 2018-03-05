@@ -51,9 +51,9 @@ description = "The Yubari Project."
 allprojects {
 
     repositories {
-        jcenter()
         mavenLocal()
         mavenCentral()
+        jcenter()
     }
 
     apply plugin: "ru.vyarus.github-info"
@@ -82,7 +82,7 @@ ext {
 
     publishedModules = projectModules.findAll {
         (it.name in ["yubari.connect",
-"yubari.transport"])
+                     "yubari.transport"])
     }
 
     integTestModules = projectModules.findAll {
@@ -130,6 +130,9 @@ allprojects {
             dependency "org.apache.logging.log4j:log4j-core:${log4jVersion}"
             dependency "org.apache.logging.log4j:log4j-jul:${log4jVersion}"
             dependency "com.google.guava:guava:24.0-jre"
+            dependency "com.dukascopy.dds2:DDS2-jClient-JForex:3.3.0"
+            dependency "com.dukascopy.api:JForex-API:2.13.49"
+            dependency 'apache-oro:jakarta-oro:2.0.8'
         }
     }
 }
@@ -151,6 +154,9 @@ subprojects { subProject ->
             testRuntimeOnly("org.apache.logging.log4j:log4j-jul")
 
             implementation "com.google.guava:guava"
+
+            implementation "com.dukascopy.dds2:DDS2-jClient-JForex"
+            implementation "com.dukascopy.api:JForex-API"
         }
 
     } else {
@@ -194,9 +200,10 @@ subprojects { subProject ->
     }
 
     repositories {
-        jcenter()
+        //jcenter()
         mavenLocal()
         mavenCentral()
+        maven { url "http://www.dukascopy.com/client/jforexlib/publicrepo" }
     }
 
 }
