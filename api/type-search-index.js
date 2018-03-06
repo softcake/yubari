@@ -1,1 +1,1 @@
-typeSearchIndex = [{"p":"org.softcake.yubari.connect","l":"AuthConstants"},{"p":"org.softcake.yubari.connect","l":"AuthServerProvider"},{"p":"org.softcake.yubari.connect","l":"AuthTestMain"},{"p":"org.softcake.yubari.connect","l":"Connect"},{"p":"org.softcake.yubari.connect","l":"Item"},{"p":"org.softcake.yubari.connect","l":"StaXParser"},{"p":"org.softcake.yubari.transport","l":"Transport"}]
+typeSearchIndex = [{"p":"org.softcake.yubari.connect","l":"Connect"},{"p":"org.softcake.yubari.transport","l":"Transport"}]
