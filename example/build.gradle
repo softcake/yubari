@@ -6,6 +6,5 @@ javaModule.name = "org.softcake.yubari.example"
 description = " The Example module of the Yubari project."
 
 dependencies {
-    //api project(':yubari.___')
-    //implemetation project(':yubari.___')
+
 }

@@ -15,8 +15,10 @@ build/
 *.iws
 /out/
 /.idea/
+
 # Misc
 *.log
+/.log/
 
 # lazybones
 .lazybones/
@@ -24,3 +26,4 @@ lazybones.groovy
 
 # key files Files #
 *.gpg
+/.Log/

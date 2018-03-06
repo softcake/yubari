@@ -23,7 +23,7 @@ if (!isCi) {
 
     idea {
         module {
-            excludeDirs += [file(".gradle"), file('.idea')]
+            excludeDirs += [file(".gradle"), file('.idea'), file('.log')]
             iml {
                 //if you like to keep *.iml in a secret folder
                 generateTo = file("${rootDir}/.idea")

@@ -53,9 +53,7 @@ subprojects { subProject ->
 
             javadoc {
 
-                afterEvaluate {
-                    options.header = "${project.description} of ${rootProject.description}."
-                }
+                options.header = "${project.description} of ${rootProject.description}."
                 options.memberLevel = JavadocMemberLevel.PROTECTED
                 options.author = true
                 options.header = project.name
@@ -70,10 +68,15 @@ subprojects { subProject ->
             test {
                 useJUnitPlatform {
                 }
-                testLogging.exceptionFormat = 'full'
+
+                testLogging {
+                    exceptionFormat = 'full'
+                    //events 'passed', 'skipped', 'failed'
+
+                }
                 reports {
                     junitXml.enabled = true
-                    junitXml.destination(file('build/test-results/folder'))
+                    junitXml.destination(file('build/test-results'))
                 }
             }
 
