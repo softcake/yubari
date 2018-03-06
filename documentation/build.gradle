@@ -24,8 +24,8 @@ javaModule.name = "org.softcake.yubari.documentation"
 
 dependencies {
 
-    implementation 'org.softcake.lemon:lemon-core:1.1.0'
-    testImplementation 'org.softcake.lemon:lemon-core:1.1.0'
+//    implementation 'org.softcake.lemon:lemon-core:1.1.0'
+//    testImplementation 'org.softcake.lemon:lemon-core:1.1.0'
 }
 apply plugin: 'org.asciidoctor.convert'
 apply plugin: "se.bjurr.gitchangelog.git-changelog-gradle-plugin"

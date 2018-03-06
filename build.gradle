@@ -68,11 +68,10 @@ allprojects {
 }
 
 ext {
-    junit4Version = "4.12"
     junitVintageVersion = "5.1.0"
-    junitPlatformVersion = "1.1.0"
     junitJupiterVersion = "5.1.0"
-    log4jVersion = "2.10.0"
+    logbackVersion = "1.3.0-alpha4"
+    slf4jVersion = "1.8.0-beta1"
 }
 
 ext {
@@ -127,12 +126,11 @@ allprojects {
         dependencies {
             dependency "org.junit.jupiter:junit-jupiter-api:${junitJupiterVersion}"
             dependency "org.junit.jupiter:junit-jupiter-engine:${junitJupiterVersion}"
-            dependency "org.apache.logging.log4j:log4j-core:${log4jVersion}"
-            dependency "org.apache.logging.log4j:log4j-jul:${log4jVersion}"
+            dependency "org.slf4j:slf4j-api:${slf4jVersion}"
+            dependency "ch.qos.logback:logback-classic:${logbackVersion}"
+            dependency "ch.qos.logback:logback-core:${logbackVersion}"
             dependency "com.google.guava:guava:24.0-jre"
-            dependency "com.dukascopy.dds2:DDS2-jClient-JForex:3.3.0"
-            dependency "com.dukascopy.api:JForex-API:2.13.49"
-            dependency 'apache-oro:jakarta-oro:2.0.8'
+
         }
     }
 }
@@ -149,14 +147,12 @@ subprojects { subProject ->
             testImplementation("org.junit.jupiter:junit-jupiter-api")
             testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
 
-            // To use Log4J's LogManager
-            testRuntimeOnly("org.apache.logging.log4j:log4j-core")
-            testRuntimeOnly("org.apache.logging.log4j:log4j-jul")
-
             implementation "com.google.guava:guava"
+            // Logging
+            implementation "org.slf4j:slf4j-api"
+            implementation "ch.qos.logback:logback-classic"
+            implementation "ch.qos.logback:logback-core"
 
-            implementation "com.dukascopy.dds2:DDS2-jClient-JForex"
-            implementation "com.dukascopy.api:JForex-API"
         }
 
     } else {
@@ -175,11 +171,8 @@ subprojects { subProject ->
             testImplementation("org.junit.jupiter:junit-jupiter-api")
             testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
 
-            // To use Log4J's LogManager
-            testRuntimeOnly("org.apache.logging.log4j:log4j-core")
-            testRuntimeOnly("org.apache.logging.log4j:log4j-jul")
-
             implementation "com.google.guava:guava"
+
         }
         jar.enabled = false
         javadoc.enabled = false
@@ -222,11 +215,6 @@ private List<Project> getProjectModules() {
 semanticRelease {
     repo {
         ghToken = project.ext.ghToken
-//        releaseAsset aggregateJar, contentType: "application/zip"
-//        releaseAsset aggregateSourcesJar, label: "the sources of the project", contentType:
-//                "application/zip"
-//        releaseAsset aggregateJavadocJar, label: "the javadoc of the project", contentType:
-//                "application/zip"
     }
 }
 
