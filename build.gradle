@@ -1,5 +1,4 @@
 /*
- *
  * Copyright 2018 softcake.org.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -131,6 +130,7 @@ allprojects {
             dependency "ch.qos.logback:logback-core:${logbackVersion}"
             dependency "com.google.guava:guava:24.0-jre"
             dependency "commons-validator:commons-validator:1.6"
+            dependency "org.softcake.lemon:lemon-core:1.1.0"
 
         }
     }
@@ -147,6 +147,8 @@ subprojects { subProject ->
             // JUnit Jupiter API and TestEngine implementation
             testImplementation("org.junit.jupiter:junit-jupiter-api")
             testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+            testImplementation "com.google.guava:guava"
+            testImplementation "org.softcake.lemon:lemon-core"
 
             implementation "com.google.guava:guava"
             // Logging
