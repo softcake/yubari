@@ -17,31 +17,26 @@
 package org.softcake.yubari.connect.authorization;
 
 /**
- * The enum constants for authorization properties.
+ * The Client Mode of Dukascopy platform.
  *
- * @author Rene Neubert
+ * @author René Neubert
  */
-public enum AuthorizationPropertiesNames {
+public enum ClientMode {
 
-
-    JNLP_LOGIN_URL("jnlp.login.url"),
-    JNLP_SRP6_LOGIN_URL("jnlp.srp6.login.url"),
-    JNLP_CLIENT_MODE("jnlp.client.mode"),
-    JNLP_CLIENT_VERSION("jnlp.client.version"),
-    JAVA_NET_PREFER_IPV4_STACK("java.net.preferIPv4Stack");
-
+    DEMO("DEMO"),
+    LIVE("LIVE");
 
     private final String value;
 
-    AuthorizationPropertiesNames(final String value) {
+    ClientMode(final String value) {
 
         this.value = value;
     }
 
     /**
-     * The String representation of the AuthorizationPropertiesNames Enum.
+     * The String representation of the Client Mode Enum.
      *
-     * @return the AuthorizationPropertiesNames as String
+     * @return the Client Mode as String
      */
     public String getValue() {
 

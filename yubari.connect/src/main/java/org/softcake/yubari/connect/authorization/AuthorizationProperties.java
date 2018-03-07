@@ -16,10 +16,7 @@
 
 package org.softcake.yubari.connect.authorization;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Strings.isNullOrEmpty;
-import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.DEMO;
-import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.LIVE;
 
 import com.google.common.base.MoreObjects;
 import org.apache.commons.validator.routines.UrlValidator;
@@ -28,6 +25,9 @@ import org.slf4j.LoggerFactory;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * The authorization properties to connect the authentication server.
@@ -36,11 +36,11 @@ import java.net.URL;
  */
 public class AuthorizationProperties {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthorizationProperties.class);
-    private final String clientMode;
+    private final ClientMode clientMode;
     private final boolean preferIPv4Stack;
     private final String version;
-    private final URL[] loginUrl;
-    private final URL[] loginSrpSixUrl;
+    private final List<URL> loginUrl;
+    private final List<URL> loginSrpSixUrl;
     private final boolean canUseSrpSix;
     private final boolean isLive;
     private final boolean isValid;
@@ -61,34 +61,35 @@ public class AuthorizationProperties {
                                    final String preferIPv4Stack) {
 
         this.version = isNullOrEmpty(clientVersion) ? "99.99.99" : clientVersion.trim();
-        this.loginUrl = isNullOrEmpty(loginUrl) ? new URL[0] : getUrlsFromString(loginUrl);
-        this.loginSrpSixUrl = isNullOrEmpty(srpSixLoginUrl) ? new URL[0] : getUrlsFromString(srpSixLoginUrl);
-        this.clientMode = isNullOrEmpty(clientMode) ? DEMO : clientMode.trim().toUpperCase();
+        this.loginUrl = isNullOrEmpty(loginUrl) ? new ArrayList<>() : getUrlsFromString(loginUrl);
+        this.loginSrpSixUrl = isNullOrEmpty(srpSixLoginUrl) ? new ArrayList<>() : getUrlsFromString(srpSixLoginUrl);
+        this.clientMode = isNullOrEmpty(clientMode) ? ClientMode.DEMO : ClientMode.valueOf(clientMode.trim()
+                                                                                                     .toUpperCase());
         this.preferIPv4Stack = isNullOrEmpty(preferIPv4Stack) || Boolean.parseBoolean(preferIPv4Stack.trim());
-        this.isLive = LIVE.equals(this.clientMode);
-        this.isValid = this.loginUrl.length != 0 || this.loginSrpSixUrl.length != 0;
-        this.canUseSrpSix = this.loginSrpSixUrl.length != 0;
+        this.isLive = ClientMode.LIVE.equals(this.clientMode);
+        this.isValid = !this.loginUrl.isEmpty() || !this.loginSrpSixUrl.isEmpty();
+        this.canUseSrpSix = !this.loginSrpSixUrl.isEmpty();
     }
 
-    private static URL[] getUrlsFromString(final String values) {
+    private static List<URL> getUrlsFromString(final String values) {
 
-        final String message = "The login from jnlp url has not a valid format like http://....., you supplied: %s.";
-        final String[] urlArray = values.split(",");
-        final URL[] urls = new URL[urlArray.length];
-
-        for (int i = 0; i < urlArray.length; i++) {
-
-            final String url = urlArray[i];
-            checkArgument(new UrlValidator(new String[]{"http", "https"}).isValid(url), message, url);
+        final List<String> urlArray = Arrays.asList(values.split(","));
+        List<URL> urls = new ArrayList<>(urlArray.size());
+        for (final String url : urlArray) {
+            UrlValidator validator = new UrlValidator(new String[]{"http", "https"});
 
             try {
-
-                urls[i] = new URL(url);
+                if (validator.isValid(url)) {
+                    urls.add(new URL(url));
+                } else {
+                    LOGGER.debug("The url has not a valid format like http://....., you supplied: {}", url);
+                }
 
             } catch (final MalformedURLException e) {
                 LOGGER.error("Error occurred...", e);
             }
         }
+
         return urls;
     }
 
@@ -97,7 +98,7 @@ public class AuthorizationProperties {
      *
      * @return the mode as String
      */
-    public String clientMode() {
+    public ClientMode clientMode() {
 
         return this.clientMode;
     }
@@ -115,9 +116,9 @@ public class AuthorizationProperties {
     /**
      * The standard URL´s.
      *
-     * @return an array of {@link URL}
+     * @return a list of {@link URL}
      */
-    public URL[] getLoginUrls() {
+    public List<URL> getLoginUrls() {
 
         return this.loginUrl;
     }
@@ -125,9 +126,9 @@ public class AuthorizationProperties {
     /**
      * The SRP6 URL´s.
      *
-     * @return an array of {@link URL}
+     * @return a list of {@link URL}
      */
-    public URL[] getLoginSrpSixUrls() {
+    public List<URL> getLoginSrpSixUrls() {
 
         return this.loginSrpSixUrl;
     }

@@ -49,7 +49,7 @@ public class AuthorizationPropertiesFactory {
      */
     public AuthorizationPropertiesFactory(final String url) {
 
-        final String message = "The jnlp URL does not have a valid format " + "like http://....., you supplied: %s.";
+        final String message = "The jnlp URL does not have a valid format " + "like http://....., you supplied: %s";
 
         final UrlValidator validator = new UrlValidator(new String[]{"http", "https"});
 
@@ -68,12 +68,12 @@ public class AuthorizationPropertiesFactory {
         return connection;
     }
 
-    private AuthorizationProperties getAuthServerUrls(final String jnlp) {
+    private static AuthorizationProperties getAuthServerUrls(final String jnlp) {
 
         AuthorizationProperties properties = null;
         HttpURLConnection connection = null;
         InputStream inputStream = null;
-        URL jnlpUrl = null;
+        URL jnlpUrl;
 
         try {
             jnlpUrl = new URL(jnlp);
@@ -83,6 +83,19 @@ public class AuthorizationPropertiesFactory {
 
         } catch (IOException | XMLStreamException e) {
             LOGGER.error("Error occurred...", e);
+        } finally {
+            if (inputStream != null) {
+
+                try {
+                    inputStream.close();
+                } catch (final IOException e) {
+                    LOGGER.error("Error occurred while closing Inputstream!", e);
+                }
+            }
+
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
 
         return properties;
@@ -95,6 +108,6 @@ public class AuthorizationPropertiesFactory {
      */
     public AuthorizationProperties getAuthorizationProperties() {
 
-        return authorizationProperties == null ? getAuthServerUrls(this.url) : this.authorizationProperties;
+        return getAuthServerUrls(this.url);
     }
 }
