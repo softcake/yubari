@@ -1,6 +1,4 @@
-
 /*
- *
  * Copyright 2018 softcake.org.
  *
  * Licensed under the Apache License, Version 2.0 (the "License").
@@ -23,7 +21,6 @@ import java.text.SimpleDateFormat
 status = version.toString().endsWith("-SNAPSHOT") ? 'snapshot' : 'release'
 
 Date buildTimeAndDate = new Date()
-final BRANCH_NAMES_PATTERN = /^(?:release[-\/])?[0-9]+(\.[0-9]+)?\.x$|^(?:feature[-\/]|hotfix[-\/]|develop|master)?$/
 
 ext {
     isSnapshot = version.toString().endsWith("-SNAPSHOT")
@@ -40,7 +37,7 @@ ext {
     buildRevision = versioning.info.commit
     builtByValue = project.hasProperty("builtBy") ? project.builtBy : project.defaultBuiltBy
     generateManifest = false
-    isValidBranch = versioning.info.branch.matches(BRANCH_NAMES_PATTERN)
+    isValidBranch = versioning.info.branchType == "feature" || versioning.info.branchType == "master" || versioning.info.branchType == "develop" || versioning.info.branchType == "hotfix"
 }
 
 ext.normalizeVersion = { versionLiteral ->

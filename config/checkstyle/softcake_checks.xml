@@ -1,6 +1,5 @@
 <?xml version="1.0"?>
 <!--
-  ~
   ~ Copyright 2018 softcake.org.
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License").
@@ -24,7 +23,7 @@
         <property name="file" value="${basedir}" default="/"/>
     </module>
     <module name="BeforeExecutionExclusionFileFilter">
-        <property name="fileNamePattern" value="module\-info\.java$" />
+        <property name="fileNamePattern" value="module\-info\.java$"/>
     </module>
 
     <module name="SuppressWarningsFilter"/>
@@ -49,9 +48,9 @@
         <property name="max" value="1500"/>
         <property name="fileExtensions" value="java"/>
     </module>
-    <module name="JavadocPackage">
-        <property name="allowLegacy" value="false"/>
-    </module>
+    <!--<module name="JavadocPackage">-->
+    <!--<property name="allowLegacy" value="false"/>-->
+    <!--</module>-->
     <!-- Headers -->
     <module name="Header">
         <property
@@ -153,7 +152,6 @@
                       value="\\u00(08|09|0(a|A)|0(c|C)|0(d|D)|22|27|5(C|c))|\\(0(10|11|12|14|15|42|47)|134)"/>
             <property name="message" value="Avoid using corresponding octal or Unicode escape."/>
         </module>
-        <module name="IllegalType"/>
         <module name="InnerAssignment"/>
         <module name="MagicNumber"/>
         <module name="MissingCtor">
@@ -253,9 +251,9 @@
             <!-- avoid errors on tag '@noinspection' -->
             <property name="allowUnknownTags" value="true"/>
         </module>
-        <module name="JavadocVariable">
+        <!--<module name="JavadocVariable">
             <property name="scope" value="public"/>
-        </module>
+        </module>-->
         <module name="NonEmptyAtclauseDescription"/>
         <module name="SingleLineJavadoc">
             <property name="ignoreInlineTags" value="false"/>
@@ -322,7 +320,6 @@
         <!-- Modifiers -->
         <module name="ModifierOrder"/>
         <module name="RedundantModifier"/>
-
 
 
         <!-- Naming Conventions -->
@@ -466,22 +463,22 @@
             <property name="tokens" value="DOT"/>
             <property name="allowLineBreaks" value="true"/>
         </module>
-       <!-- <module name="OperatorWrap"/>
-        <module name="OperatorWrap">
-            <property name="tokens" value="ASSIGN"/>
-            <property name="tokens" value="DIV_ASSIGN"/>
-            <property name="tokens" value="PLUS_ASSIGN"/>
-            <property name="tokens" value="MINUS_ASSIGN"/>
-            <property name="tokens" value="STAR_ASSIGN"/>
-            <property name="tokens" value="MOD_ASSIGN"/>
-            <property name="tokens" value="SR_ASSIGN"/>
-            <property name="tokens" value="BSR_ASSIGN"/>
-            <property name="tokens" value="SL_ASSIGN"/>
-            <property name="tokens" value="BXOR_ASSIGN"/>
-            <property name="tokens" value="BOR_ASSIGN"/>
-            <property name="tokens" value="BAND_ASSIGN"/>
-            <property name="option" value="eol"/>
-        </module>-->
+        <!-- <module name="OperatorWrap"/>
+         <module name="OperatorWrap">
+             <property name="tokens" value="ASSIGN"/>
+             <property name="tokens" value="DIV_ASSIGN"/>
+             <property name="tokens" value="PLUS_ASSIGN"/>
+             <property name="tokens" value="MINUS_ASSIGN"/>
+             <property name="tokens" value="STAR_ASSIGN"/>
+             <property name="tokens" value="MOD_ASSIGN"/>
+             <property name="tokens" value="SR_ASSIGN"/>
+             <property name="tokens" value="BSR_ASSIGN"/>
+             <property name="tokens" value="SL_ASSIGN"/>
+             <property name="tokens" value="BXOR_ASSIGN"/>
+             <property name="tokens" value="BOR_ASSIGN"/>
+             <property name="tokens" value="BAND_ASSIGN"/>
+             <property name="option" value="eol"/>
+         </module>-->
         <module name="OperatorWrap">
             <property name="option" value="NL"/>
             <property name="tokens"

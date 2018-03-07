@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<!--
+  ~ Copyright 2018 softcake.org.
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License").
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<jnlp spec="1.8+" codebase="https://platform.dukascopy.com/demo_3/" href="https://platform.dukascopy.com/demo_3/jforex_3.jnlp">
+    <information>
+        <title>jForex platform</title>
+        <vendor>Dukascopy</vendor>
+        <description kind="one-line">jForex platform</description>
+        <description kind="short">jForex platform</description>
+        <description kind="tooltip">jForex platform</description>
+	<icon href="images/logo/dukascopy-sw_48x48.png"/>
+    </information>
+    <shortcut online="true" install="true">
+        <desktop/>
+        <menu submenu="Jforex"/>
+    </shortcut>
+    <security>
+        <all-permissions/>
+    </security>
+    <update check="timeout" policy="always"/>
+    <platform-res>
+        <property name="jnlp.platform.logo.url" value="images/logo/dukascopy-sw_32x32.png"/>
+        <property name="jnlp.company.logo.url" value="images/dukascopy-sw.png"/>
+    </platform-res>
+  <resources>
+    <property name="jnlp.platform.mode" value="jforex"/>
+    <property name="jnlp.client.version" value="3.3.2"/>
+    <property name="jnlp.client.mode" value="DEMO"/>
+    <property name="jnlp.packEnabled" value="True"/>
+    <property name="sun.java2d.d3d" value="false"/>
+    <property name="jnlp.platform.name" value="JForex"/>
+    <property name="jnlp.localize.reg.form.url" value="true"/>
+    <property name="java.net.preferIPv4Stack" value="true"/>
+    <property name="jnlp.href" value="jforex_3.jnlp" />        
+    <property name="jnlp.login.url" value="https://login.dukascopy.com/authorization-1/demo,https://login.online-trading-solutions.com/authorization-1/demo,https://login.dukascopy.com/authorization-2/demo"/>
+    <property name="jnlp.srp6.login.url" value="https://login.dukascopy.com/authorization-1/demo,https://login.online-trading-solutions.com/authorization-1/demo,https://login.dukascopy.com/authorization-2/demo"/>
+    <property name="jnlp.register.new.demo.url" value="https://demo-login.dukascopy.com/fo/register/demo_new"/>
+    <property name="jnlp.forgotten.url" value="https://demo-login.dukascopy.com/fo/password/forgot/"/>
+    <property name="jnlp.open.live.url" value="https://live-login.dukascopy.com/bankrto"/>
+    <java version="1.8+" java-vm-args="-Xmx512m -Xms32m" />
+    <extension name="AppFramework" href="https://platform.dukascopy.com/demo_3/libs_3.jnlp"/>
+  </resources>
+  <application-desc main-class="com.dukascopy.dds2.greed.GreedClient"/>
+</jnlp>
+

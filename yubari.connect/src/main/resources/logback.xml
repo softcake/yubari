@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 
-<configuration debug="true">
+<configuration debug="false">
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>.log/root.log</file>
         <encoder>
