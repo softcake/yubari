@@ -1,1 +1,1 @@
-typeSearchIndex = [{"p":"org.softcake.yubari.connect","l":"Connect"},{"p":"org.softcake.yubari.transport","l":"Transport"}]
+typeSearchIndex = [{"p":"org.softcake.yubari.connect.authorization","l":"AuthorizationProperties"},{"p":"org.softcake.yubari.connect.authorization","l":"AuthorizationPropertiesFactory"},{"p":"org.softcake.yubari.connect.authorization","l":"AuthorizationPropertiesNames"}]
