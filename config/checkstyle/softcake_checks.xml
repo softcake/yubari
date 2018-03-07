@@ -49,9 +49,9 @@
         <property name="max" value="1500"/>
         <property name="fileExtensions" value="java"/>
     </module>
-    <module name="JavadocPackage">
-        <property name="allowLegacy" value="false"/>
-    </module>
+    <!--<module name="JavadocPackage">-->
+        <!--<property name="allowLegacy" value="false"/>-->
+    <!--</module>-->
     <!-- Headers -->
     <module name="Header">
         <property
@@ -253,9 +253,9 @@
             <!-- avoid errors on tag '@noinspection' -->
             <property name="allowUnknownTags" value="true"/>
         </module>
-        <module name="JavadocVariable">
+        <!--<module name="JavadocVariable">
             <property name="scope" value="public"/>
-        </module>
+        </module>-->
         <module name="NonEmptyAtclauseDescription"/>
         <module name="SingleLineJavadoc">
             <property name="ignoreInlineTags" value="false"/>

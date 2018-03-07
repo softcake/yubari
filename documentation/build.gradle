@@ -35,7 +35,7 @@ task gitChangelogTask(type: se.bjurr.gitchangelog.plugin.gradle.GitChangelogTask
     file = new File("$buildDir/changelog/changelog.md")
     templateContent = file("$rootDir/documentation/content/templates/changelog.mustache").getText('UTF-8')
     toRef = "HEAD"
-    dateFormat = "MM/dd/yyyy";
+    dateFormat = "MM/dd/yyyy"
     timeZone = "UTC"
     untaggedName = 'Next release'
 }
