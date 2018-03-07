@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<jnlp spec="1.8+" codebase="https://platform.dukascopy.com/live_3/" href="https://platform.dukascopy.com/live_3/jforex_3.jnlp">
+    <information>
+        <title>jForex platform</title>
+        <vendor>Dukascopy</vendor>
+        <description kind="one-line">jForex platform</description>
+        <description kind="short">jForex platform</description>
+        <description kind="tooltip">jForex platform</description>
+	<icon href="images/logo/dukascopy-sw_48x48.png"/>
+    </information>
+    <shortcut online="true" install="true">
+        <desktop/>
+        <menu submenu="Jforex"/>
+    </shortcut>
+    <security>
+        <all-permissions/>
+    </security>
+    <update check="timeout" policy="always"/>
+    <platform-res>
+        <property name="jnlp.platform.logo.url" value="images/logo/dukascopy-sw_32x32.png"/>
+        <property name="jnlp.company.logo.url" value="images/dukascopy-sw.png"/>
+    </platform-res>
+  <resources>
+    <property name="jnlp.platform.mode" value="jforex"/>
+    <property name="jnlp.client.version" value="3.3.2"/>
+    <property name="jnlp.client.mode" value="LIVE"/>
+    <property name="jnlp.packEnabled" value="True"/>
+    <property name="sun.java2d.d3d" value="false"/>
+    <property name="jnlp.platform.name" value="JForex"/>
+    <property name="jnlp.localize.reg.form.url" value="true"/>
+    <property name="java.net.preferIPv4Stack" value="true"/>
+    <property name="jnlp.href" value="jforex_3.jnlp" />        
+    <property name="jnlp.login.url" value="https://login.dukascopy.com/authorization-1/live,https://login.online-trading-solutions.com/authorization-1/live,https://login.dukascopy.com/authorization-2/live"/>
+    <property name="jnlp.srp6.login.url" value="https://login.dukascopy.com/authorization-1/live,https://login.online-trading-solutions.com/authorization-1/live,https://login.dukascopy.com/authorization-2/live"/>
+    <property name="jnlp.register.new.demo.url" value="https://demo-login.dukascopy.com/fo/register/demo_new"/>
+    <property name="jnlp.forgotten.url" value="https://live-login.dukascopy.com/fo/password/forgot/"/>
+    <property name="jnlp.open.live.url" value="https://live-login.dukascopy.com/bankrto"/>
+    <java version="1.8+" java-vm-args="-Xmx512m -Xms32m" />
+    <extension name="AppFramework" href="https://platform.dukascopy.com/live_3/libs_3.jnlp"/>
+  </resources>
+  <application-desc main-class="com.dukascopy.dds2.greed.GreedClient"/>
+</jnlp>
+

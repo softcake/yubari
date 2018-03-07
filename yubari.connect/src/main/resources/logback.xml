@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 
-<configuration debug="true">
+<configuration debug="false">
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>.log/root.log</file>
         <encoder>
@@ -26,7 +26,7 @@
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
-    <logger name="org.softcake" level="TRACE">
+    <logger name="org.softcake" level="INFO">
         <appender-ref ref="FILE"/>
     </logger>
     <root level="TRACE">

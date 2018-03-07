@@ -2,9 +2,10 @@ plugins {
     id 'java-library'
 }
 
-javaModule.name = "org.softcake.yubari.connect"  
+javaModule.name = "org.softcake.yubari.connect"
 description = " The Connect module of the Yubari project."
 
 dependencies {
+    implementation "commons-validator:commons-validator"
 
 }
