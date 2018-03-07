@@ -40,7 +40,6 @@ public class AuthorizationPropertiesFactory {
     private static final int CONNECT_TIMEOUT = 10000;
     private static final int READ_TIMEOUT = 15000;
     private final String url;
-    private AuthorizationProperties authorizationProperties;
 
     /**
      * The Constructor.
