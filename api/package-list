@@ -1,1 +1,3 @@
+org.softcake.authentication
+org.softcake.authentication.concurrent
 org.softcake.yubari.connect.authorization

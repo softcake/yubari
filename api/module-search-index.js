@@ -1,1 +1,1 @@
-moduleSearchIndex = [{"l":"org.softcake.yubari.connect"},{"l":"org.softcake.yubari.transport"}]
+moduleSearchIndex = [{"l":"org.softcake.yubari.authentication"},{"l":"org.softcake.yubari.connect"},{"l":"org.softcake.yubari.transport"}]
