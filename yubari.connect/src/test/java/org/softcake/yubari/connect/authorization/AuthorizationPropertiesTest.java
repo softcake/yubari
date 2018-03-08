@@ -37,20 +37,16 @@ class AuthorizationPropertiesTest {
     private static final String CLIENT_VERSION = "3.3.2";
     private static final String CLIENT_MODE = "DEMO";
     private static final String TRUE = "true";
-    private static String
-        LOGIN_URL =
-        "https://login.dukascopy.com/authorization-1/demo,"
-        + "https://login.online-trading-solutions.com/authorization-1/demo,"
-        + "https://login.dukascopy.com/authorization-2/demo";
-    private static String
-        SRP6_LOGIN_URL =
-        "https://login.dukascopy.com/authorization-1/demo,https://login.online-trading-solutions"
-        + ".com/authorization-1/demo,https://login.dukascopy.com/authorization-2/demo";
-    private static String
-        ONE_INVALID_LOGIN_URL =
-        "https://login.dukascopy.com/authorization-1/demo,"
-        + "tps://login.online-trading-solutions.com/authorization-1/demo,"
-        + "https://login.dukascopy.com/authorization-2/demo";
+    private static String LOGIN_URL = "https://login.dukascopy.com/authorization-1/demo,"
+                                      + "https://login.online-trading-solutions.com/authorization-1/demo,"
+                                      + "https://login.dukascopy.com/authorization-2/demo";
+    private static String SRP6_LOGIN_URL = "https://login.dukascopy.com/authorization-1/demo,"
+                                           + "https://login.online-trading-solutions"
+                                           + ".com/authorization-1/demo,https://login.dukascopy"
+                                           + ".com/authorization-2/demo";
+    private static String ONE_INVALID_LOGIN_URL = "https://login.dukascopy.com/authorization-1/demo,"
+                                                  + "tps://login.online-trading-solutions.com/authorization-1/demo,"
+                                                  + "https://login.dukascopy.com/authorization-2/demo";
 
     @Test
     void testAll() throws MalformedURLException {
@@ -65,17 +61,17 @@ class AuthorizationPropertiesTest {
                                             new URL("https://login.online-trading-solutions.com/authorization-1/demo"),
                                             new URL("https://login.dukascopy.com/authorization-2/demo"));
 
-        List<URL> loginSrpSixUrls = Arrays.asList(new URL("https://login.dukascopy.com/authorization-1/demo"),
-                                                  new URL("https://login.online-trading-solutions"
-                                                          + ".com/authorization-1/demo"),
-                                                  new URL("https://login.dukascopy.com/authorization-2/demo"));
+        List<URL> loginSrpUrls = Arrays.asList(new URL("https://login.dukascopy.com/authorization-1/demo"),
+
+                                               new URL("https://login.online-trading-solutions"
+                                                       + ".com/authorization-1/demo"),
+                                               new URL("https://login.dukascopy.com/authorization-2/demo"));
 
         assertAll("Properties",
                   () -> assertEquals(ClientMode.DEMO, properties.clientMode()),
                   () -> assertEquals("3.3.2", properties.getVersion()),
                   () -> Assertions.assertArrayEquals(loginUrls.toArray(), properties.getLoginUrls().toArray()),
-                  () -> Assertions.assertArrayEquals(loginSrpSixUrls.toArray(),
-                                                     properties.getLoginSrpSixUrls().toArray()),
+                  () -> Assertions.assertArrayEquals(loginSrpUrls.toArray(), properties.getLoginSrpSixUrls().toArray()),
                   () -> assertEquals(true, properties.canUseSrpSix()),
                   () -> assertEquals(false, properties.isLive()),
                   () -> assertEquals(true, properties.isPreferIPv4Stack()),
@@ -94,17 +90,16 @@ class AuthorizationPropertiesTest {
         List<URL> loginUrls = Arrays.asList(new URL("https://login.dukascopy.com/authorization-1/demo"),
                                             new URL("https://login.dukascopy.com/authorization-2/demo"));
 
-        List<URL> loginSrpSixUrls = Arrays.asList(new URL("https://login.dukascopy.com/authorization-1/demo"),
-                                                  new URL("https://login.online-trading-solutions"
-                                                          + ".com/authorization-1/demo"),
-                                                  new URL("https://login.dukascopy.com/authorization-2/demo"));
+        List<URL> loginSrpUrls = Arrays.asList(new URL("https://login.dukascopy.com/authorization-1/demo"),
+                                               new URL("https://login.online-trading-solutions"
+                                                       + ".com/authorization-1/demo"),
+                                               new URL("https://login.dukascopy.com/authorization-2/demo"));
 
         assertAll("Properties",
                   () -> assertEquals(ClientMode.DEMO, properties.clientMode()),
                   () -> assertEquals("3.3.2", properties.getVersion()),
                   () -> Assertions.assertArrayEquals(loginUrls.toArray(), properties.getLoginUrls().toArray()),
-                  () -> Assertions.assertArrayEquals(loginSrpSixUrls.toArray(),
-                                                     properties.getLoginSrpSixUrls().toArray()),
+                  () -> Assertions.assertArrayEquals(loginSrpUrls.toArray(), properties.getLoginSrpSixUrls().toArray()),
                   () -> assertEquals(true, properties.canUseSrpSix()),
                   () -> assertEquals(false, properties.isLive()),
                   () -> assertEquals(true, properties.isPreferIPv4Stack()),
@@ -122,14 +117,13 @@ class AuthorizationPropertiesTest {
                                                                          TRUE);
         List<URL> loginUrls = Arrays.asList();
 
-        List<URL> loginSrpSixUrls = Arrays.asList();
+        List<URL> loginSrpUrls = Arrays.asList();
 
         assertAll("Properties",
                   () -> assertEquals(ClientMode.DEMO, properties.clientMode()),
                   () -> assertEquals("3.3.2", properties.getVersion()),
                   () -> Assertions.assertArrayEquals(loginUrls.toArray(), properties.getLoginUrls().toArray()),
-                  () -> Assertions.assertArrayEquals(loginSrpSixUrls.toArray(),
-                                                     properties.getLoginSrpSixUrls().toArray()),
+                  () -> Assertions.assertArrayEquals(loginSrpUrls.toArray(), properties.getLoginSrpSixUrls().toArray()),
                   () -> assertEquals(false, properties.canUseSrpSix()),
                   () -> assertEquals(false, properties.isLive()),
                   () -> assertEquals(true, properties.isPreferIPv4Stack()),
