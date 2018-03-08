@@ -34,27 +34,27 @@ import javax.xml.stream.XMLStreamException;
  *
  * @author The softcake authors
  */
-public class AuthorizationPropertiesFactory {
+public final class AuthorizationPropertiesFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthorizationPropertiesFactory.class);
     private static final int CONNECT_TIMEOUT = 10000;
     private static final int READ_TIMEOUT = 15000;
-    private final String url;
+
 
     /**
      * The Constructor.
-     *
-     * @param url for request the jnlp file from Dukascopy.
      */
-    public AuthorizationPropertiesFactory(final String url) {
+    private AuthorizationPropertiesFactory() {
+
+        throw new IllegalAccessError("Utility class");
+    }
+
+    private static void validateUrl(final String url) {
 
         final String message = "The jnlp URL does not have a valid format " + "like http://....., you supplied: %s";
-
         final UrlValidator validator = new UrlValidator(new String[]{"http", "https"});
-
         checkArgument(validator.isValid(url), message, url);
 
-        this.url = url;
     }
 
     private static HttpURLConnection getConnection(final URL url) throws IOException {
@@ -67,15 +67,16 @@ public class AuthorizationPropertiesFactory {
         return connection;
     }
 
-    private static AuthorizationProperties getAuthServerUrls(final String jnlp) {
+    private static AuthorizationProperties getAuthServerUrls(final String url) {
 
+        validateUrl(url);
         AuthorizationProperties properties = null;
         HttpURLConnection connection = null;
         InputStream inputStream = null;
         URL jnlpUrl;
 
         try {
-            jnlpUrl = new URL(jnlp);
+            jnlpUrl = new URL(url);
             connection = getConnection(jnlpUrl);
             inputStream = connection.getInputStream();
             properties = JnlpParser.parse(inputStream);
@@ -103,10 +104,11 @@ public class AuthorizationPropertiesFactory {
     /**
      * Getter for the authorization properties {@link AuthorizationProperties}.
      *
+     * @param jnlpUrl the Url for the jnlp file
      * @return the properties
      */
-    public AuthorizationProperties getAuthorizationProperties() {
+    public static AuthorizationProperties getAuthorizationProperties(final String jnlpUrl) {
 
-        return getAuthServerUrls(this.url);
+        return getAuthServerUrls(jnlpUrl);
     }
 }

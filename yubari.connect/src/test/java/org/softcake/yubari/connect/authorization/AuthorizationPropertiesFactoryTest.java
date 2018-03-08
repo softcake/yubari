@@ -19,6 +19,8 @@ package org.softcake.yubari.connect.authorization;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import org.softcake.lemon.core.tester.PrivateConstructorTester;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,11 +35,13 @@ class AuthorizationPropertiesFactoryTest {
     private static String INVALID_URL = "https:/platform.dukascopy.com/demo_3/jforex_3.jnlp";
 
     @Test
-    @DisplayName("Test Constructor")
+    @DisplayName("Test private Constructor")
     void authorizationPropertiesConstructor() {
 
-        AuthorizationPropertiesFactory factory = new AuthorizationPropertiesFactory(VALID_URL);
-        Assertions.assertNotNull(factory);
+        PrivateConstructorTester.forClass(AuthorizationPropertiesFactory.class)
+                                .expectedExceptionType(IllegalAccessError.class, "Utility class")
+                                .check();
+
     }
 
     @Test
@@ -46,7 +50,7 @@ class AuthorizationPropertiesFactoryTest {
 
         Throwable exception = assertThrows(IllegalArgumentException.class, () -> {
 
-            AuthorizationPropertiesFactory factory = new AuthorizationPropertiesFactory(INVALID_URL);
+            AuthorizationPropertiesFactory.getAuthorizationProperties(INVALID_URL);
         });
 
         assertEquals("The jnlp URL does not have a valid format like http://....., you supplied: " + INVALID_URL,
@@ -58,8 +62,7 @@ class AuthorizationPropertiesFactoryTest {
     @DisplayName("Test that Properties is not null")
     void getAuthorizationProperties() {
 
-        AuthorizationPropertiesFactory factory = new AuthorizationPropertiesFactory(VALID_URL);
-        AuthorizationProperties properties = factory.getAuthorizationProperties();
+        AuthorizationProperties properties = AuthorizationPropertiesFactory.getAuthorizationProperties(VALID_URL);
         Assertions.assertNotNull(properties);
     }
 }
