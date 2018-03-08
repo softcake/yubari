@@ -1,5 +1,3 @@
-
-
 /*
  * Copyright 2018 softcake.org.
  *
@@ -15,23 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Require Java 9 or higher
 
-int javaVersion = Integer.valueOf(JavaVersion.current().getMajorVersion())
-if (javaVersion < 9) {
+package org.softcake.authentication;
 
-	throw new GradleException("The build requires Java 9 or higher. " +
+import java.awt.image.BufferedImage;
 
-		"Currently executing with Java " + javaVersion + ".")
+
+/**
+ * @author Rene Neubert
+ *
+ */
+public class CaptchaImage {
+    private BufferedImage captchaImage;
+    private String captchaId;
+
+    public BufferedImage getCaptchaImage() {
+        return captchaImage;
+    }
+
+    public String getCaptchaId() {
+        return captchaId;
+    }
+
+    public CaptchaImage(BufferedImage captchaImage, String captchaId) {
+        this.captchaImage = captchaImage;
+        this.captchaId = captchaId;
+    }
+
+
 
 }
-
-rootProject.name = "yubari"
-
-include "documentation"
-include "yubari.connect"
-include "yubari.transport"
-include "yubari.authentication"
-include "example"
-
-

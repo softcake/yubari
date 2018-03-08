@@ -44,6 +44,7 @@ public class AuthorizationProperties {
     private final boolean canUseSrpSix;
     private final boolean isLive;
     private final boolean isValid;
+    private final List<String> loginUrlStr;
 
     /**
      * The constructor.
@@ -69,6 +70,8 @@ public class AuthorizationProperties {
         this.isLive = ClientMode.LIVE.equals(this.clientMode);
         this.isValid = !this.loginUrl.isEmpty() || !this.loginSrpSixUrl.isEmpty();
         this.canUseSrpSix = !this.loginSrpSixUrl.isEmpty();
+
+        this.loginUrlStr = Arrays.asList(loginUrl.split(","));;
     }
 
     private static List<URL> getUrlsFromString(final String values) {
@@ -188,5 +191,10 @@ public class AuthorizationProperties {
     public boolean isPreferIPv4Stack() {
 
         return this.preferIPv4Stack;
+    }
+
+    public List<String> getLoginUrlStr() {
+
+        return loginUrlStr;
     }
 }

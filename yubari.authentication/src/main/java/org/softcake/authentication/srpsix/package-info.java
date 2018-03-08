@@ -1,5 +1,3 @@
-
-
 /*
  * Copyright 2018 softcake.org.
  *
@@ -15,23 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Require Java 9 or higher
 
-int javaVersion = Integer.valueOf(JavaVersion.current().getMajorVersion())
-if (javaVersion < 9) {
-
-	throw new GradleException("The build requires Java 9 or higher. " +
-
-		"Currently executing with Java " + javaVersion + ".")
-
-}
-
-rootProject.name = "yubari"
-
-include "documentation"
-include "yubari.connect"
-include "yubari.transport"
-include "yubari.authentication"
-include "example"
-
-
+/**
+ * @author René Neubert
+ */
+package org.softcake.authentication.srpsix;
