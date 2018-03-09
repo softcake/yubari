@@ -9,4 +9,5 @@ module org.softcake.yubari.authentication {
     requires java.desktop;
     requires com.google.common;
     requires org.softcake.yubari.connect;
+    requires cherry.core;
 }

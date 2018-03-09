@@ -26,12 +26,12 @@ public class AuthorizationServerStsTokenResponse extends AbstractAuthorizationSe
     private String stsToken;
     private String error;
 
-    public AuthorizationServerStsTokenResponse(AuthorizationClient.AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerStsTokenResponse(AuthorizationServerResponseCode authorizationServerResponseCode) {
         this.responseMessage = null;
         this.responseCode = authorizationServerResponseCode;
     }
 
-    public AuthorizationServerStsTokenResponse(String responseMessage, AuthorizationClient.AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerStsTokenResponse(String responseMessage, AuthorizationServerResponseCode authorizationServerResponseCode) {
         this.responseMessage = null;
         this.responseCode = authorizationServerResponseCode;
         this.init();
@@ -39,7 +39,7 @@ public class AuthorizationServerStsTokenResponse extends AbstractAuthorizationSe
 
     public AuthorizationServerStsTokenResponse(String responseMessage, int authorizationServerResponseCode) {
         this.responseMessage = responseMessage;
-        this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.fromValue(authorizationServerResponseCode);
+        this.responseCode = AuthorizationServerResponseCode.fromValue(authorizationServerResponseCode);
         this.init();
     }
 
@@ -65,15 +65,15 @@ public class AuthorizationServerStsTokenResponse extends AbstractAuthorizationSe
                 }
 
                 if (this.stsToken == null || this.stsToken.isEmpty() || this.error != null) {
-                    this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
+                    this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
                 }
             } catch (Throwable var3) {
                 LOGGER.error(var3.getMessage(), var3);
-                this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
+                this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
                 LOGGER.error("Cannot parse STS Token answer [" + authorizationResponse + "]");
             }
         } else {
-            this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.EMPTY_RESPONSE;
+            this.responseCode = AuthorizationServerResponseCode.EMPTY_RESPONSE;
         }
 
     }

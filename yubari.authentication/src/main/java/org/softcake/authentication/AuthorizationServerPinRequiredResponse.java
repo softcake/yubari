@@ -17,6 +17,7 @@
 package org.softcake.authentication;
 
 
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,50 +40,50 @@ public class AuthorizationServerPinRequiredResponse extends AbstractAuthorizatio
         this.init();
     }
 
-    public AuthorizationServerPinRequiredResponse(AuthorizationClient.AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerPinRequiredResponse(AuthorizationServerResponseCode authorizationServerResponseCode) {
         this.responseMessage = null;
         this.responseCode = authorizationServerResponseCode;
     }
 
     public AuthorizationServerPinRequiredResponse(int responseCode, String responseMessage) {
-        this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.fromValue(responseCode);
+        this.responseCode = AuthorizationServerResponseCode.fromValue(responseCode);
         this.responseMessage = responseMessage;
     }
 
     protected void init() {
         if (this.authResponseAsJsonObject == null) {
-            this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.EMPTY_RESPONSE;
+            this.responseCode = AuthorizationServerResponseCode.EMPTY_RESPONSE;
         } else {
             Integer wlPartnerId = null;
             Boolean checkPin = null;
 
             try {
-                if (!this.authResponseAsJsonObject.isNull("checkPin")) {
-                    checkPin = this.authResponseAsJsonObject.getBoolean("checkPin");
+                if (!this.authResponseAsJsonObject.isNull(CHECK_PIN_NAME)) {
+                    checkPin = this.authResponseAsJsonObject.getBoolean(CHECK_PIN_NAME);
                 }
 
-                if (!this.authResponseAsJsonObject.isNull("wlPartnerId")) {
-                    wlPartnerId = this.authResponseAsJsonObject.getInt("wlPartnerId");
+                if (!this.authResponseAsJsonObject.isNull(WL_PARTNER_ID_NAME)) {
+                    wlPartnerId = this.authResponseAsJsonObject.getInt(WL_PARTNER_ID_NAME);
                 }
 
                 if (checkPin != null) {
-                    this.responseValues.put("checkPin", checkPin);
+                    this.responseValues.put(CHECK_PIN_NAME, checkPin);
                     this.checkPin = checkPin;
                 } else {
-                    this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.EMPTY_RESPONSE;
+                    this.responseCode = AuthorizationServerResponseCode.EMPTY_RESPONSE;
                 }
 
                 if (wlPartnerId != null) {
-                    this.responseValues.put("wlPartnerId", wlPartnerId);
+                    this.responseValues.put(WL_PARTNER_ID_NAME, wlPartnerId);
                     this.wlPartnerId = wlPartnerId;
                 }
 
-                if (this.responseValues.get("checkPin") != null) {
-                    this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.SUCCESS_OK;
+                if (this.responseValues.get(CHECK_PIN_NAME) != null) {
+                    this.responseCode = AuthorizationServerResponseCode.SUCCESS_OK;
                 }
-            } catch (Throwable var4) {
-                LOGGER.error(var4.getMessage(), var4);
-                this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
+            } catch (JSONException e) {
+                LOGGER.error(e.getMessage(), e);
+                this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
             }
         }
 

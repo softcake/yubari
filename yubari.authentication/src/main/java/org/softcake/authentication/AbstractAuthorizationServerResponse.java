@@ -28,7 +28,7 @@ import java.util.Set;
 public abstract class AbstractAuthorizationServerResponse {
     private static final Logger LOGGER = getLogger(AbstractAuthorizationServerResponse.class);
     protected String responseMessage = null;
-    protected AuthorizationClient.AuthorizationServerResponseCode responseCode = null;
+    protected AuthorizationServerResponseCode responseCode = null;
     protected Properties platformProperties;
     protected boolean srp6requestWithProperties = false;
 
@@ -41,7 +41,7 @@ public abstract class AbstractAuthorizationServerResponse {
         return this.responseMessage;
     }
 
-    public AuthorizationClient.AuthorizationServerResponseCode getResponseCode() {
+    public AuthorizationServerResponseCode getResponseCode() {
         return this.responseCode;
     }
 
@@ -50,13 +50,13 @@ public abstract class AbstractAuthorizationServerResponse {
             this.responseMessage.trim();
         }
 
-        if (AuthorizationClient.AuthorizationServerResponseCode.SUCCESS_OK == this.responseCode) {
+        if (AuthorizationServerResponseCode.SUCCESS_OK == this.responseCode) {
             if (this.responseMessage != null && this.responseMessage.length() > 0) {
                 if (!this.responseMessage.equals("-1") && !this.responseMessage.equals("-2") && !this.responseMessage.equals("-3") && !this.responseMessage.equals("-500")) {
                     this.validateResponse(this.responseMessage);
                 } else {
                     int responseCode = Integer.parseInt(this.responseMessage);
-                    this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.fromValue(responseCode);
+                    this.responseCode = AuthorizationServerResponseCode.fromValue(responseCode);
                 }
             } else {
                 this.validateResponse(this.responseMessage);
@@ -66,7 +66,7 @@ public abstract class AbstractAuthorizationServerResponse {
     }
 
     public boolean isOK() {
-        return AuthorizationClient.AuthorizationServerResponseCode.SUCCESS_OK == this.responseCode;
+        return AuthorizationServerResponseCode.SUCCESS_OK == this.responseCode;
     }
 
     public boolean isSrp6requestWithProperties() {

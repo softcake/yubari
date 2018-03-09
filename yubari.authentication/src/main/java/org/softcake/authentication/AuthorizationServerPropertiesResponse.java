@@ -27,14 +27,14 @@ import java.util.Properties;
 public class AuthorizationServerPropertiesResponse extends AbstractAuthorizationServerResponse {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthorizationServerPropertiesResponse.class);
 
-    public AuthorizationServerPropertiesResponse(AuthorizationClient.AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerPropertiesResponse(AuthorizationServerResponseCode authorizationServerResponseCode) {
         this.responseCode = authorizationServerResponseCode;
         this.responseMessage = null;
         this.init();
     }
 
     public AuthorizationServerPropertiesResponse(int authorizationServerResponseCode, String platformPropertiesAsString) {
-        this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.fromValue(authorizationServerResponseCode);
+        this.responseCode = AuthorizationServerResponseCode.fromValue(authorizationServerResponseCode);
         this.responseMessage = platformPropertiesAsString;
         this.init();
     }
@@ -44,7 +44,7 @@ public class AuthorizationServerPropertiesResponse extends AbstractAuthorization
             try {
                 byte[] decodedBytes = Base64.decode(authorizationResponse);
                 if (decodedBytes == null || decodedBytes.length == 0) {
-                    this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
+                    this.responseCode = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
                     return;
                 }
 
@@ -52,18 +52,18 @@ public class AuthorizationServerPropertiesResponse extends AbstractAuthorization
                 Object propertiesAsObject = inputStream.readObject();
                 Properties properties = (Properties)propertiesAsObject;
                 if (properties.isEmpty()) {
-                    this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
+                    this.responseCode = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
                     return;
                 }
 
                 this.platformProperties = properties;
             } catch (Throwable var6) {
-                this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
+                this.responseCode = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
                 LOGGER.error(var6.getMessage(), var6);
             }
 
         } else {
-            this.responseCode = AuthorizationClient.AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
+            this.responseCode = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
         }
     }
 }
