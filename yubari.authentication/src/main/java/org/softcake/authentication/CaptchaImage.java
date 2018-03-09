@@ -21,25 +21,26 @@ import java.awt.image.BufferedImage;
 
 /**
  * @author Rene Neubert
- *
  */
 public class CaptchaImage {
     private BufferedImage captchaImage;
     private String captchaId;
 
     public BufferedImage getCaptchaImage() {
+
         return captchaImage;
     }
 
     public String getCaptchaId() {
+
         return captchaId;
     }
 
     public CaptchaImage(BufferedImage captchaImage, String captchaId) {
+
         this.captchaImage = captchaImage;
         this.captchaId = captchaId;
     }
-
 
 
 }

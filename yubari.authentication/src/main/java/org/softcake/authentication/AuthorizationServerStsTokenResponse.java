@@ -17,6 +17,9 @@
 package org.softcake.authentication;
 
 
+import static org.softcake.authentication.AuthorizationServerResponseCode.*;
+
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,20 +29,20 @@ public class AuthorizationServerStsTokenResponse extends AbstractAuthorizationSe
     private String stsToken;
     private String error;
 
-    public AuthorizationServerStsTokenResponse(AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerStsTokenResponse(AuthorizationServerResponseCode code) {
         this.responseMessage = null;
-        this.responseCode = authorizationServerResponseCode;
+        this.responseCode = code;
     }
 
-    public AuthorizationServerStsTokenResponse(String responseMessage, AuthorizationServerResponseCode authorizationServerResponseCode) {
-        this.responseMessage = null;
-        this.responseCode = authorizationServerResponseCode;
+    public AuthorizationServerStsTokenResponse(String responseMessage, AuthorizationServerResponseCode code) {
+        this.responseMessage = responseMessage;
+        this.responseCode = code;
         this.init();
     }
 
-    public AuthorizationServerStsTokenResponse(String responseMessage, int authorizationServerResponseCode) {
+    public AuthorizationServerStsTokenResponse(String responseMessage, int code) {
         this.responseMessage = responseMessage;
-        this.responseCode = AuthorizationServerResponseCode.fromValue(authorizationServerResponseCode);
+        this.responseCode = fromValue(code);
         this.init();
     }
 
@@ -51,11 +54,11 @@ public class AuthorizationServerStsTokenResponse extends AbstractAuthorizationSe
         return this.error;
     }
 
-    protected void validateResponse(String authorizationResponse) {
-        if (authorizationResponse != null && authorizationResponse.length() != 0) {
+    protected void validateResponse(String response) {
+        if (response != null && response.length() != 0) {
             try {
-                // TODO JSONObject jsonObject = new JSONObject(authorizationResponse, false);
-                JSONObject jsonObject = new JSONObject(authorizationResponse);
+
+                JSONObject jsonObject = new JSONObject(response);
                 this.stsToken = jsonObject.getString("result");
                 if (!jsonObject.isNull("error")) {
                     this.error = jsonObject.getString("error");
@@ -65,15 +68,15 @@ public class AuthorizationServerStsTokenResponse extends AbstractAuthorizationSe
                 }
 
                 if (this.stsToken == null || this.stsToken.isEmpty() || this.error != null) {
-                    this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
+                    this.responseCode = WRONG_AUTH_RESPONSE;
                 }
-            } catch (Throwable var3) {
-                LOGGER.error(var3.getMessage(), var3);
-                this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
-                LOGGER.error("Cannot parse STS Token answer [" + authorizationResponse + "]");
+            } catch (JSONException e) {
+                this.responseCode = WRONG_AUTH_RESPONSE;
+                LOGGER.error("Error occurred...", e);
+                LOGGER.error("Cannot parse STS Token answer [{}]",response);
             }
         } else {
-            this.responseCode = AuthorizationServerResponseCode.EMPTY_RESPONSE;
+            this.responseCode = EMPTY_RESPONSE;
         }
 
     }

@@ -21,8 +21,6 @@ import com.dukascopy.api.JFException.Error;
 import com.dukascopy.api.instrument.AvailableInstrumentProvider;*/
 
 
-
-
 import static org.softcake.authentication.AuthorizationServerResponseCode.*;
 
 import org.softcake.cherry.core.base.PreCheck;
@@ -193,16 +191,16 @@ public class AuthorizationClient {
 
         try {
             int authorizationServerResponseCode = 0;
-            URLConnection connection = getConnection(url);
-            if (connection instanceof HttpURLConnection) {
-                authorizationServerResponseCode = ((HttpURLConnection) connection).getResponseCode();
-            }
+            HttpURLConnection connection = getConnection(url);
+
+                authorizationServerResponseCode = connection.getResponseCode();
+
 
             try {
                 reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
                 response = reader.readLine();
             } catch (IOException var10) {
-                ;
+
             }
 
             authorizationServerResponse = new AuthorizationServerResponse(response, authorizationServerResponseCode);
@@ -221,184 +219,88 @@ public class AuthorizationClient {
         throws ApiUrlServerFormatException, InterruptedException, IOException {
 
         LOGGER.info("Selecting the best server...");
-        Matcher matcher = null;
-        boolean matches = false;
 
-        try {
-            matcher = RESULT_PATTERN.matcher(apiServersAndTicket);
-            matches = matcher.matches();
-        } catch (Throwable var22) {
-            String message = var22.getMessage();
-            if (message == null || message.isEmpty()) {
-                message = "";
-            }
 
-            throw new ApiUrlServerFormatException("1. Wrong format of api url." + message, var22);
-        }
+        Matcher matcher = RESULT_PATTERN.matcher(apiServersAndTicket);
+        boolean matches = matcher.matches();
 
         if (!matches) {
-            throw new ApiUrlServerFormatException("2. Wrong format of api url:" + apiServersAndTicket);
+            throw new ApiUrlServerFormatException("1. Wrong format of api url:" + apiServersAndTicket);
         } else {
-            long pingStartTime = 0L;
-            long pingEndTime = 0L;
 
-            String apiURL;
-            try {
-                String apiUrls = matcher.group(1);
-                Map<String, InetSocketAddress> addresses = new LinkedHashMap();
-                StringTokenizer tokenizer = new StringTokenizer(apiUrls, "@");
-                if (tokenizer.countTokens() == 0) {
-                    throw new ApiUrlServerFormatException("3. Wrong format of api url:" + apiServersAndTicket);
-                } else if (tokenizer.countTokens() == 1) {
-                    return apiServersAndTicket;
-                } else {
-                    String host;
-                    int port;
-                    for (; tokenizer.hasMoreTokens(); addresses.put(apiURL, new InetSocketAddress(host, port))) {
-                        apiURL = tokenizer.nextToken();
-                        int semicolonIndex = apiURL.indexOf(58);
-                        if (semicolonIndex != -1) {
-                            host = apiURL.substring(0, semicolonIndex);
-                            if (semicolonIndex + 1 >= apiURL.length()) {
-                                LOGGER.warn("Port is not set, using default 443");
-                                port = 443;
-                            } else {
-                                port = Integer.parseInt(apiURL.substring(semicolonIndex + 1));
-                            }
-                        } else {
-                            LOGGER.warn("Port is not set, using default 443");
-                            host = apiURL;
-                            port = 443;
-                        }
-                    }
 
-                    SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSS");
-                    pingStartTime = System.currentTimeMillis();
-                    LOGGER.info("The ping start time=" + DATE_FORMAT.format(pingStartTime));
-                    //                    SLogger.add(ISSUE.JFOREX_9102, (Object)null, LogName.AUTHORIZATION_CLIENT,
-                    // ((StringBuffer)SLogger.STRING_BUFFER.get()).append
-                    // ("AuthorizationClient#selectFastestAPIServer, before ping API servers"), true);
-                    Map<String, Long[]> pingResult = Ping.ping(addresses);
-                    pingEndTime = System.currentTimeMillis();
-                    LOGGER.info("The ping end time="
-                                + DATE_FORMAT.format(pingEndTime)
-                                + ", the ping processing time=["
-                                + (pingEndTime - pingStartTime)
-                                + "]ms");
-                    Map<String, Long> pingAverages = new LinkedHashMap();
-                    Iterator var29 = pingResult.entrySet().iterator();
+            String apiUrls = matcher.group(1);
+            LinkedHashMap<String, InetSocketAddress> addresses = new LinkedHashMap<>();
+            StringTokenizer tokenizer = new StringTokenizer(apiUrls, "@");
+            if (tokenizer.countTokens() == 0) {
+                throw new ApiUrlServerFormatException("2. Wrong format of api url:" + apiServersAndTicket);
+            } else if (tokenizer.countTokens() == 1) {
+                return apiServersAndTicket;
+            } else {
+                while (tokenizer.hasMoreTokens()) {
 
-                    while (var29.hasNext()) {
-                        Entry<String, Long[]> entry = (Entry) var29.next();
-                        Long[] results = (Long[]) entry.getValue();
-                        long averageTime = 0L;
-                        Long[] var18 = results;
-                        int var19 = results.length;
-
-                        for (int var20 = 0; var20 < var19; ++var20) {
-                            Long time = var18[var20];
-                            if (time == Long.MIN_VALUE) {
-                                if (averageTime > 0L) {
-                                    averageTime = -averageTime;
-                                }
-
-                                averageTime += -2147483648L;
-                            } else if (time == 9223372036854775807L) {
-                                if (averageTime < 0L) {
-                                    averageTime += -2147483648L;
-                                } else {
-                                    averageTime += 2147483647L;
-                                }
-                            } else if (averageTime < 0L) {
-                                averageTime -= time;
-                            } else {
-                                averageTime += time;
-                            }
-                        }
-
-                        averageTime /= (long) results.length;
-                        pingAverages.put(entry.getKey(), averageTime);
-                    }
-
-                    String mainURL = null;
-                    Long mainTime = null;
-                    String bestURL = null;
-                    Long bestTime = null;
-                    Iterator var17 = pingAverages.entrySet().iterator();
-
-                    while (var17.hasNext()) {
-                        Entry<String, Long> entry = (Entry) var17.next();
-                        if (mainURL == null) {
-                            bestURL = mainURL = (String) entry.getKey();
-                            bestTime = mainTime = (Long) entry.getValue();
-                        } else {
-                            Long time = (Long) entry.getValue();
-                            if (mainTime >= 0L) {
-                                if (time < 0L) {
-                                    break;
-                                }
-
-                                if (mainTime > time
-                                    && (mainTime - time) * 100L / mainTime > 10L
-                                    && mainTime - time > 50L
-                                    && bestTime > time) {
-                                    bestURL = (String) entry.getKey();
-                                    bestTime = time;
-                                }
-                            } else if (time >= 0L) {
-                                if (bestTime < 0L || bestTime > time) {
-                                    bestURL = (String) entry.getKey();
-                                    bestTime = (Long) entry.getValue();
-                                }
-                            } else if (Math.abs(mainTime) > Math.abs(time)
-                                       && (Math.abs(mainTime) - Math.abs(time)) * 100L / Math.abs(mainTime) > 10L
-                                       && Math.abs(mainTime) - Math.abs(time) > 50L
-                                       && bestTime < 0L
-                                       && Math.abs(bestTime) > Math.abs(time)) {
-                                bestURL = (String) entry.getKey();
-                                bestTime = time;
-                            }
-                        }
-                    }
-
-                    LOGGER.debug("Best api url [" + bestURL + "] with time [" + bestTime + "]");
-                    addIPAndBestPing(bestTime, bestURL);
-                    String address = bestURL + "@" + matcher.group(7);
-                    if (validAPIServerAddressFormat(address)) {
-                        return address;
-                    } else {
-                        throw new ApiUrlServerFormatException("4. Wrong format of api url:" + address);
-                    }
+                    String url = tokenizer.nextToken();
+                    addresses.put(url,getInetSocketAddress(url));
                 }
-            } catch (InterruptedException var23) {
-                //                SLogger.add(ISSUE.JFOREX_9102, (Object)null, LogName.AUTHORIZATION_CLIENT, (
-                // (StringBuffer)SLogger.STRING_BUFFER.get()).append("AuthorizationClient#selectFastestAPIServer, the
-                // API servers ping is interrupted"), true);
-                //                SLogger.sendToALS(ISSUE.JFOREX_9102);
-                SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSS");
-                pingEndTime = System.currentTimeMillis();
-                String errorMessage = "";
-                if (pingEndTime > 0L && pingStartTime > 0L) {
-                    errorMessage = "The ping interrupted, end time="
-                                   + DATE_FORMAT.format(pingEndTime)
-                                   + ", the ping processing time=["
-                                   + (pingEndTime - pingStartTime)
-                                   + "]ms";
-                } else {
-                    errorMessage = "The ping interrupted.";
-                }
+                Map<String, Long[]> pingTimesMap = Ping.ping(addresses);
+                LinkedHashMap<Long, String> pingTimeLinkedMap = new LinkedHashMap<>();
+                pingTimesMap.forEach((s, longs) -> pingTimeLinkedMap.put(getBestTime(longs), s));
+                Long bestTime = pingTimeLinkedMap.keySet().stream().min(Long::compareTo).orElse(Long.MAX_VALUE);
 
-                apiURL = var23.getMessage();
-                if (apiURL != null && !apiURL.isEmpty()) {
-                    apiURL = ". " + apiURL;
+                String bestURL = pingTimeLinkedMap.get(bestTime);
+                LOGGER.debug("Best api url [{}] with time [{}]", bestURL, bestTime);
+                addIPAndBestPing(bestTime, bestURL);
+                String address = bestURL + "@" + matcher.group(7);
+                if (validAPIServerAddressFormat(address)) {
+                    return address;
                 } else {
-                    apiURL = "";
+                    throw new ApiUrlServerFormatException("4. Wrong format of api url:" + address);
                 }
+            }
 
-                LOGGER.error(errorMessage + apiURL, var23);
-                throw var23;
+        }
+    }
+
+    /**
+     * @param url
+     * @return
+     */
+    private static InetSocketAddress getInetSocketAddress(final String url) {
+
+        String host;
+        int port;
+        int semicolonIndex = url.indexOf(":");
+        if (semicolonIndex != -1) {
+            host = url.substring(0, semicolonIndex);
+            if (semicolonIndex + 1 >= url.length()) {
+                LOGGER.warn("Port is not set, using default 443");
+                port = 443;
+            } else {
+                port = Integer.parseInt(url.substring(semicolonIndex + 1));
+            }
+        } else {
+            LOGGER.warn("Port is not set, using default 443");
+            host = url;
+            port = 443;
+        }
+        return new InetSocketAddress(host, port);
+    }
+
+    /**
+     * @param pingTimes
+     * @return
+     */
+    private static Long getBestTime(Long[] pingTimes) {
+
+        Long bestTime = 0L;
+        for (Long time : pingTimes) {
+            if (time < 0 || time == Long.MAX_VALUE) {
+                return Long.MAX_VALUE;
+            } else {
+                bestTime += time;
             }
         }
+        return bestTime / pingTimes.length;
     }
 
     private static void addIPAndBestPing(long bestTime, String bestURL) {
@@ -421,10 +323,10 @@ public class AuthorizationClient {
         AuthorizationServerPropertiesResponse authorizationServerPropertiesResponse = null;
 
         try {
-            URLConnection connection = getConnection(url);
-            if (connection instanceof HttpURLConnection) {
-                responseCode = ((HttpURLConnection) connection).getResponseCode();
-            }
+            HttpURLConnection connection = getConnection(url);
+
+                responseCode =connection.getResponseCode();
+
 
             String clientCountry;
             try {
@@ -555,31 +457,33 @@ public class AuthorizationClient {
         //
         //            if (!ObjectUtils.isNullOrEmpty(authToken)) {
         //                return true;
-        //            } else if (!ObjectUtils.isNullOrEmpty(password) && !ObjectUtils.isNullOrEmpty(username.isEmpty())) {
+        //            } else if (!ObjectUtils.isNullOrEmpty(password) && !ObjectUtils.isNullOrEmpty(username.isEmpty
+        // ())) {
         //                return true;
         //            } else {
-        //                return !ObjectUtils.isNullOrEmpty(username) && !ObjectUtils.isNullOrEmpty(sessionId) && !ObjectUtils.isNullOrEmpty(apiUrl) && !ObjectUtils.isNullOrEmpty(ticket);
+        //                return !ObjectUtils.isNullOrEmpty(username) && !ObjectUtils.isNullOrEmpty(sessionId) &&
+        // !ObjectUtils.isNullOrEmpty(apiUrl) && !ObjectUtils.isNullOrEmpty(ticket);
         //            }
         //        }
         //TODO added
         return true;
     }
 
-    private static URLConnection getConnection(URL url) throws IOException {
+    private static HttpURLConnection getConnection(URL url) throws IOException {
 
-        URLConnection connection = url.openConnection();
+
+
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         if (connection instanceof HttpsURLConnection && Boolean.getBoolean(SSL_IGNORE_ERRORS)) {
             LOGGER.debug("Ignoring SSL errors");
-            ((HttpsURLConnection) connection).setHostnameVerifier(new AuthorizationClient.DummyHostNameVerifier());
-        }
-
-        if (connection instanceof URLConnection) {
+            ((HttpsURLConnection) connection).setHostnameVerifier(new DummyHostNameVerifier());
+        } else {
             connection.setRequestProperty(USER_AGENT_KEY, USER_AGENT_VALUE);
         }
-
         connection.setConnectTimeout(10000);
         connection.setReadTimeout(15000);
         return connection;
+
     }
 
     private static String convertToHex(byte[] data) {
@@ -633,6 +537,7 @@ public class AuthorizationClient {
      * @return
      */
     public static boolean validAPIServerAddressFormat(String address) {
+
         PreCheck.parameterNotNullOrEmpty(address, "address");
         Matcher e = RESULT_PATTERN.matcher(address);
         return e.matches();
@@ -667,7 +572,11 @@ public class AuthorizationClient {
             long currentTimeMillis = System.currentTimeMillis();
             SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             String currentDate = DATE_FORMAT.format(new Date(currentTimeMillis));
-            String info = String.format("%s %s%-10s %s%-65s %s%-65s %s%-5s %s%s %s%-5s %s%-15s %s%-15s %s%-20s %s%-15s %s%-40s %s%s", currentDate, "login=", login, "currentToken=", currentToken, "nextToken=", nextToken, "authResult=", String.valueOf(authResult), "deviceID=", deviceID, "rememberMe=", rememberMe, "platform=", platform, "deviceName=", deviceName, "deviceOS=", deviceOS, "platformVersion=", platformVersion, "sessionId=", sessionId, "authorizationUrl=", authorizationUrl);
+            String info = String.format("%s %s%-10s %s%-65s %s%-65s %s%-5s %s%s %s%-5s %s%-15s %s%-15s %s%-20s
+            %s%-15s %s%-40s %s%s", currentDate, "login=", login, "currentToken=", currentToken, "nextToken=",
+            nextToken, "authResult=", String.valueOf(authResult), "deviceID=", deviceID, "rememberMe=", rememberMe,
+            "platform=", platform, "deviceName=", deviceName, "deviceOS=", deviceOS, "platformVersion=",
+            platformVersion, "sessionId=", sessionId, "authorizationUrl=", authorizationUrl);
             IFilePathManager filePathManager = FilePathManager.getInstance();
             String defaultJForexFolderPath = filePathManager.getDefaultJForexFolderPath();
             Path autologinLogPath = Paths.get(defaultJForexFolderPath, "autologin-log.txt");
@@ -715,58 +624,48 @@ public class AuthorizationClient {
      * The report URL.
      *
      * @param reportKey the key
-     * @param baseUrl the url
-     * @param stsToken the requiered token
+     * @param baseUrl   the url
+     * @param stsToken  the requiered token
      * @return the report url as String
      */
     public String getReportURL(String reportKey, String baseUrl, String stsToken) {
+
         PreCheck.parameterNotNullOrEmpty(reportKey, "reportKey");
         PreCheck.parameterNotNullOrEmpty(baseUrl, "baseUrl");
         PreCheck.parameterNotNullOrEmpty(stsToken, "stsToken");
         reportKey = reportKey.trim();
-        String TYPE =            "secure";
-        StringBuilder reportUrl =            new StringBuilder(256);
-        reportUrl
-            .append(baseUrl)
-            .append("/fo/reports/trader/auth/?")
-            .append("type")
-            .append("=")
-            .append("secure")
-            .append("&")
-            .append("token")
-            .append("=")
-            .append(stsToken)
-            .append("&")
-            .append("report")
-            .append("=")
-            .append(reportKey);
+        String TYPE = "secure";
+        StringBuilder reportUrl = new StringBuilder(256);
+        reportUrl.append(baseUrl)
+                 .append("/fo/reports/trader/auth/?")
+                 .append("type")
+                 .append("=")
+                 .append("secure")
+                 .append("&")
+                 .append("token")
+                 .append("=")
+                 .append(stsToken)
+                 .append("&")
+                 .append("report")
+                 .append("=")
+                 .append(reportKey);
         return reportUrl.toString();
     }
 
     /**
-     *
-     *
      * @param baseUrl
      * @param stsToken
      * @param mode
      * @return
      */
-    public String getChatURL(String baseUrl,
-                             String stsToken,
-                             String mode) {
+    public String getChatURL(String baseUrl, String stsToken, String mode) {
 
         PreCheck.parameterNotNullOrEmpty(stsToken, "stsToken");
-        PreCheck.parameterNotNullOrEmpty(baseUrl,"baseUrl");
-        PreCheck.parameterNotNullOrEmpty(mode,"mode");
+        PreCheck.parameterNotNullOrEmpty(baseUrl, "baseUrl");
+        PreCheck.parameterNotNullOrEmpty(mode, "mode");
         StringBuilder chatUrl = new StringBuilder();
-        char separator = baseUrl.contains("#") ?  '&' : '?';
-        chatUrl
-            .append(baseUrl)
-            .append(separator)
-            .append("token")
-            .append("=")
-            .append(mode)
-            .append(stsToken);
+        char separator = baseUrl.contains("#") ? '&' : '?';
+        chatUrl.append(baseUrl).append(separator).append("token").append("=").append(mode).append(stsToken);
         return chatUrl.toString();
     }
 
@@ -856,19 +755,16 @@ public class AuthorizationClient {
                 LOGGER.error(authorizationServerStsTokenResponse.toString());
             } catch (MalformedURLException var30) {
                 LOGGER.error(var30.getMessage(), var30);
-                authorizationServerStsTokenResponse
-                    = new AuthorizationServerStsTokenResponse(AuthorizationServerResponseCode
-                                                                  .BAD_URL);
+                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(
+                    AuthorizationServerResponseCode.BAD_URL);
                 return authorizationServerStsTokenResponse;
             } catch (IOException var31) {
                 LOGGER.error(var31.getMessage(), var31);
-                authorizationServerStsTokenResponse
-                    = new AuthorizationServerStsTokenResponse(ERROR_IO);
+                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(ERROR_IO);
             } catch (Throwable var32) {
                 LOGGER.error(var32.getMessage(), var32);
-                authorizationServerStsTokenResponse
-                    = new AuthorizationServerStsTokenResponse(AuthorizationServerResponseCode
-                    .INTERNAL_ERROR);
+                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(
+                    AuthorizationServerResponseCode.INTERNAL_ERROR);
                 return authorizationServerStsTokenResponse;
             }
 
@@ -970,20 +866,20 @@ public class AuthorizationClient {
     private boolean continueObtainingAPIServers(int retryCount,
                                                 AuthorizationServerResponse authorizationServerResponse) {
 
-            return authorizationServerResponse == null || (
-                retryCount < this.configurationPool.size() && authorizationServerResponse.isEmptyResponse()
-                || retryCount < this.configurationPool.size() && (
-                    authorizationServerResponse.getResponseCode() == TOO_MANY_REQUESTS
-                    || authorizationServerResponse.getResponseCode() == ERROR_IO
-                    || authorizationServerResponse.getResponseCode() == EMPTY_RESPONSE
-                    || authorizationServerResponse.getResponseCode() == NOT_FOUND
-                    || authorizationServerResponse.getResponseCode() == WRONG_AUTH_RESPONSE
-                    || authorizationServerResponse.getResponseCode() == AUTHORIZATION_REQUEST_TIMEOUT
-                    || authorizationServerResponse.getResponseCode() == AUTHORIZATION_TIMEOUT
-                    || authorizationServerResponse.getResponseCode() == NO_PROPERTIES_RECEIVED
-                    || authorizationServerResponse.getResponseCode() == SERVICE_UNAVAILABLE
-                    || authorizationServerResponse.getResponseCode() == UNKNOWN_RESPONSE
-                    || authorizationServerResponse.isSystemError()));
+        return authorizationServerResponse == null || (retryCount < this.configurationPool.size()
+                                                       && authorizationServerResponse.isEmptyResponse()
+                                                       || retryCount < this.configurationPool.size() && (
+            authorizationServerResponse.getResponseCode() == TOO_MANY_REQUESTS
+            || authorizationServerResponse.getResponseCode() == ERROR_IO
+            || authorizationServerResponse.getResponseCode() == EMPTY_RESPONSE
+            || authorizationServerResponse.getResponseCode() == NOT_FOUND
+            || authorizationServerResponse.getResponseCode() == WRONG_AUTH_RESPONSE
+            || authorizationServerResponse.getResponseCode() == AUTHORIZATION_REQUEST_TIMEOUT
+            || authorizationServerResponse.getResponseCode() == AUTHORIZATION_TIMEOUT
+            || authorizationServerResponse.getResponseCode() == NO_PROPERTIES_RECEIVED
+            || authorizationServerResponse.getResponseCode() == SERVICE_UNAVAILABLE
+            || authorizationServerResponse.getResponseCode() == UNKNOWN_RESPONSE
+            || authorizationServerResponse.isSystemError()));
     }
 
     /**
@@ -1012,7 +908,7 @@ public class AuthorizationClient {
                                                              || authorizationServerResponse.getResponseCode()
                                                                 == AuthorizationServerResponseCode.AUTHORIZATION_TIMEOUT
                                                              || authorizationServerResponse.getResponseCode()
-                                                                ==AuthorizationServerResponseCode.SERVICE_UNAVAILABLE
+                                                                == AuthorizationServerResponseCode.SERVICE_UNAVAILABLE
                                                              || authorizationServerResponse.getResponseCode()
                                                                 == AuthorizationServerResponseCode.INTERRUPTED);
         }
@@ -1021,8 +917,7 @@ public class AuthorizationClient {
     /**
      * @param attempts
      */
-    private void resetSameAuthUrlAttempts(Map<AuthorizationServerResponseCode,
-        SameAuthUrlAttemptsBean> attempts) {
+    private void resetSameAuthUrlAttempts(Map<AuthorizationServerResponseCode, SameAuthUrlAttemptsBean> attempts) {
 
 
         if (attempts != null) {
@@ -1039,14 +934,11 @@ public class AuthorizationClient {
      * @param attempts
      * @return
      */
-    private boolean useTheSameAuthorizationURL(AuthorizationServerResponseCode
-    authorizationServerResponseCode,
-                                               Map<AuthorizationServerResponseCode,
-                                               AuthorizationClient.SameAuthUrlAttemptsBean> attempts) {
+    private boolean useTheSameAuthorizationURL(AuthorizationServerResponseCode authorizationServerResponseCode,
+                                               Map<AuthorizationServerResponseCode, AuthorizationClient
+                                                   .SameAuthUrlAttemptsBean> attempts) {
 
-        AuthorizationClient.SameAuthUrlAttemptsBean
-            authUrlAttemptsBean
-            =  attempts.get(authorizationServerResponseCode);
+        AuthorizationClient.SameAuthUrlAttemptsBean authUrlAttemptsBean = attempts.get(authorizationServerResponseCode);
         return authUrlAttemptsBean != null ? authUrlAttemptsBean.isNextAttemptAvailable() : false;
     }
 
@@ -1080,9 +972,8 @@ public class AuthorizationClient {
                         (SettingsClientParamsBuilder) ((SettingsClientParamsBuilder) ((SettingsClientParamsBuilder) (
                             (SettingsClientParamsBuilder) builder
                     .setAuthTransport(new HttpAuthTransport())).setSessionId(sessionId)).setPlatform(JFOREX_PLATFORM)
-                    ).setLogin(
-                    login)).setPassword(password)).setPlatformVersion(clientVersion)).setAccountType(AccountType
-                    .TRADER))
+                        ).setLogin(
+                    login)).setPassword(password)).setPlatformVersion(clientVersion)).setAccountType(AccountType.TRADER))
                     .setUserAgent(USER_AGENT_VALUE)).setZipSettings(true)).setLogger(LOGGER)).setHttpBase(
                     authorizationUrl);
                 SettingsClientParams params = builder.build();
@@ -1188,14 +1079,11 @@ public class AuthorizationClient {
             sameAuthUrlAttempts
             = new HashMap();
         authUrlAttemptsBean = new AuthorizationClient.SameAuthUrlAttemptsBean(3);
-        sameAuthUrlAttempts.put(AUTHORIZATION_REQUEST_TIMEOUT,
-                                authUrlAttemptsBean);
+        sameAuthUrlAttempts.put(AUTHORIZATION_REQUEST_TIMEOUT, authUrlAttemptsBean);
         authUrlAttemptsBean = new AuthorizationClient.SameAuthUrlAttemptsBean(3);
-        sameAuthUrlAttempts.put(AuthorizationServerResponseCode.AUTHORIZATION_TIMEOUT,
-                                authUrlAttemptsBean);
+        sameAuthUrlAttempts.put(AuthorizationServerResponseCode.AUTHORIZATION_TIMEOUT, authUrlAttemptsBean);
         authUrlAttemptsBean = new AuthorizationClient.SameAuthUrlAttemptsBean(2);
-        sameAuthUrlAttempts.put(AuthorizationServerResponseCode.SERVICE_UNAVAILABLE,
-                                authUrlAttemptsBean);
+        sameAuthUrlAttempts.put(AuthorizationServerResponseCode.SERVICE_UNAVAILABLE, authUrlAttemptsBean);
 
         while (true) {
             label191:
@@ -1214,8 +1102,7 @@ public class AuthorizationClient {
                     } catch (Throwable var41) {
                         LOGGER.error(var41.getMessage(), var41);
                         authorizationServerResponse
-                            = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                            .INTERNAL_ERROR);
+                            = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
                         return authorizationServerResponse;
                     }
                 }
@@ -1235,7 +1122,7 @@ public class AuthorizationClient {
 
                     ((AbstractBusinessSRPAuthClientParamsBuilder) ((AbstractBusinessSRPAuthClientParamsBuilder) (
                         (AbstractBusinessSRPAuthClientParamsBuilder) ((AbstractBusinessSRPAuthClientParamsBuilder)
-                        builder)
+                                                                          builder)
                         .setAuthTransport(new HttpAuthTransport())).setHttpBase(authorizationUrl)).setLogin(login)
                                                                                                   .setPassword(password)
                                                                                                   .setCaptchaId(
@@ -1243,7 +1130,7 @@ public class AuthorizationClient {
                                                                                                   .setPin(pin)
                                                                                                   .setAccountType(
                                                                                                       AccountType
-                                                                                                      .TRADER)
+                                                                                                          .TRADER)
                                                                                                   .setSessionId(
                                                                                                       sessionId)
                                                                                                   .setPlatform(platform)
@@ -1274,7 +1161,7 @@ public class AuthorizationClient {
                                                                                                   .setDeviceOS(deviceOS)
                                                                                                   .setAccountType(
                                                                                                       AccountType
-                                                                                                      .TRADER))
+                                                                                                          .TRADER))
                             .setPassword(previousRememberMeToken);
                     }
 
@@ -1331,7 +1218,8 @@ public class AuthorizationClient {
                         }
 
                         authorizationServerResponse = new AuthorizationServerResponse(sb.toString(),
-                                                                                      AuthorizationServerResponseCode.SUCCESS_OK,
+                                                                                      AuthorizationServerResponseCode
+                                                                                          .SUCCESS_OK,
                                                                                       true,
                                                                                       properties);
                         if (authorizationServerResponse.isOK()) {
@@ -1360,8 +1248,7 @@ public class AuthorizationClient {
                         break;
                     }
 
-                    authorizationServerResponse
-                        = new AuthorizationServerResponse(EMPTY_RESPONSE);
+                    authorizationServerResponse = new AuthorizationServerResponse(EMPTY_RESPONSE);
                     this.configurationPool.markLastUsedAsBad();
                     ++retryCount;
                 } catch (AuthServerException var43) {
@@ -1404,8 +1291,7 @@ public class AuthorizationClient {
                         }
                     } else {
                         authorizationServerResponse
-                            = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                            .UNKNOWN_RESPONSE);
+                            = new AuthorizationServerResponse(AuthorizationServerResponseCode.UNKNOWN_RESPONSE);
                     }
                     break;
                 } catch (SRP6Exception var44) {
@@ -1413,42 +1299,35 @@ public class AuthorizationClient {
                     authProtocol = var44.getCauseType();
                     switch (authProtocol) {
                         case BAD_CREDENTIALS:
-                            authorizationServerResponse
-                                = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                                .BAD_CREDENTIALS);
+                            authorizationServerResponse = new AuthorizationServerResponse(
+                                AuthorizationServerResponseCode.BAD_CREDENTIALS);
                             break label191;
                         case BAD_PUBLIC_VALUE:
-                            authorizationServerResponse
-                                = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                                .BAD_PUBLIC_VALUE);
+                            authorizationServerResponse = new AuthorizationServerResponse(
+                                AuthorizationServerResponseCode.BAD_PUBLIC_VALUE);
                             break label191;
                         case TIMEOUT:
-                            authorizationServerResponse
-                                = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                                .AUTHORIZATION_TIMEOUT);
+                            authorizationServerResponse = new AuthorizationServerResponse(
+                                AuthorizationServerResponseCode.AUTHORIZATION_TIMEOUT);
                             break label191;
                         default:
-                            authorizationServerResponse
-                                = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                                .UNKNOWN_RESPONSE);
+                            authorizationServerResponse = new AuthorizationServerResponse(
+                                AuthorizationServerResponseCode.UNKNOWN_RESPONSE);
                             break label191;
                     }
                 } catch (IOException var45) {
                     LOGGER.error(var45.getMessage(), var45);
-                    authorizationServerResponse
-                        = new AuthorizationServerResponse(ERROR_IO);
+                    authorizationServerResponse = new AuthorizationServerResponse(ERROR_IO);
                     break;
                 } catch (InterruptedException var46) {
                     LOGGER.error(var46.getMessage(), var46);
                     authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                        .INTERRUPTED);
+                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERRUPTED);
                     break;
                 } catch (Throwable var47) {
                     LOGGER.error(var47.getMessage(), var47);
                     authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                        .INTERNAL_ERROR);
+                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
                     return authorizationServerResponse;
                 }
             }
@@ -1456,7 +1335,7 @@ public class AuthorizationClient {
             if (!this.useTheSameAuthorizationURL(authorizationServerResponse.getResponseCode(), sameAuthUrlAttempts)) {
                 this.resetSameAuthUrlAttempts(sameAuthUrlAttempts);
                 ++retryCount;
-                if (this.continueObtainingAPIServers(retryCount,  authorizationServerResponse)) {
+                if (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
                     this.configurationPool.markLastUsedAsBad();
                 }
             }
@@ -1481,8 +1360,7 @@ public class AuthorizationClient {
                 } catch (Throwable var12) {
                     LOGGER.error(var12.getMessage(), var12);
                     authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                        .INTERNAL_ERROR);
+                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
                     return authorizationServerResponse;
                 }
             }
@@ -1532,21 +1410,18 @@ public class AuthorizationClient {
 
                 if (var13 instanceof UnsupportedEncodingException) {
                     authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                        .ERROR_INIT);
+                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.ERROR_INIT);
                 }
 
                 if (var13 instanceof NoSuchAlgorithmException) {
                     authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                        .ERROR_INIT);
+                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.ERROR_INIT);
                 }
 
                 return authorizationServerResponse;
             } catch (IOException var14) {
                 LOGGER.error(var14.getMessage(), var14);
-                authorizationServerResponse
-                    = new AuthorizationServerResponse(ERROR_IO);
+                authorizationServerResponse = new AuthorizationServerResponse(ERROR_IO);
             } catch (InterruptedException var15) {
                 LOGGER.error(var15.getMessage(), var15);
                 authorizationServerResponse
@@ -1554,13 +1429,12 @@ public class AuthorizationClient {
             } catch (Throwable var16) {
                 LOGGER.error(var16.getMessage(), var16);
                 authorizationServerResponse
-                    = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                    .INTERNAL_ERROR);
+                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
                 return authorizationServerResponse;
             }
 
             ++retryCount;
-            if (this.continueObtainingAPIServers(retryCount,  authorizationServerResponse)) {
+            if (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
                 this.configurationPool.markLastUsedAsBad();
             }
         }
@@ -1578,7 +1452,7 @@ public class AuthorizationClient {
         AuthorizationServerResponse authorizationServerResponse = null;
         int retryCount = 0;
 
-        while (this.continueObtainingAPIServers(retryCount,  authorizationServerResponse)) {
+        while (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
             if (this.firstApiRequest) {
                 this.firstApiRequest = false;
             } else {
@@ -1587,8 +1461,7 @@ public class AuthorizationClient {
                 } catch (Throwable var13) {
                     LOGGER.error(var13.getMessage(), var13);
                     authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                        .INTERNAL_ERROR);
+                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
                     return authorizationServerResponse;
                 }
             }
@@ -1645,15 +1518,13 @@ public class AuthorizationClient {
 
                 if (var14 instanceof NoSuchAlgorithmException) {
                     authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                        .ERROR_INIT);
+                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.ERROR_INIT);
                 }
 
                 return authorizationServerResponse;
             } catch (IOException var15) {
                 LOGGER.error(var15.getMessage(), var15);
-                authorizationServerResponse
-                    = new AuthorizationServerResponse(ERROR_IO);
+                authorizationServerResponse = new AuthorizationServerResponse(ERROR_IO);
             } catch (InterruptedException var16) {
                 LOGGER.error(var16.getMessage(), var16);
                 authorizationServerResponse
@@ -1661,13 +1532,12 @@ public class AuthorizationClient {
             } catch (Throwable var17) {
                 LOGGER.error(var17.getMessage(), var17);
                 authorizationServerResponse
-                    = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                    .INTERNAL_ERROR);
+                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
                 return authorizationServerResponse;
             }
 
             ++retryCount;
-            if (this.continueObtainingAPIServers(retryCount,  authorizationServerResponse)) {
+            if (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
                 this.configurationPool.markLastUsedAsBad();
             }
         }
@@ -1683,7 +1553,7 @@ public class AuthorizationClient {
         AuthorizationServerResponse authorizationServerResponse = null;
         int retryCount = 0;
 
-        while (this.continueObtainingAPIServers(retryCount,  authorizationServerResponse)) {
+        while (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
             try {
                 String formedUrl = this.getBaseUrl()
                                    + RELOGIN_AUTH_CONTEXT
@@ -1726,15 +1596,13 @@ public class AuthorizationClient {
 
                 if (var10 instanceof UnsupportedEncodingException) {
                     authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                        .ERROR_INIT);
+                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.ERROR_INIT);
                 }
 
                 return authorizationServerResponse;
             } catch (IOException var11) {
                 LOGGER.error(var11.getMessage(), var11);
-                authorizationServerResponse
-                    = new AuthorizationServerResponse(ERROR_IO);
+                authorizationServerResponse = new AuthorizationServerResponse(ERROR_IO);
             } catch (InterruptedException var12) {
                 LOGGER.error(var12.getMessage(), var12);
                 authorizationServerResponse
@@ -1742,13 +1610,12 @@ public class AuthorizationClient {
             } catch (Throwable var13) {
                 LOGGER.error(var13.getMessage(), var13);
                 authorizationServerResponse
-                    = new AuthorizationServerResponse(AuthorizationServerResponseCode
-                    .INTERNAL_ERROR);
+                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
                 return authorizationServerResponse;
             }
 
             ++retryCount;
-            if (this.continueObtainingAPIServers(retryCount,  authorizationServerResponse)) {
+            if (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
                 this.configurationPool.markLastUsedAsBad();
             }
         }
@@ -1780,8 +1647,7 @@ public class AuthorizationClient {
                     = new AuthorizationServerPinRequiredResponse(AuthorizationServerResponseCode.BAD_URL);
             } catch (IOException var10) {
                 LOGGER.error(var10.getMessage(), var10);
-                authorizationServerResponse
-                    = new AuthorizationServerPinRequiredResponse(ERROR_IO);
+                authorizationServerResponse = new AuthorizationServerPinRequiredResponse(ERROR_IO);
             } catch (InterruptedException var11) {
                 LOGGER.error(var11.getMessage(), var11);
                 authorizationServerResponse
@@ -1795,18 +1661,17 @@ public class AuthorizationClient {
                     authorizationServerResponse = new AuthorizationServerPinRequiredResponse(responseCode,
                                                                                              responseMessage);
                 } else {
-                    authorizationServerResponse
-                        = new AuthorizationServerPinRequiredResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
+                    authorizationServerResponse = new AuthorizationServerPinRequiredResponse(
+                        AuthorizationServerResponseCode.INTERNAL_ERROR);
                 }
             } catch (Throwable var13) {
                 LOGGER.error(var13.getMessage(), var13);
                 authorizationServerResponse
-                    = new AuthorizationServerPinRequiredResponse(AuthorizationServerResponseCode
-                    .INTERNAL_ERROR);
+                    = new AuthorizationServerPinRequiredResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
             }
 
             ++retryCount;
-            if (this.continueCheckIfPinRequired(retryCount,  authorizationServerResponse)) {
+            if (this.continueCheckIfPinRequired(retryCount, authorizationServerResponse)) {
                 this.configurationPool.markLastUsedAsBad();
             }
         }
@@ -1820,8 +1685,7 @@ public class AuthorizationClient {
         if (this.configurationPool.size() == 0) {
             LOGGER.error("No authorization url provided.");
             authorizationServerWLBOResponse
-                = new AuthorizationServerWLBOResponse(AuthorizationServerResponseCode
-                .INTERNAL_ERROR);
+                = new AuthorizationServerWLBOResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
             return authorizationServerWLBOResponse;
         } else {
             for (int retryCount = 0; retryCount < this.configurationPool.size(); ++retryCount) {
@@ -1873,19 +1737,16 @@ public class AuthorizationClient {
                                  + authorizationServerWLBOResponse.toString());
                 } catch (MalformedURLException var26) {
                     LOGGER.error(var26.getMessage(), var26);
-                    authorizationServerWLBOResponse
-                        = new AuthorizationServerWLBOResponse(AuthorizationServerResponseCode
-                        .BAD_URL);
+                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(
+                        AuthorizationServerResponseCode.BAD_URL);
                     return authorizationServerWLBOResponse;
                 } catch (IOException var27) {
                     LOGGER.error(var27.getMessage(), var27);
-                    authorizationServerWLBOResponse
-                        = new AuthorizationServerWLBOResponse(ERROR_IO);
+                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(ERROR_IO);
                 } catch (Throwable var28) {
                     LOGGER.error(var28.getMessage(), var28);
-                    authorizationServerWLBOResponse
-                        = new AuthorizationServerWLBOResponse(AuthorizationServerResponseCode
-                        .INTERNAL_ERROR);
+                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(
+                        AuthorizationServerResponseCode.INTERNAL_ERROR);
                     return authorizationServerWLBOResponse;
                 }
 
@@ -1966,8 +1827,7 @@ public class AuthorizationClient {
                 this.configurationPool.markLastUsedAsBad();
             } catch (IOException var13) {
                 LOGGER.info("Cannot get the platform properties, url=" + formedUrl);
-                propertiesResponse
-                    = new AuthorizationServerPropertiesResponse(ERROR_IO);
+                propertiesResponse = new AuthorizationServerPropertiesResponse(ERROR_IO);
                 this.configurationPool.markLastUsedAsBad();
                 LOGGER.error(var13.getMessage(), var13);
             } catch (Throwable var14) {
@@ -1978,8 +1838,7 @@ public class AuthorizationClient {
                 LOGGER.error(var14.getMessage(), var14);
             }
 
-            if (propertiesResponse.getResponseCode()
-                == AuthorizationServerResponseCode.TICKET_EXPIRED) {
+            if (propertiesResponse.getResponseCode() == AuthorizationServerResponseCode.TICKET_EXPIRED) {
                 handleNoAccountSettings(propertiesResponse.getResponseCode().getError());
             }
 
@@ -1988,10 +1847,9 @@ public class AuthorizationClient {
                 if (responseCode != null) {
                     String errorMessage = responseCode.getError();
                     if (responseCode != AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED) {
-                        errorMessage
-                            = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED.getMessage()
-                              + ". "
-                              + errorMessage;
+                        errorMessage = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED.getMessage()
+                                       + ". "
+                                       + errorMessage;
                     }
 
                     handleNoAccountSettings(errorMessage);
@@ -2091,7 +1949,11 @@ public class AuthorizationClient {
                 LOGGER.error(var9.getMessage(), var9);
             }
 
-            //authClient.ipInfoAlsMessageBean = AlsMessageFactory.createIPInfoAlsMessageBean(clientCountry, clientIpAddress);
+          // authClient.ipInfoAlsMessageBean = AlsMessageFactory.createIPInfoAlsMessageBean(clientCountry,
+            // clientIpAddress);
+
+            authClient.ipInfoAlsMessageBean = new AlsMessageBean();
+
         } catch (Exception var10) {
             LOGGER.error("Cannot get the Client-IP and Client-country.");
             LOGGER.error(var10.getMessage(), var10);
@@ -2139,7 +2001,6 @@ public class AuthorizationClient {
 
         this.srp6PlatformSessionKey.set(sessionKey);
     }
-
 
 
     private static class DummyHostNameVerifier implements HostnameVerifier {

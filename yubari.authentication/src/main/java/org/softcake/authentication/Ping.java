@@ -45,11 +45,8 @@ public class Ping {
     private static final Logger LOGGER = LoggerFactory.getLogger(Ping.class);
 
     private static final int DAYTIME_PORT = 13;
-
     private static final int TIMEOUT = 2000;
-
     private static final int ATTEMPS = 3;
-
 
     private static volatile List<PingResult> pingsResults = null;
 
@@ -164,15 +161,6 @@ public class Ping {
                 addressPingTime.put(s, pingTime);
             }
         });
-
-        try {
-		  /* PlatformServiceProvider.getInstance().setPingInfo("ping", pingsResults);
-            if(pingsResults != null) {
-                pingsResults.clear();
-            }*/
-        } catch (Throwable var14) {
-            LOGGER.error(var14.getMessage(), var14);
-        }
 
         return addressPingTime;
     }
@@ -438,14 +426,10 @@ public class Ping {
 
 
         private InetSocketAddress address;
-
-
         private SocketChannel channel;
-
         private Exception failure;
 
         private long connectStart;
-
         private long connectFinish = Long.MIN_VALUE;
 
         private boolean shown = false;

@@ -52,10 +52,10 @@ public class SRP6Test {
 
         System.setProperty("jnlp.login.url",
                            "https://www-cdn-1.dukascopy.com/authorization-1/demo,https://www-cdn-3.dukascopy"
-			   + ".com/authorization-2/demo");
+                           + ".com/authorization-2/demo");
         System.setProperty("jnlp.srp6.login.url",
                            "https://login.dukascopy.com/authorization-1/demo,https://login.dukascopy"
-			   + ".com/authorization-2/demo");
+                           + ".com/authorization-2/demo");
         System.setProperty("jnlp.platform.mode", "jforex");
         System.setProperty("jnlp.client.version", "2.45.47");
         System.setProperty("jnlp.client.mode", "DEMO");
@@ -82,13 +82,12 @@ public class SRP6Test {
 
         AuthorizationClient authClient = AuthorizationClient.getInstance(authServerUrls, DEFAULT_VERSION);
         String pin = PinDialog.showAndGetPin();
-		/*AuthorizationServerResponse serverResponse = authClient.getAPIsAndTicketUsingLogin(username,
-		password,captchaId,
-												   pin,
-																				UUID.randomUUID().toString(),
-																				JFOREXSDK_PLATFORM
-																				);
-*/
+        AuthorizationServerResponse serverResponse = authClient.getAPIsAndTicketUsingLogin(username,
+                                                                                           password,
+                                                                                           captchaId,
+                                                                                           pin,
+                                                                                           UUID.randomUUID().toString(),
+                                                                                           JFOREXSDK_PLATFORM);
 
 
         //            Matcher
@@ -96,15 +95,15 @@ public class SRP6Test {
         //            String ticket = matcher.group(7);
 
         //            LOGGER.info(ticket);
-        AuthorizationServerResponse serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(username,
+       /* AuthorizationServerResponse serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(username,
                                                                                           password,
                                                                                                 captchaId,
                                                                                                 pin,
                                                                                                 UUID.randomUUID()
                                                                                                     .toString(),
-                                                                                                JFOREXSDK_PLATFORM);
+                                                                                                JFOREXSDK_PLATFORM);*/
         String fastestAPIAndTicket = serverResponse.getFastestAPIAndTicket();
-LOGGER.info(serverResponse.getMessage());
+        LOGGER.info(serverResponse.getMessage());
     }
 
 

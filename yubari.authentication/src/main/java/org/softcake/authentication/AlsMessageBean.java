@@ -35,6 +35,10 @@ public class AlsMessageBean {
     private List<Map<String, String>> messageParameters = new ArrayList();
     private boolean doNotSend = false;
 
+    public AlsMessageBean() {
+
+    }
+
     public AlsMessageBean(RemoteLogMessageType remoteLogMessageType, String translationKey) {
         this.remoteLogMessageType = remoteLogMessageType;
         this.translationKey = translationKey;

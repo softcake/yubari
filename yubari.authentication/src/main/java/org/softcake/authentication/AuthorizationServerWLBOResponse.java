@@ -17,6 +17,9 @@
 package org.softcake.authentication;
 
 
+import static org.softcake.authentication.AuthorizationServerResponseCode.*;
+
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,20 +38,20 @@ public class AuthorizationServerWLBOResponse extends AbstractAuthorizationServer
     private String login;
     private String error;
 
-    public AuthorizationServerWLBOResponse(AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerWLBOResponse(AuthorizationServerResponseCode code) {
         this.responseMessage = null;
-        this.responseCode = authorizationServerResponseCode;
+        this.responseCode = code;
     }
 
-    public AuthorizationServerWLBOResponse(String responseMessage, AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerWLBOResponse(String responseMessage, AuthorizationServerResponseCode code) {
         this.responseMessage = null;
-        this.responseCode = authorizationServerResponseCode;
+        this.responseCode = code;
         this.init();
     }
 
-    public AuthorizationServerWLBOResponse(String responseMessage, int authorizationServerResponseCode) {
+    public AuthorizationServerWLBOResponse(String responseMessage, int code) {
         this.responseMessage = responseMessage;
-        this.responseCode = AuthorizationServerResponseCode.fromValue(authorizationServerResponseCode);
+        this.responseCode = fromValue(code);
         this.init();
     }
 
@@ -56,12 +59,12 @@ public class AuthorizationServerWLBOResponse extends AbstractAuthorizationServer
         return this.error;
     }
 
-    protected void validateResponse(String authorizationResponse) {
-        if (authorizationResponse != null && authorizationResponse.length() != 0) {
+    protected void validateResponse(String response) {
+        if (response != null && response.length() != 0) {
             try {
 
-                //TODO  JSONObject jsonObject = new JSONObject(authorizationResponse, false);
-                JSONObject jsonObject = new JSONObject(authorizationResponse);
+                //TODO  JSONObject jsonObject = new JSONObject(response, false);
+                JSONObject jsonObject = new JSONObject(response);
                 if (!jsonObject.isNull("error")) {
                     this.error = jsonObject.getString("error");
                     if (this.error != null) {
@@ -70,50 +73,50 @@ public class AuthorizationServerWLBOResponse extends AbstractAuthorizationServer
                 }
 
                 if (this.error != null && this.error.length() > 0) {
-                    LOGGER.error("Error [" + authorizationResponse + "]");
-                    this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
+                    LOGGER.error("Error [{}]", response);
+                    this.responseCode = WRONG_AUTH_RESPONSE;
                     return;
                 }
 
                 this.authTicket = jsonObject.getString(AUTH_TICKET_PARAM_NAME);
                 this.sid = jsonObject.getString(SID_PARAM_NAME);
                 this.readOnly = jsonObject.getBoolean(READONLY_PARAM_NAME);
-                this.authApiURL = jsonObject.getString("authApiURL");
-                this.login = jsonObject.getString("login");
+                this.authApiURL = jsonObject.getString(AUTH_API_URL_PARAM_NAME);
+                this.login = jsonObject.getString(LOGIN_PARAM_NAME);
                 if (this.authApiURL != null) {
                     this.authApiURL = this.authApiURL.trim();
                 }
 
                 if (this.isEmpty(this.authTicket)) {
-                    this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
-                    LOGGER.error("Wrong authTicket [" + authorizationResponse + "]");
+                    this.responseCode = WRONG_AUTH_RESPONSE;
+                    LOGGER.error("Wrong authTicket [{}]", response);
                     return;
                 }
 
                 if (this.isEmpty(this.sid)) {
-                    this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
-                    LOGGER.error("Wrong sid [" + authorizationResponse + "]");
+                    this.responseCode = WRONG_AUTH_RESPONSE;
+                    LOGGER.error("Wrong sid [{}]", response);
                     return;
                 }
 
                 if (this.isEmpty(this.authApiURL)) {
-                    this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
-                    LOGGER.error("Wrong authApiURL [" + authorizationResponse + "]");
+                    this.responseCode = WRONG_AUTH_RESPONSE;
+                    LOGGER.error("Wrong authApiURL [{}]", response);
                     return;
                 }
 
                 if (this.isEmpty(this.login)) {
-                    this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
-                    LOGGER.error("Wrong login [" + authorizationResponse + "]");
+                    this.responseCode = WRONG_AUTH_RESPONSE;
+                    LOGGER.error("Wrong login [{}]", response);
                     return;
                 }
-            } catch (Throwable var3) {
-                LOGGER.error(var3.getMessage(), var3);
-                this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
-                LOGGER.error("Cannot parse the authorization answer [" + authorizationResponse + "]");
+            } catch (JSONException ex) {
+                this.responseCode = WRONG_AUTH_RESPONSE;
+                LOGGER.error("Error occurred...", ex);
+                LOGGER.error("Cannot parse the authorization answer [{}]", response);
             }
         } else {
-            this.responseCode = AuthorizationServerResponseCode.EMPTY_RESPONSE;
+            this.responseCode = EMPTY_RESPONSE;
         }
 
     }

@@ -17,6 +17,8 @@
 package org.softcake.authentication;
 
 
+import static org.softcake.authentication.AuthorizationServerResponseCode.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,106 +28,100 @@ import java.util.regex.Matcher;
 public class AuthorizationServerResponse extends AbstractAuthorizationServerResponse {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthorizationServerResponse.class);
     private String fastestAPIAndTicket;
-    private String rememberMeToken = null;
-    private int passwordLength = 0;
+    private String rememberMeToken;
+    private int passwordLength;
     private int detailedStatusCode;
 
-    public AuthorizationServerResponse(AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerResponse(AuthorizationServerResponseCode code) {
 
         this.responseMessage = null;
-        this.responseCode = authorizationServerResponseCode;
+        this.responseCode = code;
     }
 
-    public AuthorizationServerResponse(AuthorizationServerResponseCode authorizationServerResponseCode,
-                                       int detailedStatusCode) {
+    public AuthorizationServerResponse(AuthorizationServerResponseCode code, int detailedStatusCode) {
 
         this.responseMessage = null;
-        this.responseCode = authorizationServerResponseCode;
+        this.responseCode = code;
         this.detailedStatusCode = detailedStatusCode;
     }
 
-    public AuthorizationServerResponse(String responseMessage,
-                                       AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerResponse(String responseMessage, AuthorizationServerResponseCode code) {
 
         this.responseMessage = responseMessage;
-        this.responseCode = authorizationServerResponseCode;
+        this.responseCode = code;
         this.init();
     }
 
     public AuthorizationServerResponse(String responseMessage,
-                                       AuthorizationServerResponseCode authorizationServerResponseCode,
+                                       AuthorizationServerResponseCode code,
                                        boolean srp6requestWithProperties,
                                        Properties platformProperties) {
 
         this.responseMessage = responseMessage;
-        this.responseCode = authorizationServerResponseCode;
+        this.responseCode = code;
         this.srp6requestWithProperties = srp6requestWithProperties;
         this.platformProperties = platformProperties;
         this.init();
     }
 
-    public AuthorizationServerResponse(String responseMessage, int authorizationServerResponseCode) {
+    public AuthorizationServerResponse(String responseMessage, int code) {
 
         this.responseMessage = responseMessage;
-        this.responseCode = AuthorizationServerResponseCode.fromValue(authorizationServerResponseCode);
+        this.responseCode = fromValue(code);
         this.init();
     }
 
     public boolean isEmptyResponse() {
 
-        return this.isOK() && AuthorizationServerResponseCode.EMPTY_RESPONSE == this.responseCode;
+        return this.isOK() && EMPTY_RESPONSE == this.responseCode;
     }
 
     public boolean isTicketExpired() {
 
-        return AuthorizationServerResponseCode.TICKET_EXPIRED == this.responseCode
-               || AuthorizationServerResponseCode.MINUS_ONE_OLD_ERROR == this.responseCode;
+        return TICKET_EXPIRED == this.responseCode || MINUS_ONE_OLD_ERROR == this.responseCode;
     }
 
     public boolean isSystemError() {
 
-        return AuthorizationServerResponseCode.SYSTEM_ERROR == this.responseCode
-               || AuthorizationServerResponseCode.SYSTEM_ERROR_OLD == this.responseCode;
+        return SYSTEM_ERROR == this.responseCode || SYSTEM_ERROR_OLD == this.responseCode;
     }
 
     public boolean isWrongVersion() {
 
-        return AuthorizationServerResponseCode.WRONG_VERSION_RESPONSE == this.responseCode
-               || AuthorizationServerResponseCode.WRONG_VERSION_RESPONSE_OLD == this.responseCode;
+        return WRONG_VERSION_RESPONSE == this.responseCode || WRONG_VERSION_RESPONSE_OLD == this.responseCode;
     }
 
     public boolean isNoAPIServers() {
 
-        return AuthorizationServerResponseCode.SERVICE_UNAVAILABLE == this.responseCode
-               || AuthorizationServerResponseCode.SERVICE_UNAVAILABLE_OLD == this.responseCode;
+        return SERVICE_UNAVAILABLE == this.responseCode || SERVICE_UNAVAILABLE_OLD == this.responseCode;
     }
 
     public boolean isInternalError() {
 
-        return AuthorizationServerResponseCode.INTERNAL_ERROR == this.responseCode;
+        return INTERNAL_ERROR == this.responseCode;
     }
 
     public boolean isAuthorizationError() {
 
-        return AuthorizationServerResponseCode.AUTHENTICATION_AUTHORIZATION_ERROR == this.responseCode;
+        return AUTHENTICATION_AUTHORIZATION_ERROR == this.responseCode;
     }
 
-    protected void validateResponse(String authorizationResponse) {
+    protected void validateResponse(String response) {
 
-        if (authorizationResponse != null && authorizationResponse.length() != 0) {
-            Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(authorizationResponse);
+        if (response != null && response.length() != 0) {
+            Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(response);
             if (!matcher.matches()) {
-                LOGGER.error("Authorization procedure returned unexpected result [" + authorizationResponse + "]");
-                this.responseCode = AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
+                LOGGER.error("Authorization procedure returned unexpected result [{}]", response);
+                this.responseCode = WRONG_AUTH_RESPONSE;
             }
         } else {
-            this.responseCode = AuthorizationServerResponseCode.EMPTY_RESPONSE;
+            this.responseCode = EMPTY_RESPONSE;
         }
 
-        if (this.responseCode == AuthorizationServerResponseCode.SUCCESS_OK
-            && this.srp6requestWithProperties
-            && (this.platformProperties == null || this.platformProperties.isEmpty())) {
-            this.responseCode = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
+        if (this.responseCode == SUCCESS_OK && this.srp6requestWithProperties && (this.platformProperties == null
+                                                                                  || this.platformProperties.isEmpty
+            ())) {
+            this.responseCode = NO_PROPERTIES_RECEIVED;
         }
 
     }
@@ -139,20 +135,18 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
 
         this.fastestAPIAndTicket = null;
 
-        try {
-            if (fastestAPIAndTicket != null) {
-                fastestAPIAndTicket = fastestAPIAndTicket.trim();
-            }
 
-            Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(fastestAPIAndTicket);
-            if (matcher.matches()) {
-                this.fastestAPIAndTicket = fastestAPIAndTicket;
-            } else {
-                LOGGER.error("Wrong fastest API format:", fastestAPIAndTicket);
-            }
-        } catch (Throwable var3) {
-            LOGGER.error("Wrong fastest API format:");
-            LOGGER.error(var3.getMessage(), var3);
+        if (fastestAPIAndTicket != null) {
+            fastestAPIAndTicket = fastestAPIAndTicket.trim();
+        } else {
+            fastestAPIAndTicket = "";
+        }
+
+        Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(fastestAPIAndTicket);
+        if (matcher.matches()) {
+            this.fastestAPIAndTicket = fastestAPIAndTicket;
+        } else {
+            LOGGER.error("Wrong fastest API format: {}", fastestAPIAndTicket);
         }
 
     }
@@ -174,9 +168,8 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
 
     public String getMessage() {
 
-        String message = "Internal error";
-        if (this.responseCode == AuthorizationServerResponseCode.AUTHENTICATION_AUTHORIZATION_ERROR
-            && this.detailedStatusCode == 1) {
+        String message;
+        if (this.responseCode == AUTHENTICATION_AUTHORIZATION_ERROR && this.detailedStatusCode == 1) {
             message = "Password has Expired";
         } else {
             message = this.responseCode.getMessage();

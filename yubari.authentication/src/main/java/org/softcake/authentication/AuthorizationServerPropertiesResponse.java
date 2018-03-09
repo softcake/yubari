@@ -21,45 +21,50 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.util.Properties;
 
 public class AuthorizationServerPropertiesResponse extends AbstractAuthorizationServerResponse {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthorizationServerPropertiesResponse.class);
 
-    public AuthorizationServerPropertiesResponse(AuthorizationServerResponseCode authorizationServerResponseCode) {
-        this.responseCode = authorizationServerResponseCode;
+    public AuthorizationServerPropertiesResponse(AuthorizationServerResponseCode code) {
+
+        this.responseCode = code;
         this.responseMessage = null;
         this.init();
     }
 
-    public AuthorizationServerPropertiesResponse(int authorizationServerResponseCode, String platformPropertiesAsString) {
-        this.responseCode = AuthorizationServerResponseCode.fromValue(authorizationServerResponseCode);
+    public AuthorizationServerPropertiesResponse(int code,
+                                                 String platformPropertiesAsString) {
+
+        this.responseCode = AuthorizationServerResponseCode.fromValue(code);
         this.responseMessage = platformPropertiesAsString;
         this.init();
     }
 
     protected void validateResponse(String authorizationResponse) {
-        if (authorizationResponse != null && authorizationResponse.length() != 0) {
-            try {
-                byte[] decodedBytes = Base64.decode(authorizationResponse);
-                if (decodedBytes == null || decodedBytes.length == 0) {
-                    this.responseCode = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
-                    return;
-                }
 
-                ObjectInputStream inputStream = new ObjectInputStream(new ByteArrayInputStream(decodedBytes));
+        if (authorizationResponse != null && authorizationResponse.length() != 0) {
+            byte[] decodedBytes = Base64.decode(authorizationResponse);
+            if (decodedBytes == null || decodedBytes.length == 0) {
+                this.responseCode = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
+                return;
+            }
+
+            try (ObjectInputStream inputStream = new ObjectInputStream(new ByteArrayInputStream(decodedBytes))){
+
                 Object propertiesAsObject = inputStream.readObject();
-                Properties properties = (Properties)propertiesAsObject;
+                Properties properties = (Properties) propertiesAsObject;
                 if (properties.isEmpty()) {
                     this.responseCode = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
                     return;
                 }
 
                 this.platformProperties = properties;
-            } catch (Throwable var6) {
+            } catch (IOException | ClassNotFoundException e) {
                 this.responseCode = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED;
-                LOGGER.error(var6.getMessage(), var6);
+                LOGGER.error("Error occurred...", e);
             }
 
         } else {

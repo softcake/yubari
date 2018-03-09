@@ -40,9 +40,9 @@ public class AuthorizationServerPinRequiredResponse extends AbstractAuthorizatio
         this.init();
     }
 
-    public AuthorizationServerPinRequiredResponse(AuthorizationServerResponseCode authorizationServerResponseCode) {
+    public AuthorizationServerPinRequiredResponse(AuthorizationServerResponseCode code) {
         this.responseMessage = null;
-        this.responseCode = authorizationServerResponseCode;
+        this.responseCode = code;
     }
 
     public AuthorizationServerPinRequiredResponse(int responseCode, String responseMessage) {
