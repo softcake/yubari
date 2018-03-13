@@ -81,7 +81,8 @@ ext {
     publishedModules = projectModules.findAll {
         (it.name in ["yubari.connect",
                      "yubari.transport",
-                     "yubari.authentication"])
+                     "yubari.authentication",
+                     "yubari.netty"])
     }
 
     integTestModules = projectModules.findAll {
@@ -132,15 +133,32 @@ allprojects {
             dependency "com.google.guava:guava:24.0-jre"
             dependency "commons-validator:commons-validator:1.6"
             dependency "org.softcake.lemon:lemon-core:1.1.0"
-         dependency "com.dukascopy.dds2:DDS2-jClient-JForex:3.3.0"
+
+         // dependency "com.dukascopy.dds2:DDS2-jClient-JForex:3.3.0"
             dependency "com.dukascopy:auth-protocol-client:1.0.16"
             dependency "com.nimbusds:srp6a:1.5.4" //2.0.2
             dependency "org.json:json:20160212" //20180130
             dependency group: 'org.apache.commons', name: 'commons-lang3', version: '3.4' //3.7
             dependency group: 'commons-codec', name: 'commons-codec', version: '1.5' //1.11
-             dependency "com.dukascopy.dds4:netty-transport-client:0.4.84"
-            dependency "com.dukascopy.dds2:msg:1.0.199"
-            // dependency "com.dukascopy.dds2:DDS2-jClient-JForex:3.3.0"
+//             dependency "com.dukascopy.dds4:netty-transport-client:0.4.84",{
+//                 exclude group: "com.dukascopy", module: "dev-tools"
+//                 exclude group: "com.dukascopy.dds4", module: "transport-common"
+//             }
+//
+// ,{
+//                 exclude group: "com.dukascopy.dds4", module: "transport-common"
+//
+//             }
+            dependency "com.dukascopy.dds2:msg:1.0.199",{
+                exclude group: "com.dukascopy", module: "dev-tools"
+            }
+           dependency "com.dukascopy.dds4:transport-common:0.5.153",{
+               exclude group: "com.dukascopy", module: "dev-tools"
+           }
+
+
+           dependency "io.netty:netty-transport:4.1.17.Final"
+            dependency "io.netty:netty-handler:4.1.17.Final"
         }
     }
 }
@@ -164,13 +182,25 @@ subprojects { subProject ->
             implementation "org.slf4j:slf4j-api"
             implementation "ch.qos.logback:logback-classic"
             implementation "ch.qos.logback:logback-core"
-        //implementation "com.dukascopy.dds2:DDS2-jClient-JForex"
+
+
+       //   implementation "com.dukascopy.dds2:DDS2-jClient-JForex"
             implementation "com.dukascopy:auth-protocol-client"
-            implementation "com.dukascopy.dds4:netty-transport-client"
-           implementation  "com.dukascopy.dds2:msg"
+//           implementation "com.dukascopy.dds4:netty-transport-client",{
+//               exclude group: "com.dukascopy", module: "dev-tools"
+//               exclude group: "com.dukascopy.dds4", module: "transport-common"
+//           }
+          implementation "com.dukascopy.dds4:transport-common",{
+              exclude group: "com.dukascopy", module: "dev-tools"
+          }
+              implementation  "com.dukascopy.dds2:msg",{
+                  exclude group: "com.dukascopy", module: "dev-tools"
+              }
             implementation "com.nimbusds:srp6a"
             implementation "org.json:json"
             implementation "commons-codec:commons-codec"
+            implementation "io.netty:netty-handler"
+            implementation "io.netty:netty-transport"
         }
 
     } else {

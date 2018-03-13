@@ -1,5 +1,3 @@
-
-
 /*
  * Copyright 2018 softcake.org.
  *
@@ -15,24 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Require Java 9 or higher
 
-int javaVersion = Integer.valueOf(JavaVersion.current().getMajorVersion())
-if (javaVersion < 9) {
+package org.softcake.yubari.netty;
 
-	throw new GradleException("The build requires Java 9 or higher. " +
+import com.dukascopy.dds4.transport.authorization.AuthorizationProvider;
+import com.dukascopy.dds4.transport.authorization.AuthorizationProviderListener;
 
-		"Currently executing with Java " + javaVersion + ".")
+public interface ClientAuthorizationProvider extends AuthorizationProvider {
+    void setUserAgent(String var1);
 
+    void setSecondaryConnectionDisabled(boolean var1);
+
+    void setDroppableMessageServerTTL(long var1);
+
+    void setSessionName(String var1);
+
+    void setListener(AuthorizationProviderListener var1);
 }
-
-rootProject.name = "yubari"
-
-include "documentation"
-include "yubari.connect"
-include "yubari.transport"
-include "yubari.authentication"
-include "yubari.netty"
-include "example"
-
-
