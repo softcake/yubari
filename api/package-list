@@ -1,3 +1,9 @@
 org.softcake.authentication
 org.softcake.authentication.concurrent
 org.softcake.yubari.connect.authorization
+org.softcake.yubari.netty
+org.softcake.yubari.netty.data
+org.softcake.yubari.netty.map
+org.softcake.yubari.netty.pinger
+org.softcake.yubari.netty.stream
+org.softcake.yubari.netty.util
