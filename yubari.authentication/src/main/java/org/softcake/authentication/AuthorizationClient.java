@@ -57,7 +57,6 @@ import com.dukascopy.auth.client.response.Step3ServerResponse;
 import com.dukascopy.auth.client.transport.http.HttpAuthTransport;
 import com.google.common.base.Strings;
 import com.nimbusds.srp6.SRP6Exception;
-import com.nimbusds.srp6.SRP6Exception.CauseType;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -71,15 +70,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
-import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.net.URLEncoder;
 import java.security.NoSuchAlgorithmException;
-import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -88,6 +84,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -111,6 +108,8 @@ public class AuthorizationClient {
     public static final int TICKET_GROUP = 7;
     public static final int CONNECT_TIMEOUT = 10000;
     public static final int READ_TIMEOUT = 15000;
+    public static final int SSL_PORT = 443;
+    public static final String AUTH_API_URLS = "authApiURLs";
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthorizationClient.class);
     private static final String FO_REPORTS_ACTION = "open_reports";
     private static final String OPEN_CHAT_ACTION = "open_chat";
@@ -143,20 +142,24 @@ public class AuthorizationClient {
     private static final String IP_HTTP_HEADER = "Client-IP";
     private static final String CLIENT_COUNTRY = "Client-country";
     public static int ERROR_CODE_OFFSET = 400;
-    private static AuthorizationClient authClient;
+    private static AuthorizationClient instance;
+    private static Object mutex = new Object();
+
     private final AuthorizationConfigurationPool configurationPool = new AuthorizationConfigurationPool();
     private final String version;
     private volatile AlsMessageBean ipInfoAlsMessageBean = null;
     private volatile boolean firstApiRequest = true;
     private AtomicReference<String> srp6PlatformSessionKey = new AtomicReference();
 
+    private AuthorizationClient() {
+        this.version = "99.99.99";
+    }
+
     private AuthorizationClient(Collection<String> authServerUrls, String version) throws MalformedURLException {
 
-        Iterator var3 = authServerUrls.iterator();
 
-        while (var3.hasNext()) {
-            String authServerUrl = (String) var3.next();
-            this.configurationPool.add(authServerUrl);
+        for (final String url : authServerUrls) {
+            this.configurationPool.add(url);
         }
 
         this.version = version;
@@ -164,62 +167,60 @@ public class AuthorizationClient {
 
     public static synchronized AuthorizationClient getInstance(Collection<String> authServerUrls, String version) {
 
-        if (authClient == null) {
-            try {
-                authClient = new AuthorizationClient(authServerUrls, version);
-            } catch (MalformedURLException var4) {
-                LOGGER.error(var4.getMessage(), var4);
+        AuthorizationClient result = instance;
+        if (result == null) {
+            synchronized (mutex) {
+                result = instance;
+                if (result == null) {
+                    try {
+                        instance = result = new AuthorizationClient(authServerUrls, version);
+
+                    } catch (MalformedURLException var4) {
+                        LOGGER.error(var4.getMessage(), var4);
+                    }
+
+
+                }else{
+                    try {
+                        result.updateConfigurationPool(authServerUrls);
+                    } catch (MalformedURLException var3) {
+                        LOGGER.error(var3.getMessage(), var3);
+                    }
+                }
             }
         } else {
             try {
-                authClient.updateConfigurationPool(authServerUrls);
+                result.updateConfigurationPool(authServerUrls);
             } catch (MalformedURLException var3) {
                 LOGGER.error(var3.getMessage(), var3);
             }
         }
-
-        return authClient;
+        return result;
     }
 
     public static synchronized AuthorizationClient getInstance() {
 
-        if (authClient == null) {
+        AuthorizationClient result = instance;
+        if (result == null) {
+            synchronized (mutex) {
+                result = instance;
+                if (result == null) { instance = result = new AuthorizationClient(); }
+            }
+        }
+        return result;
+
+    }
+
+
+/*
+    public static synchronized AuthorizationClient getInstance() {
+
+        if (instance == null) {
             throw new IllegalStateException("The AuthorizationClient is not initialized.");
         } else {
-            return authClient;
+            return instance;
         }
-    }
-
-    private static AuthorizationServerResponse getAuthorizationServerResponse(URL url) throws IOException {
-
-        LOGGER.debug(">> [{}]", url);
-        String response = null;
-
-        AuthorizationServerResponse authorizationServerResponse = null;
-
-        try {
-            int authorizationServerResponseCode = 0;
-            HttpURLConnection connection = getConnection(url);
-
-            authorizationServerResponseCode = connection.getResponseCode();
-
-
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                throw new IOException();
-                // response = reader.readLine();
-            } catch (IOException var10) {
-
-            }
-
-            authorizationServerResponse = new AuthorizationServerResponse(response, authorizationServerResponseCode);
-        } finally {
-
-
-        }
-
-        LOGGER.debug("<< [{}]", response);
-        return authorizationServerResponse;
-    }
+    }*/
 
     public static String selectFastestAPIServer(String apiServersAndTicket)
         throws ApiUrlServerFormatException, InterruptedException, IOException {
@@ -257,6 +258,7 @@ public class AuthorizationClient {
                 LOGGER.debug("Best api url [{}] with time [{}]", bestURL, bestTime);
                 addIPAndBestPing(bestTime, bestURL);
                 String address = bestURL + "@" + matcher.group(7);
+
                 if (validAPIServerAddressFormat(address)) {
                     return address;
                 } else {
@@ -275,19 +277,19 @@ public class AuthorizationClient {
 
         String host;
         int port;
-        int semicolonIndex = url.indexOf(":");
+        int semicolonIndex = url.indexOf(':');
         if (semicolonIndex != -1) {
             host = url.substring(0, semicolonIndex);
             if (semicolonIndex + 1 >= url.length()) {
-                LOGGER.warn("Port is not set, using default 443");
-                port = 443;
+                LOGGER.warn("Port is not set, using default {}", SSL_PORT);
+                port = SSL_PORT;
             } else {
                 port = Integer.parseInt(url.substring(semicolonIndex + 1));
             }
         } else {
-            LOGGER.warn("Port is not set, using default 443");
+            LOGGER.warn("Port is not set, using default {}", SSL_PORT);
             host = url;
-            port = 443;
+            port = SSL_PORT;
         }
         return new InetSocketAddress(host, port);
     }
@@ -311,64 +313,13 @@ public class AuthorizationClient {
 
     private static void addIPAndBestPing(long bestTime, String bestURL) {
 
-        if (authClient.ipInfoAlsMessageBean != null) {
-            authClient.ipInfoAlsMessageBean.addParameter("PING_TIME", bestTime).addParameter("API_IP_ADDRESS", bestURL);
-            //  PlatformServiceProvider.getInstance().setIpInfoAlsMessageBean(authClient.ipInfoAlsMessageBean);
-            authClient.ipInfoAlsMessageBean = null;
+        if (instance.ipInfoAlsMessageBean != null) {
+            instance.ipInfoAlsMessageBean.addParameter("PING_TIME", bestTime).addParameter("API_IP_ADDRESS", bestURL);
+            //  PlatformServiceProvider.getInstance().setIpInfoAlsMessageBean(instance.ipInfoAlsMessageBean);
+            instance.ipInfoAlsMessageBean = null;
         } else {
             LOGGER.error("The ipInfoAlsMessageBean is null.");
         }
-
-    }
-
-    /**
-     * @param url
-     * @return
-     * @throws IOException
-     */
-    private static AuthorizationServerPropertiesResponse requestPlatformProperties(URL url) throws IOException {
-
-        AuthorizationServerPropertiesResponse response = null;
-        HttpURLConnection connection = getConnection(url);
-        int responseCode = connection.getResponseCode();
-
-        String clientIpAddress = connection.getHeaderField(IP_HTTP_HEADER);
-        if (clientIpAddress == null || clientIpAddress.trim().isEmpty()) {
-            clientIpAddress = "n/a";
-        }
-
-        String clientCountry = connection.getHeaderField(CLIENT_COUNTRY);
-        if (clientCountry == null || clientCountry.trim().isEmpty()) {
-            clientCountry = "n/a";
-        }
-
-        //TODO
-        if (authClient.ipInfoAlsMessageBean != null) {
-            authClient.ipInfoAlsMessageBean.addParameter("CLIENT_IP_ADDRESS", clientIpAddress).addParameter(
-                "CLIENT_COUNTRY",
-                clientCountry);
-            //                    PlatformServiceProvider.getInstance().setIpInfoAlsMessageBean(authClient
-            // .ipInfoAlsMessageBean);
-            //                    PlatformServiceProvider.getInstance().setClientCountry(clientCountry);
-            authClient.ipInfoAlsMessageBean = null;
-        } else {
-            LOGGER.error("The ipInfoAlsMessageBean is null.");
-        }
-
-        String propertiesAsString = null;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-
-            StringBuilder sb = new StringBuilder(8192);
-            String line;
-            do {
-                line = reader.readLine();
-                sb.append(line);
-            } while (line != null);
-
-            propertiesAsString = sb.toString().trim();
-        }
-
-        return new AuthorizationServerPropertiesResponse(responseCode, propertiesAsString);
 
     }
 
@@ -614,10 +565,7 @@ public class AuthorizationClient {
 
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
                     response = reader.readLine();
-                } catch (IOException e) {
-                    LOGGER.error("Error occurred...", e);
                 }
-
                 authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(response,
                                                                                               authorizationServerResponseCode);
                 if (authorizationServerStsTokenResponse.isOK()) {
@@ -659,7 +607,7 @@ public class AuthorizationClient {
 
         while (retryCount < this.configurationPool.size() && output == null) {
             String baseURL = this.getBaseUrl().toString();
-            StringBuffer buf = new StringBuffer(128);
+            StringBuilder buf = new StringBuilder(128);
             buf.append(baseURL);
             if (!baseURL.endsWith("/")) {
                 buf.append("/");
@@ -703,7 +651,7 @@ public class AuthorizationClient {
                 LOGGER.debug("<< [{} : {}]", CAPTCHA_HEADER, captchaId);
                 output = new HashMap();
                 output.put(captchaId, captchaImage);
-            } catch (Throwable var23) {
+            } catch (NumberFormatException var23) {
                 this.configurationPool.markLastUsedAsBad();
                 LOGGER.error(var23.getMessage(), var23);
             } finally {
@@ -711,8 +659,8 @@ public class AuthorizationClient {
                     if (inputStream != null) {
                         inputStream.close();
                     }
-                } catch (Exception var22) {
-                    ;
+                } catch (IOException e) {
+
                 }
 
             }
@@ -723,36 +671,37 @@ public class AuthorizationClient {
         return output;
     }
 
-    public AuthorizationServerResponse getAPIsAndTicketUsingLogin(String login,
-                                                                  String password,
-                                                                  String sessionId,
-                                                                  String platform) {
-
-        return this.getAPIsAndTicketUsingLogin(login, password, sessionId, true, platform);
-    }
 
     /**
      * @param retryCount
      * @param response
      * @return
      */
-    private boolean continueObtainingAPIServers(int retryCount,
-                                                AuthorizationServerResponse response) {
+    private boolean continueObtainingAPIServers(int retryCount, AuthorizationServerResponse response) {
 
-        return response == null || (retryCount < this.configurationPool.size()
-                                                       && response.isEmptyResponse()
-                                                       || retryCount < this.configurationPool.size() && (
-            response.getResponseCode() == TOO_MANY_REQUESTS
-            || response.getResponseCode() == ERROR_IO
-            || response.getResponseCode() == EMPTY_RESPONSE
-            || response.getResponseCode() == NOT_FOUND
-            || response.getResponseCode() == WRONG_AUTH_RESPONSE
-            || response.getResponseCode() == AUTHORIZATION_REQUEST_TIMEOUT
-            || response.getResponseCode() == AUTHORIZATION_TIMEOUT
-            || response.getResponseCode() == NO_PROPERTIES_RECEIVED
-            || response.getResponseCode() == SERVICE_UNAVAILABLE
-            || response.getResponseCode() == UNKNOWN_RESPONSE
-            || response.isSystemError()));
+        return response == null || (retryCount < this.configurationPool.size() && response.isEmptyResponse()
+                                    || retryCount < this.configurationPool.size() && (response.getResponseCode()
+                                                                                      == TOO_MANY_REQUESTS
+                                                                                      || response.getResponseCode()
+                                                                                         == ERROR_IO
+                                                                                      || response.getResponseCode()
+                                                                                         == EMPTY_RESPONSE
+                                                                                      || response.getResponseCode()
+                                                                                         == NOT_FOUND
+                                                                                      || response.getResponseCode()
+                                                                                         == WRONG_AUTH_RESPONSE
+                                                                                      || response.getResponseCode()
+                                                                                         ==
+                                                                                         AUTHORIZATION_REQUEST_TIMEOUT
+                                                                                      || response.getResponseCode()
+                                                                                         == AUTHORIZATION_TIMEOUT
+                                                                                      || response.getResponseCode()
+                                                                                         == NO_PROPERTIES_RECEIVED
+                                                                                      || response.getResponseCode()
+                                                                                         == SERVICE_UNAVAILABLE
+                                                                                      || response.getResponseCode()
+                                                                                         == UNKNOWN_RESPONSE
+                                                                                      || response.isSystemError()));
     }
 
     /**
@@ -808,10 +757,9 @@ public class AuthorizationClient {
      * @return
      */
     private boolean useTheSameAuthorizationURL(AuthorizationServerResponseCode authorizationServerResponseCode,
-                                               Map<AuthorizationServerResponseCode, AuthorizationClient
-                                                   .SameAuthUrlAttemptsBean> attempts) {
+                                               Map<AuthorizationServerResponseCode, SameAuthUrlAttemptsBean> attempts) {
 
-        AuthorizationClient.SameAuthUrlAttemptsBean authUrlAttemptsBean = attempts.get(authorizationServerResponseCode);
+        SameAuthUrlAttemptsBean authUrlAttemptsBean = attempts.get(authorizationServerResponseCode);
         return authUrlAttemptsBean != null ? authUrlAttemptsBean.isNextAttemptAvailable() : false;
     }
 
@@ -823,6 +771,7 @@ public class AuthorizationClient {
         int retryCount = 0;
         Properties properties = null;
         String password = (String) this.srp6PlatformSessionKey.get();
+
         if (password == null || password.isEmpty()) {
             password = System.getProperty("jnlp.auth.ticket");
         }
@@ -864,7 +813,7 @@ public class AuthorizationClient {
                 ObjectInputStream inputStream = new ObjectInputStream(new ByteArrayInputStream(settingsBytes));
                 properties = (Properties) inputStream.readObject();
                 if (properties != null) {
-                    if (authClient.isSnapshotVersion()) {
+                    if (instance.isSnapshotVersion()) {
                         LOGGER.debug("Properties received as a separate request << [{}]", properties);
                     }
                     break;
@@ -947,494 +896,265 @@ public class AuthorizationClient {
                                                  && rememberMe
                                                  && deviceId != null
                                                  && !deviceId.isEmpty();
-        AuthorizationClient.SameAuthUrlAttemptsBean authUrlAttemptsBean = null;
-        Map<AuthorizationServerResponseCode, AuthorizationClient.SameAuthUrlAttemptsBean>
-            sameAuthUrlAttempts
-            = new HashMap();
-        authUrlAttemptsBean = new AuthorizationClient.SameAuthUrlAttemptsBean(3);
+        SameAuthUrlAttemptsBean authUrlAttemptsBean = null;
+        Map<AuthorizationServerResponseCode, SameAuthUrlAttemptsBean> sameAuthUrlAttempts = new HashMap();
+        authUrlAttemptsBean = new SameAuthUrlAttemptsBean(3);
         sameAuthUrlAttempts.put(AUTHORIZATION_REQUEST_TIMEOUT, authUrlAttemptsBean);
-        authUrlAttemptsBean = new AuthorizationClient.SameAuthUrlAttemptsBean(3);
+        authUrlAttemptsBean = new SameAuthUrlAttemptsBean(3);
         sameAuthUrlAttempts.put(AuthorizationServerResponseCode.AUTHORIZATION_TIMEOUT, authUrlAttemptsBean);
-        authUrlAttemptsBean = new AuthorizationClient.SameAuthUrlAttemptsBean(2);
+        authUrlAttemptsBean = new SameAuthUrlAttemptsBean(2);
         sameAuthUrlAttempts.put(AuthorizationServerResponseCode.SERVICE_UNAVAILABLE, authUrlAttemptsBean);
 
-        while (true) {
-            label191:
-            while (true) {
-                if (!this.continueObtainingAPIServers(retryCount,
 
-                                                      authorizationServerResponse)) {
-                    return authorizationServerResponse;
-                }
+        do {
 
-                if (this.firstApiRequest) {
-                    this.firstApiRequest = false;
-                } else {
-                    try {
-                        sessionId = this.getNewSessionId();
-                    } catch (Throwable var41) {
-                        LOGGER.error(var41.getMessage(), var41);
-                        authorizationServerResponse
-                            = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
-                        return authorizationServerResponse;
-                    }
-                }
-
-                String authorizationUrl = null;
-
-                CauseType authProtocol;
-                String serverResponse;
+            if (this.firstApiRequest) {
+                this.firstApiRequest = false;
+            } else {
                 try {
-                    authorizationUrl = this.getBaseUrl().toString();
-                    AbstractBusinessSRPAuthClientParamsBuilder<?, ?> builder = null;
-                    if (isRememberMeTokenAuthorization) {
-                        builder = new RememberMeClientParamsBuilder();
-                    } else {
-                        builder = new ApiClientParamsBuilder();
-                    }
+                    sessionId = this.getNewSessionId();
+                } catch (Throwable var41) {
+                    LOGGER.error(var41.getMessage(), var41);
+                    return new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
 
-                    ((AbstractBusinessSRPAuthClientParamsBuilder) ((AbstractBusinessSRPAuthClientParamsBuilder) (
-                        (AbstractBusinessSRPAuthClientParamsBuilder) ((AbstractBusinessSRPAuthClientParamsBuilder)
-                                                                          builder)
-                        .setAuthTransport(new HttpAuthTransport())).setHttpBase(authorizationUrl)).setLogin(login)
-                                                                                                  .setPassword(password)
-                                                                                                  .setCaptchaId(
-                                                                                                      captchaId)
-                                                                                                  .setPin(pin)
-                                                                                                  .setAccountType(
-                                                                                                      AccountType
-                                                                                                          .TRADER)
-                                                                                                  .setSessionId(
-                                                                                                      sessionId)
-                                                                                                  .setPlatform(platform)
-                                                                                                  .setPlatformVersion(
-                                                                                                      this.version)
-                                                                                                  .setWillPing(true)
-                                                                                                  .setNeedSettings(true)
-                                                                                                  .setUserAgent(
-                                                                                                      USER_AGENT_VALUE))
-                        .setLogger(LOGGER);
-                    if (isRememberMeTokenRemove) {
-                        ((ApiClientParamsBuilder) builder).setRememberMe(false).setDeviceId(deviceId).setDeviceName(
-                            deviceName).setDeviceOS(deviceOS).setAccountType(AccountType.TRADER);
-                    }
-
-                    if (isRememberMeTokenRequest) {
-                        ((ApiClientParamsBuilder) builder).setRememberMe(rememberMe)
-                                                          .setDeviceId(deviceId)
-                                                          .setDeviceName(deviceName)
-                                                          .setDeviceOS(deviceOS)
-                                                          .setAccountType(AccountType.TRADER);
-                    }
-
-                    if (isRememberMeTokenAuthorization) {
-                        ((RememberMeClientParamsBuilder) ((RememberMeClientParamsBuilder) builder).setDeviceId(deviceId)
-                                                                                                  .setDeviceName(
-                                                                                                      deviceName)
-                                                                                                  .setDeviceOS(deviceOS)
-                                                                                                  .setAccountType(
-                                                                                                      AccountType
-                                                                                                          .TRADER))
-                            .setPassword(previousRememberMeToken);
-                    }
-
-                    authProtocol = null;
-                    Object authProtocol2;
-                    if (isRememberMeTokenAuthorization) {
-                        authProtocol2 = new RememberMeClientProtocol(((RememberMeClientParamsBuilder) builder).build());
-                    } else {
-                        authProtocol2 = new ApiClientProtocol(((ApiClientParamsBuilder) builder).build());
-                    }
-
-                    SRPAuthClient client = new SRPAuthClient((ISRPClientProtocol) authProtocol2, LOGGER);
-                    ServerResponseObject<Step3ServerResponse> result = client.authenticate();
-                    if (result != null) {
-                        String
-                            newRememberMeToken
-                            = ((Step3ServerResponse) result.getPasswordServerResponse()).getSessionKey();
-                        this.srp6PlatformSessionKey.set(newRememberMeToken);
-                        this.retrieveDataForALS(result);
-                        Step3ServerResponse
-                            passwordServerResponse
-                            = (Step3ServerResponse) result.getPasswordServerResponse();
-                        serverResponse = passwordServerResponse.getServerResponse();
-                        String sessionKey = passwordServerResponse.getSessionKey();
-                        // TODO  JSONObject jsonObject = new JSONObject(serverResponse, true);
-                        JSONObject jsonObject = new JSONObject(serverResponse);
-                        JSONArray jsonArray = jsonObject.getJSONArray("authApiURLs");
-                        StringBuilder sb = new StringBuilder(1024);
-
-                        for (int i = 0; i < jsonArray.length(); ++i) {
-                            sb.append(jsonArray.get(i));
-                            sb.append("@");
-                        }
-
-                        sb.append(sessionKey);
-                        Properties properties = null;
-
-                        String fastestAPIAndTicket;
-                        try {
-                            fastestAPIAndTicket = AuthParameterDefinition.SETTINGS.getName(AccountType.TRADER);
-                            String encodedString = jsonObject.getString(fastestAPIAndTicket);
-                            byte[] decodedBytes = Base64.decode(encodedString);
-                            ObjectInputStream
-                                inputStream
-                                = new ObjectInputStream(new ByteArrayInputStream(decodedBytes));
-                            properties = (Properties) inputStream.readObject();
-                            if (authClient.isSnapshotVersion()) {
-                                LOGGER.debug("Properties received << [{}]", properties);
-                            }
-
-                            // AvailableInstrumentProvider.INSTANCE.init(properties);
-                        } catch (Throwable var40) {
-                            LOGGER.error(var40.getMessage(), var40);
-                        }
-
-                        authorizationServerResponse = new AuthorizationServerResponse(sb.toString(),
-                                                                                      AuthorizationServerResponseCode
-                                                                                          .SUCCESS_OK,
-                                                                                      true,
-                                                                                      properties);
-                        if (authorizationServerResponse.isOK()) {
-                            if (isRememberMeTokenRequest || isRememberMeTokenAuthorization) {
-                                authorizationServerResponse.setRememberMeToken(newRememberMeToken);
-                                if (password != null && !password.isEmpty()) {
-                                    authorizationServerResponse.setPasswordLength(password.length());
-                                }
-                            }
-
-                            fastestAPIAndTicket
-                                = selectFastestAPIServer(authorizationServerResponse.getResponseMessage());
-                            authorizationServerResponse.setFastestAPIAndTicket(fastestAPIAndTicket);
-                        }
-
-                        try {
-                            //                            if (ObjectUtils.isEqual(CommonContext.CLIENT_VERSION,
-                            // "99.99.99") && isRememberMeTokenAuthorization) {
-                            //                                writeToRememberMeLog(previousRememberMeToken,
-                            // newRememberMeToken, authorizationServerResponse.isOK(), deviceId, rememberMe, login,
-                            // platform, deviceName, deviceOS, this.version, sessionId, authorizationUrl);
-                            //                            }
-                        } catch (Throwable var39) {
-                            LOGGER.error(var39.getMessage(), var39);
-                        }
-                        break;
-                    }
-
-                    authorizationServerResponse = new AuthorizationServerResponse(EMPTY_RESPONSE);
-                    this.configurationPool.markLastUsedAsBad();
-                    ++retryCount;
-                } catch (AuthServerException var43) {
-                    LOGGER.error(var43.getMessage(), var43);
-
-                    try {
-                        //                        if (ObjectUtils.isEqual(CommonContext.CLIENT_VERSION, "99.99.99")
-                        // && isRememberMeTokenAuthorization) {
-                        //                            writeToRememberMeLog(previousRememberMeToken, (String)this
-                        // .srp6PlatformSessionKey.get(), false, deviceId, rememberMe, login, platform, deviceName,
-                        // deviceOS, this.version, sessionId, authorizationUrl);
-                        //                        }
-                    } catch (Throwable var38) {
-                        LOGGER.error(var38.getMessage(), var38);
-                    }
-
-                    AuthServerResponse httpServerResponse = var43.getAuthServerResponse();
-                    if (httpServerResponse != null) {
-                        int responseCode = httpServerResponse.getResponseCode();
-                        AuthorizationServerResponseCode
-                            authorizationServerResponseCode
-                            = AuthorizationServerResponseCode.fromValue(responseCode);
-                        authorizationServerResponse = new AuthorizationServerResponse(authorizationServerResponseCode);
-
-                        try {
-                            Map<String, List<String>> responseHeaderFields = httpServerResponse.getHeaderFields();
-                            List<String> detailedStatusCodeInfo = (List) responseHeaderFields.get("DetailedStatusCode");
-                            if (detailedStatusCodeInfo != null) {
-                                if (detailedStatusCodeInfo.size() == 1) {
-                                    serverResponse = (String) detailedStatusCodeInfo.get(0);
-                                    int detailedStatusCode = Integer.valueOf(serverResponse);
-                                    authorizationServerResponse.setDetailedStatusCode(detailedStatusCode);
-                                } else if (detailedStatusCodeInfo.size() > 1) {
-                                    LOGGER.error("Cannot get the DetailedStatusCode, size="
-                                                 + detailedStatusCodeInfo.size());
-                                }
-                            }
-                        } catch (Exception e) {
-                            LOGGER.error("Error occurred...", e);
-                        }
-                    } else {
-                        authorizationServerResponse
-                            = new AuthorizationServerResponse(AuthorizationServerResponseCode.UNKNOWN_RESPONSE);
-                    }
-                    break;
-                } catch (SRP6Exception e) {
-                    LOGGER.error("Error occurred...", e);
-                    authProtocol = e.getCauseType();
-                    switch (authProtocol) {
-                        case BAD_CREDENTIALS:
-                            authorizationServerResponse = new AuthorizationServerResponse(
-                                AuthorizationServerResponseCode.BAD_CREDENTIALS);
-                            break label191;
-                        case BAD_PUBLIC_VALUE:
-                            authorizationServerResponse = new AuthorizationServerResponse(
-                                AuthorizationServerResponseCode.BAD_PUBLIC_VALUE);
-                            break label191;
-                        case TIMEOUT:
-                            authorizationServerResponse = new AuthorizationServerResponse(
-                                AuthorizationServerResponseCode.AUTHORIZATION_TIMEOUT);
-                            break label191;
-                        default:
-                            authorizationServerResponse = new AuthorizationServerResponse(
-                                AuthorizationServerResponseCode.UNKNOWN_RESPONSE);
-                            break label191;
-                    }
-                } catch (IOException e) {
-                    LOGGER.error("Error occurred...", e);
-                    authorizationServerResponse = new AuthorizationServerResponse(ERROR_IO);
-                    break;
-                } catch (InterruptedException e) {
-                    LOGGER.error("Error occurred...", e);
-                    authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERRUPTED);
-                    break;
-                } catch (Throwable e) {
-                    LOGGER.error("Error occurred...", e);
-                    authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
-                    return authorizationServerResponse;
                 }
             }
+
+
+            String authorizationUrl = this.getBaseUrl().toString();
+
+            AbstractBusinessSRPAuthClientParamsBuilder<?, ?> builder = null;
+            if (isRememberMeTokenAuthorization) {
+                builder = new RememberMeClientParamsBuilder();
+            } else {
+                builder = new ApiClientParamsBuilder();
+            }
+            builder.setAuthTransport(new HttpAuthTransport())
+                   .setHttpBase(authorizationUrl)
+                   .setLogin(login)
+                   .setPassword(password)
+                   .setCaptchaId(captchaId)
+                   .setPin(pin)
+                   .setAccountType(AccountType.TRADER)
+                   .setSessionId(sessionId)
+                   .setPlatform(platform)
+                   .setPlatformVersion(this.version)
+                   .setWillPing(true)
+                   .setNeedSettings(true)
+                   .setUserAgent(USER_AGENT_VALUE)
+                   .setLogger(LOGGER);
+
+            if (isRememberMeTokenRemove) {
+                ((ApiClientParamsBuilder) builder).setRememberMe(false)
+                                                  .setDeviceId(deviceId)
+                                                  .setDeviceName(deviceName)
+                                                  .setDeviceOS(deviceOS)
+                                                  .setAccountType(AccountType.TRADER);
+            }
+
+            if (isRememberMeTokenRequest) {
+                ((ApiClientParamsBuilder) builder).setRememberMe(rememberMe).setDeviceId(deviceId).setDeviceName(
+                    deviceName).setDeviceOS(deviceOS).setAccountType(AccountType.TRADER);
+            }
+
+            if (isRememberMeTokenAuthorization) {
+                ((RememberMeClientParamsBuilder) builder).setDeviceId(deviceId).setDeviceName(deviceName).setDeviceOS(
+                    deviceOS).setAccountType(AccountType.TRADER).setPassword(previousRememberMeToken);
+            }
+
+
+            try {
+
+
+                Object authProtocol2;
+                if (isRememberMeTokenAuthorization) {
+                    authProtocol2
+                        = new RememberMeClientProtocol((RememberMeClientParamsBuilder.RememberMeClientParams) builder
+                        .build());
+                } else {
+                    authProtocol2 = new ApiClientProtocol(((ApiClientParamsBuilder) builder).build());
+                }
+
+                SRPAuthClient client = new SRPAuthClient((ISRPClientProtocol) authProtocol2, LOGGER);
+                ServerResponseObject<Step3ServerResponse> result = client.authenticate();
+
+                if (result != null) {
+                    String newRememberMeToken = result.getPasswordServerResponse().getSessionKey();
+                    this.srp6PlatformSessionKey.set(newRememberMeToken);
+                    this.retrieveDataForALS(result);
+                    Step3ServerResponse passwordServerResponse = result.getPasswordServerResponse();
+                    String serverResponse = passwordServerResponse.getServerResponse();
+                    String sessionKey = passwordServerResponse.getSessionKey();
+                    // TODO  JSONObject jsonObject = new JSONObject(serverResponse, true);
+                    JSONObject jsonObject = new JSONObject(serverResponse);
+                    JSONArray jsonArray = jsonObject.getJSONArray(AUTH_API_URLS);
+                    StringBuilder sb = new StringBuilder(1024);
+
+                    for (int i = 0; i < jsonArray.length(); ++i) {
+                        sb.append(jsonArray.get(i));
+                        sb.append("@");
+                    }
+
+                    sb.append(sessionKey);
+                    Properties properties = null;
+
+                    String fastestAPIAndTicket;
+                    try {
+                        fastestAPIAndTicket = AuthParameterDefinition.SETTINGS.getName(AccountType.TRADER);
+                        String encodedString = jsonObject.getString(fastestAPIAndTicket);
+                        byte[] decodedBytes = Base64.decode(encodedString);
+                        ObjectInputStream inputStream = new ObjectInputStream(new ByteArrayInputStream(decodedBytes));
+                        properties = (Properties) inputStream.readObject();
+                        if (instance.isSnapshotVersion()) {
+                            LOGGER.debug("Properties received << [{}]", properties);
+                        }
+
+                        // AvailableInstrumentProvider.INSTANCE.init(properties);
+                    } catch (Throwable var40) {
+                        LOGGER.error(var40.getMessage(), var40);
+                    }
+
+                    authorizationServerResponse = new AuthorizationServerResponse(sb.toString(),
+                                                                                  AuthorizationServerResponseCode
+                                                                                      .SUCCESS_OK,
+                                                                                  true,
+                                                                                  properties);
+                    if (authorizationServerResponse.isOK()) {
+                        if (isRememberMeTokenRequest || isRememberMeTokenAuthorization) {
+                            authorizationServerResponse.setRememberMeToken(newRememberMeToken);
+                            if (password != null && !password.isEmpty()) {
+                                authorizationServerResponse.setPasswordLength(password.length());
+                            }
+                        }
+
+                        fastestAPIAndTicket = selectFastestAPIServer(authorizationServerResponse.getResponseMessage());
+                        authorizationServerResponse.setFastestAPIAndTicket(fastestAPIAndTicket);
+                    } else {
+                        authorizationServerResponse = new AuthorizationServerResponse(EMPTY_RESPONSE);
+                    }
+
+                    try {
+                        //                            if (ObjectUtils.isEqual(CommonContext.CLIENT_VERSION,
+                        // "99.99.99") && isRememberMeTokenAuthorization) {
+                        //                                writeToRememberMeLog(previousRememberMeToken,
+                        // newRememberMeToken, authorizationServerResponse.isOK(), deviceId, rememberMe, login,
+                        // platform, deviceName, deviceOS, this.version, sessionId, authorizationUrl);
+                        //                            }
+                    } catch (Throwable var39) {
+                        LOGGER.error(var39.getMessage(), var39);
+                    }
+
+                } else {
+                    authorizationServerResponse = new AuthorizationServerResponse(EMPTY_RESPONSE);
+                }
+
+
+            } catch (AuthServerException e) {
+                LOGGER.error("Error occurred...", e);
+
+                try {
+                    //                        if (ObjectUtils.isEqual(CommonContext.CLIENT_VERSION, "99.99.99")
+                    // && isRememberMeTokenAuthorization) {
+                    //                            writeToRememberMeLog(previousRememberMeToken, (String)this
+                    // .srp6PlatformSessionKey.get(), false, deviceId, rememberMe, login, platform, deviceName,
+                    // deviceOS, this.version, sessionId, authorizationUrl);
+                    //                        }
+                } catch (Throwable var38) {
+                    LOGGER.error(var38.getMessage(), var38);
+                }
+
+                AuthServerResponse authServerResponse = e.getAuthServerResponse();
+                if (authServerResponse != null) {
+
+                    AuthorizationServerResponseCode
+                        authorizationServerResponseCode
+                        = AuthorizationServerResponseCode.fromValue(authServerResponse.getResponseCode());
+                    authorizationServerResponse = new AuthorizationServerResponse(authorizationServerResponseCode);
+
+
+                    Map<String, List<String>> responseHeaderFields = authServerResponse.getHeaderFields();
+                    List<String> detailedStatusCodeInfo = responseHeaderFields.get("DetailedStatusCode");
+                    if (detailedStatusCodeInfo != null) {
+                        if (detailedStatusCodeInfo.size() == 1) {
+
+                            int detailedStatusCode = Integer.parseInt(detailedStatusCodeInfo.get(0));
+                            authorizationServerResponse.setDetailedStatusCode(detailedStatusCode);
+                        } else if (detailedStatusCodeInfo.size() > 1) {
+                            LOGGER.error("Cannot get the DetailedStatusCode, size={}", detailedStatusCodeInfo.size());
+                        }
+                    }
+
+                } else {
+                    authorizationServerResponse
+                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.UNKNOWN_RESPONSE);
+                }
+
+            } catch (SRP6Exception e) {
+                LOGGER.error("Error occurred...", e);
+
+                switch (e.getCauseType()) {
+                    case BAD_CREDENTIALS:
+                        authorizationServerResponse
+                            = new AuthorizationServerResponse(AuthorizationServerResponseCode.BAD_CREDENTIALS);
+                        break;
+                    case BAD_PUBLIC_VALUE:
+                        authorizationServerResponse
+                            = new AuthorizationServerResponse(AuthorizationServerResponseCode.BAD_PUBLIC_VALUE);
+                        break;
+                    case TIMEOUT:
+                        authorizationServerResponse
+                            = new AuthorizationServerResponse(AuthorizationServerResponseCode.AUTHORIZATION_TIMEOUT);
+                        break;
+                    default:
+                        authorizationServerResponse
+                            = new AuthorizationServerResponse(AuthorizationServerResponseCode.UNKNOWN_RESPONSE);
+
+                }
+            } catch (IOException e) {
+                LOGGER.error("Error occurred...", e);
+                authorizationServerResponse = new AuthorizationServerResponse(ERROR_IO);
+
+            } catch (InterruptedException e) {
+                LOGGER.error("Error occurred...", e);
+                authorizationServerResponse
+                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERRUPTED);
+
+            } catch (NoSuchAlgorithmException e) {
+                LOGGER.error("Error occurred...", e);
+                authorizationServerResponse
+                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.ERROR_INIT);
+
+            } catch (ApiUrlServerFormatException e) {
+                LOGGER.error("Error occurred...", e);
+                authorizationServerResponse
+                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE);
+
+            } catch (Exception e) {
+                LOGGER.error("Error occurred...", e);
+                //TODO Exception from SPRClient Autehtication; must be spezific
+                authorizationServerResponse
+                    = new AuthorizationServerResponse(AuthorizationServerResponseCode
+                                                          .AUTHENTICATION_AUTHORIZATION_ERROR);
+
+            }
+           /* catch (Throwable e) {
+                LOGGER.error("Error occurred...", e);
+                authorizationServerResponse
+                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
+                return authorizationServerResponse;
+            }*/
+
 
             if (!this.useTheSameAuthorizationURL(authorizationServerResponse.getResponseCode(), sameAuthUrlAttempts)) {
                 this.resetSameAuthUrlAttempts(sameAuthUrlAttempts);
                 ++retryCount;
                 if (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
                     this.configurationPool.markLastUsedAsBad();
-                }
-            }
-        }
-    }
-
-    public AuthorizationServerResponse getAPIsAndTicketUsingLogin(String login,
-                                                                  String password,
-                                                                  String sessionId,
-                                                                  boolean encodePassword,
-                                                                  String platform) {
-
-        AuthorizationServerResponse authorizationServerResponse = null;
-        int retryCount = 0;
-
-        while (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
-            if (this.firstApiRequest) {
-                this.firstApiRequest = false;
-            } else {
-                try {
-                    sessionId = this.getNewSessionId();
-                } catch (Throwable e) {
-                    LOGGER.error("Error occurred...", e);
-                    authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
+                } else {
                     return authorizationServerResponse;
                 }
             }
-
-            try {
-
-
-                String formedUrl = UrlProvider.getFormedUrl(this.getBaseUrl(),
-                                                            login,
-                                                            password,
-                                                            sessionId,
-                                                            encodePassword,
-                                                            platform,
-                                                            "",
-                                                            this.version);
-                URL url = new URL(formedUrl);
-                authorizationServerResponse = getAuthorizationServerResponse(url);
-                if (authorizationServerResponse.isOK()) {
-                    String
-                        fastestAPIAndTicket
-                        = selectFastestAPIServer(authorizationServerResponse.getResponseMessage());
-                    authorizationServerResponse.setFastestAPIAndTicket(fastestAPIAndTicket);
-                }
-            } catch (MalformedURLException e) {
-                LOGGER.error("Error occurred...", e);
-                return new AuthorizationServerResponse(AuthorizationServerResponseCode.BAD_URL);
-
-            } catch (UnsupportedEncodingException e) {
-                LOGGER.error("Error occurred...", e);
-                return new AuthorizationServerResponse(AuthorizationServerResponseCode.ERROR_INIT);
-
-            } catch (NoSuchAlgorithmException e) {
-                LOGGER.error("Error occurred...", e);
-
-                return new AuthorizationServerResponse(AuthorizationServerResponseCode.ERROR_INIT);
-
-            } catch (IOException e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerResponse = new AuthorizationServerResponse(ERROR_IO);
-            } catch (InterruptedException e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerResponse
-                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERRUPTED);
-            } catch (Throwable e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerResponse
-                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
-                return authorizationServerResponse;
-            }
-
-            ++retryCount;
-            if (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
-                this.configurationPool.markLastUsedAsBad();
-            }
-        }
-
-        return authorizationServerResponse;
-    }
-
-
-    public AuthorizationServerResponse getAPIsAndTicketUsingLogin(String login,
-                                                                  String password,
-                                                                  String captchaId,
-                                                                  String pin,
-                                                                  String sessionId,
-                                                                  String platform) {
-
-        AuthorizationServerResponse authorizationServerResponse = null;
-        int retryCount = 0;
-
-        while (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
-            if (this.firstApiRequest) {
-                this.firstApiRequest = false;
-            } else {
-                try {
-                    sessionId = this.getNewSessionId();
-                } catch (Throwable e) {
-                    LOGGER.error("Error occurred...", e);
-                    authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
-                    return authorizationServerResponse;
-                }
-            }
-
-            try {
-
-                String urlString = UrlProvider.getFormedUrl(this.getBaseUrl(),
-                                                            login,
-                                                            password,
-                                                            sessionId,
-                                                            true,
-                                                            platform,
-                                                            captchaId,
-                                                            this.version);
-                if (captchaId != null) {
-                    urlString = urlString + "&verbum_id=" + captchaId;
-                }
-
-                if (pin != null) {
-                    urlString = urlString + "&sententia=" + URLEncoder.encode(pin, MESSAGE_DIGEST_ENCODING);
-                }
-
-                URL url = new URL(urlString);
-                authorizationServerResponse = getAuthorizationServerResponse(url);
-                if (authorizationServerResponse.isOK()) {
-                    String
-                        fastestAPIAndTicket
-                        = selectFastestAPIServer(authorizationServerResponse.getResponseMessage());
-                    authorizationServerResponse.setFastestAPIAndTicket(fastestAPIAndTicket);
-                }
-            } catch (MalformedURLException | NoSuchAlgorithmException var14) {
-                LOGGER.error(var14.getMessage(), var14);
-                if (var14 instanceof MalformedURLException) {
-                    authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.BAD_URL);
-                }
-
-                if (var14 instanceof NoSuchAlgorithmException) {
-                    authorizationServerResponse
-                        = new AuthorizationServerResponse(AuthorizationServerResponseCode.ERROR_INIT);
-                }
-
-                return authorizationServerResponse;
-            } catch (IOException e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerResponse = new AuthorizationServerResponse(ERROR_IO);
-            } catch (InterruptedException e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerResponse
-                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERRUPTED);
-            } catch (Throwable e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerResponse
-                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
-                return authorizationServerResponse;
-            }
-
-            ++retryCount;
-            if (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
-                this.configurationPool.markLastUsedAsBad();
-            }
-        }
-
-        return authorizationServerResponse;
-    }
-
-    public AuthorizationServerResponse getAPIsAndTicketUsingRelogin(String login,
-                                                                    String oldTicket,
-                                                                    String sessionId,
-                                                                    String platform) {
-
-        AuthorizationServerResponse authorizationServerResponse = null;
-        int retryCount = 0;
-
-        while (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
-            try {
-
-                String formedUrl = UrlProvider.getFormedUrl999(this.getBaseUrl(),
-                                                               login,
-                                                               oldTicket,
-                                                               sessionId,
-                                                               platform,
-                                                               this.version);
-                URL url = new URL(formedUrl);
-                authorizationServerResponse = getAuthorizationServerResponse(url);
-                if (authorizationServerResponse.isOK()) {
-                    String
-                        fastestAPIAndTicket
-                        = selectFastestAPIServer(authorizationServerResponse.getResponseMessage());
-                    authorizationServerResponse.setFastestAPIAndTicket(fastestAPIAndTicket);
-                }
-            } catch (UnsupportedEncodingException e) {
-                LOGGER.error("Error occurred...", e);
-
-                return new AuthorizationServerResponse(AuthorizationServerResponseCode.ERROR_INIT);
-
-            } catch (MalformedURLException e) {
-                LOGGER.error("Error occurred...", e);
-                return new AuthorizationServerResponse(AuthorizationServerResponseCode.BAD_URL);
-
-            } catch (IOException e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerResponse = new AuthorizationServerResponse(ERROR_IO);
-            } catch (InterruptedException e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerResponse
-                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERRUPTED);
-            } catch (Throwable e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerResponse
-                    = new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
-                return authorizationServerResponse;
-            }
-
-            ++retryCount;
-            if (this.continueObtainingAPIServers(retryCount, authorizationServerResponse)) {
-                this.configurationPool.markLastUsedAsBad();
-            }
-        }
-
-        return authorizationServerResponse;
+        } while (true);
     }
 
 
@@ -1494,187 +1214,11 @@ public class AuthorizationClient {
         return authorizationServerResponse;
     }
 
-    public AuthorizationServerWLBOResponse getResponeForTheWLBOAutoLogin(String authToken) {
-
-        AuthorizationServerWLBOResponse authorizationServerWLBOResponse = null;
-        if (this.configurationPool.size() == 0) {
-            LOGGER.error("No authorization url provided.");
-            authorizationServerWLBOResponse
-                = new AuthorizationServerWLBOResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
-            return authorizationServerWLBOResponse;
-        } else {
-            for (int retryCount = 0; retryCount < this.configurationPool.size(); ++retryCount) {
-                try {
-                    String baseUrl = this.getBaseUrl().toString();
-                    String slash = "";
-                    if (!baseUrl.endsWith("/")) {
-                        slash = "/";
-                    }
-
-                    StringBuilder authURLBuf = new StringBuilder(256);
-                    authURLBuf.append(baseUrl).append(slash).append(STS_WLBO).append("&").append("indicium=").append(
-                        authToken);
-                    LOGGER.debug("Authorization url={}", authURLBuf);
-                    URL stsTokenURL = new URL(authURLBuf.toString());
-                    String response = null;
-                    BufferedReader reader = null;
-                    int authorizationServerResponseCode = 0;
-                    HttpURLConnection connection = getConnection(stsTokenURL);
-
-                        authorizationServerResponseCode =  connection.getResponseCode();
-
-
-                    try {
-                        reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                        response = reader.readLine();
-                    } catch (Throwable var24) {
-                        ;
-                    } finally {
-                        if (reader != null) {
-                            try {
-                                reader.close();
-                            } catch (Throwable e) {
-                                LOGGER.error("Error occurred...", e);
-                            }
-                        }
-
-                    }
-
-                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(response,
-                                                                                          authorizationServerResponseCode);
-                    if (authorizationServerWLBOResponse.isOK()) {
-                        return authorizationServerWLBOResponse;
-                    }
-
-                    LOGGER.error("Wrong response, URL={}, response={}"
-                                 ,authURLBuf,authorizationServerWLBOResponse);
-                } catch (MalformedURLException e) {
-                    LOGGER.error("Error occurred...", e);
-                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(
-                        AuthorizationServerResponseCode.BAD_URL);
-                    return authorizationServerWLBOResponse;
-                } catch (IOException e) {
-                    LOGGER.error("Error occurred...", e);
-                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(ERROR_IO);
-                } catch (Throwable e) {
-                    LOGGER.error("Error occurred...", e);
-                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(
-                        AuthorizationServerResponseCode.INTERNAL_ERROR);
-                    return authorizationServerWLBOResponse;
-                }
-
-                this.configurationPool.markLastUsedAsBad();
-            }
-
-            return authorizationServerWLBOResponse;
-        }
-    }
-
     public String getFeedUrlAndTicket(String login, String platformTicket, String sessionId)
         throws IOException, NoSuchAlgorithmException {
 
         String result = null;
         return (String) result;
-    }
-
-    public Properties getAllProperties(String login, String ticket, String sessionId)
-        throws IOException, NoSuchAlgorithmException, Exception {
-
-        int retryCount = 1;
-        AuthorizationServerPropertiesResponse propertiesResponse = null;
-        SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        String formedUrl = null;
-
-        Properties platformProperties;
-        while (propertiesResponse == null || !propertiesResponse.isOK()) {
-            try {
-
-
-                formedUrl = UrlProvider.getFormedUrl988(this.getBaseUrl(), ticket, login, sessionId);
-                URL url = new URL(formedUrl);
-                LOGGER.info("Account settings request: retry count = {}, time = {}",
-                            retryCount,
-                            DATE_FORMAT.format(System.currentTimeMillis()));
-                LOGGER.debug(">> [{}]", url);
-                propertiesResponse = requestPlatformProperties(url);
-                if (propertiesResponse.isOK()) {
-                    LOGGER.info("Account settings received: retry count = {}, time = {}",
-                                retryCount,
-                                DATE_FORMAT.format(System.currentTimeMillis()));
-                    platformProperties = propertiesResponse.getPlatformProperties();
-                    if (authClient.isSnapshotVersion()) {
-                        LOGGER.debug("Account settings << [{}]", platformProperties);
-                    }
-
-                    try {
-                        int[] times = (int[]) ((int[]) platformProperties.get("marketTimes"));
-                        if (times != null) {
-                            LOGGER.debug("MarketTimes from "
-                                         + times[0]
-                                         + ":"
-                                         + times[1]
-                                         + " to "
-                                         + times[2]
-                                         + ":"
-                                         + times[3]);
-                        }
-                    } catch (NullPointerException e) {
-                        LOGGER.error("Error occurred...", e);
-                    }
-                    break;
-                }
-
-                this.configurationPool.markLastUsedAsBad();
-            } catch (IOException e) {
-                LOGGER.info("Cannot get the platform properties, url={}", formedUrl);
-                propertiesResponse = new AuthorizationServerPropertiesResponse(ERROR_IO);
-                this.configurationPool.markLastUsedAsBad();
-                LOGGER.error("Error occurred...", e);
-            } catch (Throwable e) {
-                LOGGER.info("Cannot get the platform properties, url={}", formedUrl);
-                propertiesResponse
-                    = new AuthorizationServerPropertiesResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
-                this.configurationPool.markLastUsedAsBad();
-                LOGGER.error("Error occurred...", e);
-            }
-
-            if (propertiesResponse.getResponseCode() == AuthorizationServerResponseCode.TICKET_EXPIRED) {
-                handleNoAccountSettings(propertiesResponse.getResponseCode().getError());
-            }
-
-            if (retryCount >= this.configurationPool.size()) {
-                AuthorizationServerResponseCode responseCode = propertiesResponse.getResponseCode();
-                if (responseCode != null) {
-                    String errorMessage = responseCode.getError();
-                    if (responseCode != AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED) {
-                        errorMessage = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED.getMessage()
-                                       + ". "
-                                       + errorMessage;
-                    }
-
-                    handleNoAccountSettings(errorMessage);
-                } else {
-                    handleNoAccountSettings((String) null);
-                }
-            }
-
-            ++retryCount;
-
-            try {
-                Thread.sleep(3000L);
-            } catch (Throwable e) {
-                LOGGER.error("Error occurred...", e);
-            }
-        }
-
-        boolean printProperties = false;
-        if (LOGGER.isDebugEnabled() && printProperties && propertiesResponse != null) {
-            propertiesResponse.printProperties();
-        }
-
-        platformProperties = propertiesResponse.getPlatformProperties();
-        //AvailableInstrumentProvider.INSTANCE.init(platformProperties);
-        return platformProperties;
     }
 
 
@@ -1703,9 +1247,9 @@ public class AuthorizationClient {
         String sessionId = null;
 
         try {
-            //            ISession session = PlatformServiceProvider.getInstance().getSession();
+            //         ISession session = PlatformServiceProvider.getInstance().getSession();
             //            if (session != null) {
-            //                session.recreateSessionId();
+            //             session.recreateSessionId();
             //                sessionId = session.getSessionId();
             //            }
         } catch (Throwable e) {
@@ -1713,7 +1257,9 @@ public class AuthorizationClient {
         }
 
         if (sessionId == null) {
-            throw new Exception("The new sessionId is null");
+            sessionId = UUID.randomUUID().toString();
+            return sessionId;
+            // throw new Exception("The new sessionId is null");
         } else {
             return sessionId;
         }
@@ -1750,10 +1296,10 @@ public class AuthorizationClient {
                 LOGGER.error("Error occurred...", e);
             }
 
-            // authClient.ipInfoAlsMessageBean = AlsMessageFactory.createIPInfoAlsMessageBean(clientCountry,
+            // instance.ipInfoAlsMessageBean = AlsMessageFactory.createIPInfoAlsMessageBean(clientCountry,
             // clientIpAddress);
 
-            authClient.ipInfoAlsMessageBean = new AlsMessageBean();
+            instance.ipInfoAlsMessageBean = new AlsMessageBean();
 
         } catch (Exception var10) {
             LOGGER.error("Cannot get the Client-IP and Client-country.");
@@ -1814,7 +1360,8 @@ public class AuthorizationClient {
 
         public boolean isNextAttemptAvailable() {
 
-            return ++this.currentUuthUrlAttempts <= this.maxSameAuthUrlAttempts;
+            ++this.currentUuthUrlAttempts;
+            return this.currentUuthUrlAttempts <= this.maxSameAuthUrlAttempts;
         }
 
         public void resetCurrentAttempts() {

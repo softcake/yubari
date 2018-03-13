@@ -40,8 +40,7 @@ public class AuthorizationConfigurationPool {
     }
 
     public void markLastUsedAsBad() {
-        URL badOne = this.authServerList.pop();
-        this.authServerList.addLast(badOne);
+        this.authServerList.addLast(this.authServerList.pop());
     }
 
     public void clear() {

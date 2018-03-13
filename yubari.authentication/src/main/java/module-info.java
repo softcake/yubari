@@ -10,5 +10,9 @@ module org.softcake.yubari.authentication {
     requires com.google.common;
     requires org.softcake.yubari.connect;
     requires cherry.core;
+    requires transport.common;
+    requires netty.transport.client;
+    requires java.prefs;
+    requires msg;
 
 }

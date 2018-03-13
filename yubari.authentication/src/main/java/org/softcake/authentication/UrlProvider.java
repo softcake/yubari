@@ -80,47 +80,9 @@ public final class UrlProvider {
     }
 
 
-    public static String getFormedUrl(final URL url,
-                                      final String login,
-                                      final String password,
-                                      final String sessionId,
-                                      final boolean encodePassword,
-                                      final String platform,
-                                      final String captchaId,
-                                      String version) throws UnsupportedEncodingException, NoSuchAlgorithmException {
 
-        String serverRegion = System.getProperty("server.region");
-        return url
-               + AUTH_CONTEXT
-               + PLATFORM_PARAM
-               + "="
-               + platform
-               + "&"
-               + LOGIN_PARAM
-               + "="
-               + URLEncoder.encode(login, "UTF-8")
-               + "&"
-               + PASSWORD_PARAM
-               + "="
-               + URLEncoder.encode(encodePassword
-                                   ? encodeAll(password, captchaId, login)
-                                   : password, "UTF-8")
-               + "&"
-               + VERSION_PARAM
-               + "="
-               + URLEncoder.encode(version, "UTF-8")
-               + "&"
-               + SESSION_ID_PARAM
-               + "="
-               + sessionId
-               + "&"
-               + WILL_PING_PARAM
-               + "=true"
-               + (serverRegion == null ? "" : "&region=" + serverRegion);
-    }
 
-    private static String encodeAll(String password, String capthaId, String login)
-        throws NoSuchAlgorithmException, UnsupportedEncodingException {
+    private static String encodeAll(String password, String capthaId, String login) {
 
         String toCode;
         if (capthaId != null) {
@@ -140,59 +102,7 @@ public final class UrlProvider {
     public static String encodeString(String string) {
         return Hashing.sha1().newHasher().putString(string, Charsets.UTF_8).hash().toString().toUpperCase();
     }
-    public static String getFormedUrl999(final URL baseUrl,
-                                          final String login,
-                                          final String oldTicket,
-                                          final String sessionId,
-                                          final String platform,
-                                          final String ver) throws UnsupportedEncodingException {
 
-        return baseUrl
-               + RELOGIN_AUTH_CONTEXT
-               + PLATFORM_PARAM
-               + "="
-               + platform
-               + "&"
-               + LOGIN_PARAM
-               + "="
-               + URLEncoder.encode(login, "UTF-8")
-               + "&"
-               + TICKET
-               + "="
-               + oldTicket
-               + "&"
-               + SESSION_ID_PARAM
-               + "="
-               + sessionId
-               + "&"
-               + VERSION_PARAM
-               + "="
-               + URLEncoder.encode(ver, "UTF-8")
-               + "&"
-               + WILL_PING_PARAM
-               + "=true";
-    }
-
-    public static String getFormedUrl988(final URL ur, final String ticket, final String login, final String sessionId)
-        throws UnsupportedEncodingException {
-
-        return ur
-               + SETTINGS_CONTEXT
-               + LOGIN_PARAM
-               + "="
-               + URLEncoder.encode(login, "UTF-8")
-               + "&"
-               + TICKET
-               + "="
-               + ticket
-               + "&"
-               + SESSION_ID_PARAM
-               + "="
-               + sessionId
-               + "&"
-               + STNGS_PARAM
-               + "=1";
-    }
 
     /**
      * The report URL.

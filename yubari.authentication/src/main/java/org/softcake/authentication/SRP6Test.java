@@ -43,11 +43,13 @@ public class SRP6Test {
     public static final String DEFAULT_VERSION = "99.99.99";
     private static final Logger LOGGER = LoggerFactory.getLogger(SRP6Test.class);
     static String url;
+    static String urlDemo;
     static String username;
     static String password;
-
+    static String usernameD;
+    static String passwordD;
     static String captchaId;
-
+    static AuthorizationClient authClient;
     public static void main(String[] args) throws Exception {
 
         System.setProperty("jnlp.login.url",
@@ -69,39 +71,66 @@ public class SRP6Test {
         System.setProperty("jnlp.client.password", "");
         System.setProperty("sendThreadDumpsToALS", "true");
 
-
+        urlDemo = "https://platform.dukascopy.com/demo_3/jforex_3.jnlp";
         url = "https://platform.dukascopy.com/live_3/jforex_3.jnlp";
         username = System.getenv("DUKA_LIVE_USER");
         password = System.getenv("DUKA_LIVE_PW");
-        LOGGER.info(username);
-        AuthorizationProperties properties = AuthorizationPropertiesFactory.getAuthorizationProperties(url);
+        usernameD = System.getenv("DUKA_DEMO_USER");
+        passwordD = System.getenv("DUKA_DEMO_PW");
+
+        boolean useDemo = true;
+
+        AuthorizationProperties properties = AuthorizationPropertiesFactory.getAuthorizationProperties(useDemo?urlDemo:url);
 
 
         Collection<String> authServerUrls = properties.getLoginUrlStr();
 
 
-        AuthorizationClient authClient = AuthorizationClient.getInstance(authServerUrls, DEFAULT_VERSION);
-        String pin = PinDialog.showAndGetPin();
-        AuthorizationServerResponse serverResponse = authClient.getAPIsAndTicketUsingLogin(username,
+        authClient = AuthorizationClient.getInstance(authServerUrls, DEFAULT_VERSION);
+        AuthorizationServerResponse serverResponse;
+
+        String sessionID = UUID.randomUUID().toString();
+
+
+        if (useDemo) {
+           // String pin = PinDialog.showAndGetPin();
+            serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(usernameD,
+                                                                        passwordD,
+                                                                        null,
+                                                                        null,
+                                                                        sessionID,
+                                                                        JFOREXSDK_PLATFORM);
+        } else {
+
+            String pin = PinDialog.showAndGetPin();
+            serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(username,
+                                                                        password,
+                                                                        captchaId,
+                                                                        pin,
+                                                                        sessionID,
+                                                                        JFOREXSDK_PLATFORM);
+        }
+
+
+
+
+
+
+
+       /* AuthorizationServerResponse serverResponse = authClient.getAPIsAndTicketUsingLogin(username,
                                                                                            password,
                                                                                            captchaId,
                                                                                            pin,
                                                                                            UUID.randomUUID().toString(),
                                                                                            JFOREXSDK_PLATFORM);
-
+*/
 
         //            Matcher
         //                matcher = AuthorizationClient.RESULT_PATTERN.matcher(fastestAPIAndTicket);
         //            String ticket = matcher.group(7);
 
         //            LOGGER.info(ticket);
-       /* AuthorizationServerResponse serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(username,
-                                                                                          password,
-                                                                                                captchaId,
-                                                                                                pin,
-                                                                                                UUID.randomUUID()
-                                                                                                    .toString(),
-                                                                                                JFOREXSDK_PLATFORM);*/
+
         String fastestAPIAndTicket = serverResponse.getFastestAPIAndTicket();
         LOGGER.info(serverResponse.getMessage());
     }
@@ -109,14 +138,14 @@ public class SRP6Test {
 
     public static BufferedImage getCaptchaImage(String jnlp) throws Exception {
 
-        AuthorizationProperties properties = AuthorizationPropertiesFactory.getAuthorizationProperties(url);
-
-
-        Collection<String> authServerUrls = properties.getLoginUrlStr();
-        AuthorizationClient authorizationClient = AuthorizationClient.getInstance(authServerUrls, DEFAULT_VERSION);
+//        AuthorizationProperties properties = AuthorizationPropertiesFactory.getAuthorizationProperties(url);
+//
+//
+//        Collection<String> authServerUrls = properties.getLoginUrlStr();
+//        AuthorizationClient authorizationClient = AuthorizationClient.getInstance(authServerUrls, DEFAULT_VERSION);
         //CaptchaImage imageCaptchaMap     = authorizationClient.getImageCaptcha();
 
-        Map<String, BufferedImage> imageCaptchaMap = authorizationClient.getImageCaptcha();
+        Map<String, BufferedImage> imageCaptchaMap = authClient.getImageCaptcha();
         if (!imageCaptchaMap.isEmpty()) {
             Map.Entry<String, BufferedImage> imageCaptchaEntry = imageCaptchaMap.entrySet().iterator().next();
             captchaId = imageCaptchaEntry.getKey();
