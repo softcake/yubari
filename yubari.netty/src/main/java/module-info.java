@@ -11,16 +11,16 @@ module org.softcake.yubari.netty {
     requires org.softcake.yubari.connect;
     requires cherry.core;
     requires transport.common;
-
+requires java.sql;
     requires java.prefs;
     requires msg;
 
     requires java.management;
-    requires netty.transport;
-    requires netty.codec;
-    requires netty.handler;
-    requires netty.common;
-    requires netty.buffer;
+    requires io.netty.transport;
+    requires io.netty.common;
+    requires io.netty.codec;
+    requires io.netty.handler;
+
     exports org.softcake.yubari.netty;
     //requires transport.common;
     // requires netty.transport.client;

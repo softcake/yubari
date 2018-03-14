@@ -158,8 +158,8 @@ allprojects {
            }
 
 
-           dependency "io.netty:netty-transport:4.1.17.Final"
-            dependency "io.netty:netty-handler:4.1.17.Final"
+           dependency "io.netty:netty-transport:4.1.22.Final"
+            dependency "io.netty:netty-handler:4.1.22.Final"
         }
     }
 }

@@ -21,6 +21,7 @@ import com.dukascopy.api.IClientGUI;
 import com.dukascopy.api.IClientGUIListener;
 import com.dukascopy.api.INewsFilter;
 import com.dukascopy.api.IStrategy;
+import com.dukascopy.api.Instrument;
 import com.dukascopy.api.feed.IFeedDescriptor;
 import com.dukascopy.api.feed.IFeedInfo;
 import com.dukascopy.api.instrument.IFinancialInstrument;

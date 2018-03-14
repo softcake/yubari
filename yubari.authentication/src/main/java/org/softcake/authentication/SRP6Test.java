@@ -27,7 +27,8 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
-import java.util.Collection;
+import java.net.URL;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -83,7 +84,7 @@ public class SRP6Test {
         AuthorizationProperties properties = AuthorizationPropertiesFactory.getAuthorizationProperties(useDemo?urlDemo:url);
 
 
-        Collection<String> authServerUrls = properties.getLoginUrlStr();
+        List<URL> authServerUrls = properties.getLoginSrpSixUrls();
 
 
         authClient = AuthorizationClient.getInstance(authServerUrls, DEFAULT_VERSION);
@@ -93,13 +94,16 @@ public class SRP6Test {
 
 
         if (useDemo) {
+            DClient client = new DClient();
+            client.connect(urlDemo,usernameD,passwordD);
+
            // String pin = PinDialog.showAndGetPin();
-            serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(usernameD,
-                                                                        passwordD,
-                                                                        null,
-                                                                        null,
-                                                                        sessionID,
-                                                                        JFOREXSDK_PLATFORM);
+//            serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(usernameD,
+//                                                                        passwordD,
+//                                                                        null,
+//                                                                        null,
+//                                                                        sessionID,
+//                                                                        JFOREXSDK_PLATFORM);
         } else {
 
             String pin = PinDialog.showAndGetPin();
@@ -131,8 +135,8 @@ public class SRP6Test {
 
         //            LOGGER.info(ticket);
 
-        String fastestAPIAndTicket = serverResponse.getFastestAPIAndTicket();
-        LOGGER.info(serverResponse.getMessage());
+       // String fastestAPIAndTicket = serverResponse.getFastestAPIAndTicket();
+       // LOGGER.info(serverResponse.getMessage());
     }
 
 

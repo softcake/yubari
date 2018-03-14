@@ -17,11 +17,8 @@
 package org.softcake.authentication;
 
 
-import org.softcake.yubari.netty.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.TransportClient;
-import org.softcake.yubari.netty.TransportClientBuilder;
 
-import com.dukascopy.dds3.transport.common.protocol.binary.StaticSessionDictionary;
 import com.dukascopy.dds3.transport.msg.acc.AccountInfoMessage;
 import com.dukascopy.dds3.transport.msg.acc.AccountInfoMessageInit;
 import com.dukascopy.dds3.transport.msg.acc.AccountInfoMessagePack;
@@ -36,13 +33,9 @@ import com.dukascopy.dds3.transport.msg.ord.MergePositionsMessage;
 import com.dukascopy.dds3.transport.msg.ord.OrderGroupMessage;
 import com.dukascopy.dds3.transport.msg.ord.OrderMessage;
 import com.dukascopy.dds3.transport.msg.ord.OrderMessageExt;
-import com.dukascopy.dds4.common.ServerAddress;
-import com.dukascopy.dds4.transport.authorization.AuthorizationProviderListener;
-import com.dukascopy.dds4.transport.client.SecurityExceptionHandler;
 import com.dukascopy.dds4.transport.common.mina.ClientListener;
 import com.dukascopy.dds4.transport.common.mina.DisconnectedEvent;
 import com.dukascopy.dds4.transport.common.mina.ITransportClient;
-import com.dukascopy.dds4.transport.common.protocol.mina.IoSessionWrapper;
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
@@ -52,14 +45,8 @@ import org.slf4j.LoggerFactory;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.IOException;
 import java.io.PrintStream;
 import java.math.BigDecimal;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -67,14 +54,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class DCClientImpl implements ClientListener {
@@ -243,174 +228,175 @@ public class DCClientImpl implements ClientListener {
     }
 
     public BufferedImage getCaptchaImage(String jnlp) throws Exception {
-        String authServersCsv = this.getAuthServers(jnlp);
-        String[] urlList = authServersCsv.split(",");
-        List<String> authServers = Arrays.asList(urlList);
-        AuthorizationClient
-            authorizationClient = AuthorizationClient.getInstance(authServers, this.version);
-        Map<String, BufferedImage> imageCaptchaMap = authorizationClient.getImageCaptcha();
-        if (!imageCaptchaMap.isEmpty()) {
-            Entry<String, BufferedImage> imageCaptchaEntry = (Entry)imageCaptchaMap.entrySet().iterator().next();
-            this.captchaId = (String)imageCaptchaEntry.getKey();
-            return (BufferedImage)imageCaptchaEntry.getValue();
-        } else {
-            return null;
-        }
+//        String authServersCsv = this.getAuthServers(jnlp);
+//        String[] urlList = authServersCsv.split(",");
+//        List<String> authServers = Arrays.asList(urlList);
+//        AuthorizationClient
+//            authorizationClient = AuthorizationClient.getInstance(authServers, this.version);
+//        Map<String, BufferedImage> imageCaptchaMap = authorizationClient.getImageCaptcha();
+//        if (!imageCaptchaMap.isEmpty()) {
+//            Entry<String, BufferedImage> imageCaptchaEntry = (Entry)imageCaptchaMap.entrySet().iterator().next();
+//            this.captchaId = (String)imageCaptchaEntry.getKey();
+//            return (BufferedImage)imageCaptchaEntry.getValue();
+//        } else {
+//            return null;
+//        }
+        return null;
     }
 
     private String authenticate(Collection<String> authServerUrls, String username, String password, boolean encodePassword, String pin) throws Exception {
-        AuthorizationClient
-            authorizationClient =AuthorizationClient.getInstance(authServerUrls, this.version);
-        if (!encodePassword && pin != null) {
-            throw new Exception("(EncodePassword == false && pin != null) == NOT SUPPORTED");
-        } else {
-            AuthorizationServerResponse authorizationServerResponse = null;
-
-                authorizationServerResponse = authorizationClient.getAPIsAndTicketUsingLogin_SRP6(username, password, this.captchaId, pin, this.sessionID, "DDS3_JFOREXSDK");
-
-
-            if (authorizationServerResponse != null) {
-                String authResponse = authorizationServerResponse.getFastestAPIAndTicket();
-                LOGGER.debug(authResponse);
-                String host;
-                if (!authorizationServerResponse.isOK()) {
-                    AuthorizationServerResponseCode authorizationServerResponseCode = authorizationServerResponse.getResponseCode();
-                    if (authorizationServerResponse.isEmptyResponse()) {
-                        throw new IOException("Authentication failed");
-                    } else if (AuthorizationServerResponseCode.MINUS_ONE_OLD_ERROR != authorizationServerResponseCode && AuthorizationServerResponseCode.AUTHENTICATION_AUTHORIZATION_ERROR != authorizationServerResponseCode) {
-                        if (authorizationServerResponse.isWrongVersion()) {
-                           // throw new JFVersionException("Incorrect version");
-                        } else if (authorizationServerResponse.isNoAPIServers()) {
-                          //  throw new JFVersionException("System offline");
-                        } else if (authorizationServerResponse.isSystemError()) {
-                           // throw new JFVersionException("System error");
-                        } else if (authorizationServerResponse.isSrp6requestWithProperties() && authorizationServerResponseCode == AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED) {
-                          //  throw new JFException(Error.NO_ACCOUNT_SETTINGS_RECEIVED, authorizationServerResponseCode.getError());
-                        } else {
-                            host = authorizationServerResponseCode.getError();
-                            // throw new JFException(host);
-                        }
-                    } else {
-                      //  throw new JFAuthenticationException("Incorrect username or password");
-                    }
-                } else {
-                    Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(authResponse);
-                    if (!matcher.matches()) {
-                        throw new IOException("Authentication procedure returned unexpected result [" + authResponse + "]");
-                    } else {
-                        String url = matcher.group(1);
-                        int semicolonIndex = url.indexOf(58);
-                        int port;
-                        if (semicolonIndex != -1) {
-                            host = url.substring(0, semicolonIndex);
-                            if (semicolonIndex + 1 >= url.length()) {
-                                LOGGER.warn("port not set, using default 443");
-                                port = 443;
-                            } else {
-                                port = Integer.parseInt(url.substring(semicolonIndex + 1));
-                            }
-                        } else {
-                            host = url;
-                            port = 443;
-                        }
-
-                        String ticket = matcher.group(7);
-                        Properties properties;
-
-                            properties = authorizationServerResponse.getPlatformProperties();
-
-
-                        this.initServerProperties(properties);
-
-
-                        try {
-                            InetAddress localhost = InetAddress.getLocalHost();
-                            this.internalIP = localhost != null ? localhost.getHostAddress() : null;
-                        } catch (UnknownHostException var18) {
-                            LOGGER.error("Can't detect local IP : " + var18.getMessage());
-                            this.internalIP = "";
-                        }
-
-
-                        LOGGER.debug("UserAgent: ");
-
-
-
-                        if (this.transportClient == null) {
-                            TransportClientBuilder builder = TransportClient.builder();
-                            builder.withStaticSessionDictionary(new StaticSessionDictionary()).withTransportName("DDS2 Standalone Transport Client").withAddress(new ServerAddress(host, port)).withAuthorizationProvider(
-
-                                new ClientAuthorizationProvider() {
-                                    @Override
-                                    public void setUserAgent(final String s) {
-
-                                    }
-
-                                    @Override
-                                    public void setSecondaryConnectionDisabled(final boolean b) {
-
-                                    }
-
-                                    @Override
-                                    public void setDroppableMessageServerTTL(final long l) {
-
-                                    }
-
-                                    @Override
-                                    public void setSessionName(final String s) {
-
-                                    }
-
-                                    @Override
-                                    public void setListener(final AuthorizationProviderListener authorizationProviderListener) {
-
-                                    }
-
-                                    @Override
-                                    public InetSocketAddress getAddress() {
-
-                                        return null;
-                                    }
-
-                                    @Override
-                                    public void authorize(final IoSessionWrapper ioSessionWrapper) {
-
-                                    }
-
-                                    @Override
-                                    public void messageReceived(final IoSessionWrapper ioSessionWrapper,
-                                                                final ProtocolMessage protocolMessage) {
-
-                                    }
-
-                                    @Override
-                                    public void cleanUp() {
-
-                                    }
-                                }).withUserAgent("").withClientListener(this).withEventPoolSize(2).withUseSSL(true).withSecurityExceptionHandler(new SecurityExceptionHandler() {
-                                public boolean isIgnoreSecurityException(X509Certificate[] chain, String authType, CertificateException ex) {
-                                    DCClientImpl.LOGGER.warn("Security exception : " + ex);
-                                    return true;
-                                }
-                            });
-//                            if (!OperatingSystemType.LINUX && !OperatingSystemType.MACOSX) {
-//                                builder.withSecondaryConnectionPingTimeout(TRANSPORT_PING_TIMEOUT);
+//        AuthorizationClient
+//            authorizationClient =AuthorizationClient.getInstance(authServerUrls, this.version);
+//        if (!encodePassword && pin != null) {
+//            throw new Exception("(EncodePassword == false && pin != null) == NOT SUPPORTED");
+//        } else {
+//            AuthorizationServerResponse authorizationServerResponse = null;
+//
+//                authorizationServerResponse = authorizationClient.getAPIsAndTicketUsingLogin_SRP6(username, password, this.captchaId, pin, this.sessionID, "DDS3_JFOREXSDK");
+//
+//
+//            if (authorizationServerResponse != null) {
+//                String authResponse = authorizationServerResponse.getFastestAPIAndTicket();
+//                LOGGER.debug(authResponse);
+//                String host;
+//                if (!authorizationServerResponse.isOK()) {
+//                    AuthorizationServerResponseCode authorizationServerResponseCode = authorizationServerResponse.getResponseCode();
+//                    if (authorizationServerResponse.isEmptyResponse()) {
+//                        throw new IOException("Authentication failed");
+//                    } else if (AuthorizationServerResponseCode.MINUS_ONE_OLD_ERROR != authorizationServerResponseCode && AuthorizationServerResponseCode.AUTHENTICATION_AUTHORIZATION_ERROR != authorizationServerResponseCode) {
+//                        if (authorizationServerResponse.isWrongVersion()) {
+//                           // throw new JFVersionException("Incorrect version");
+//                        } else if (authorizationServerResponse.isNoAPIServers()) {
+//                          //  throw new JFVersionException("System offline");
+//                        } else if (authorizationServerResponse.isSystemError()) {
+//                           // throw new JFVersionException("System error");
+//                        } else if (authorizationServerResponse.isSrp6requestWithProperties() && authorizationServerResponseCode == AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED) {
+//                          //  throw new JFException(Error.NO_ACCOUNT_SETTINGS_RECEIVED, authorizationServerResponseCode.getError());
+//                        } else {
+//                            host = authorizationServerResponseCode.getError();
+//                            // throw new JFException(host);
+//                        }
+//                    } else {
+//                      //  throw new JFAuthenticationException("Incorrect username or password");
+//                    }
+//                } else {
+//                    Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(authResponse);
+//                    if (!matcher.matches()) {
+//                        throw new IOException("Authentication procedure returned unexpected result [" + authResponse + "]");
+//                    } else {
+//                        String url = matcher.group(1);
+//                        int semicolonIndex = url.indexOf(58);
+//                        int port;
+//                        if (semicolonIndex != -1) {
+//                            host = url.substring(0, semicolonIndex);
+//                            if (semicolonIndex + 1 >= url.length()) {
+//                                LOGGER.warn("port not set, using default 443");
+//                                port = 443;
 //                            } else {
-//                                builder.withSecondaryConnectionPingInterval(5000L).withPrimaryConnectionPingTimeout(2000L).withSecondaryConnectionPingTimeout(2000L);
+//                                port = Integer.parseInt(url.substring(semicolonIndex + 1));
 //                            }
-
-                            this.transportClient = builder.build();
-                        } else {
-                            this.transportClient.setAddress(new ServerAddress(host, port));
-                        }
-
-                        return ticket;
-                    }
-                }
-            } else {
-                throw new IOException("Authentication failed, no server response.");
-            }
-        }
+//                        } else {
+//                            host = url;
+//                            port = 443;
+//                        }
+//
+//                        String ticket = matcher.group(7);
+//                        Properties properties;
+//
+//                            properties = authorizationServerResponse.getPlatformProperties();
+//
+//
+//                        this.initServerProperties(properties);
+//
+//
+//                        try {
+//                            InetAddress localhost = InetAddress.getLocalHost();
+//                            this.internalIP = localhost != null ? localhost.getHostAddress() : null;
+//                        } catch (UnknownHostException var18) {
+//                            LOGGER.error("Can't detect local IP : " + var18.getMessage());
+//                            this.internalIP = "";
+//                        }
+//
+//
+//                        LOGGER.debug("UserAgent: ");
+//
+//
+//
+//                        if (this.transportClient == null) {
+//                            TransportClientBuilder builder = TransportClient.builder();
+//                            builder.withStaticSessionDictionary(new StaticSessionDictionary()).withTransportName("DDS2 Standalone Transport Client").withAddress(new ServerAddress(host, port)).withAuthorizationProvider(
+//
+//                                new ClientAuthorizationProvider() {
+//                                    @Override
+//                                    public void setUserAgent(final String s) {
+//
+//                                    }
+//
+//                                    @Override
+//                                    public void setSecondaryConnectionDisabled(final boolean b) {
+//
+//                                    }
+//
+//                                    @Override
+//                                    public void setDroppableMessageServerTTL(final long l) {
+//
+//                                    }
+//
+//                                    @Override
+//                                    public void setSessionName(final String s) {
+//
+//                                    }
+//
+//                                    @Override
+//                                    public void setListener(final AuthorizationProviderListener authorizationProviderListener) {
+//
+//                                    }
+//
+//                                    @Override
+//                                    public InetSocketAddress getAddress() {
+//
+//                                        return null;
+//                                    }
+//
+//                                    @Override
+//                                    public void authorize(final IoSessionWrapper ioSessionWrapper) {
+//
+//                                    }
+//
+//                                    @Override
+//                                    public void messageReceived(final IoSessionWrapper ioSessionWrapper,
+//                                                                final ProtocolMessage protocolMessage) {
+//
+//                                    }
+//
+//                                    @Override
+//                                    public void cleanUp() {
+//
+//                                    }
+//                                }).withUserAgent("").withClientListener(this).withEventPoolSize(2).withUseSSL(true).withSecurityExceptionHandler(new SecurityExceptionHandler() {
+//                                public boolean isIgnoreSecurityException(X509Certificate[] chain, String authType, CertificateException ex) {
+//                                    DCClientImpl.LOGGER.warn("Security exception : " + ex);
+//                                    return true;
+//                                }
+//                            });
+////                            if (!OperatingSystemType.LINUX && !OperatingSystemType.MACOSX) {
+////                                builder.withSecondaryConnectionPingTimeout(TRANSPORT_PING_TIMEOUT);
+////                            } else {
+////                                builder.withSecondaryConnectionPingInterval(5000L).withPrimaryConnectionPingTimeout(2000L).withSecondaryConnectionPingTimeout(2000L);
+////                            }
+//
+//                            this.transportClient = builder.build();
+//                        } else {
+//                            this.transportClient.setAddress(new ServerAddress(host, port));
+//                        }
+//
+//                        return ticket;
+//                    }
+//                }
+//            } else {
+//                throw new IOException("Authentication failed, no server response.");
+//            }
+//        }
         return "";
     }
 

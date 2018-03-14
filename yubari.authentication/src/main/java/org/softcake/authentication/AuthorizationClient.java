@@ -78,7 +78,6 @@ import java.net.URLConnection;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -145,55 +144,37 @@ public class AuthorizationClient {
     private static AuthorizationClient instance;
     private static Object mutex = new Object();
 
-    private final AuthorizationConfigurationPool configurationPool = new AuthorizationConfigurationPool();
+    private final AuthorizationUrlPool configurationPool = new AuthorizationUrlPool();
     private final String version;
     private volatile AlsMessageBean ipInfoAlsMessageBean = null;
     private volatile boolean firstApiRequest = true;
     private AtomicReference<String> srp6PlatformSessionKey = new AtomicReference();
 
     private AuthorizationClient() {
+
         this.version = "99.99.99";
     }
 
-    private AuthorizationClient(Collection<String> authServerUrls, String version) throws MalformedURLException {
+    private AuthorizationClient(Collection<URL> authServerUrls, String version) {
 
-
-        for (final String url : authServerUrls) {
-            this.configurationPool.add(url);
-        }
-
+        this.configurationPool.addAll(authServerUrls);
         this.version = version;
     }
 
-    public static synchronized AuthorizationClient getInstance(Collection<String> authServerUrls, String version) {
+    public static synchronized AuthorizationClient getInstance(Collection<URL> authServerUrls, String version) {
 
         AuthorizationClient result = instance;
         if (result == null) {
             synchronized (mutex) {
                 result = instance;
                 if (result == null) {
-                    try {
-                        instance = result = new AuthorizationClient(authServerUrls, version);
-
-                    } catch (MalformedURLException var4) {
-                        LOGGER.error(var4.getMessage(), var4);
-                    }
-
-
-                }else{
-                    try {
-                        result.updateConfigurationPool(authServerUrls);
-                    } catch (MalformedURLException var3) {
-                        LOGGER.error(var3.getMessage(), var3);
-                    }
+                    instance = result = new AuthorizationClient(authServerUrls, version);
+                } else {
+                    result.updateConfigurationPool(authServerUrls);
                 }
             }
         } else {
-            try {
-                result.updateConfigurationPool(authServerUrls);
-            } catch (MalformedURLException var3) {
-                LOGGER.error(var3.getMessage(), var3);
-            }
+            result.updateConfigurationPool(authServerUrls);
         }
         return result;
     }
@@ -212,16 +193,6 @@ public class AuthorizationClient {
     }
 
 
-/*
-    public static synchronized AuthorizationClient getInstance() {
-
-        if (instance == null) {
-            throw new IllegalStateException("The AuthorizationClient is not initialized.");
-        } else {
-            return instance;
-        }
-    }*/
-
     public static String selectFastestAPIServer(String apiServersAndTicket)
         throws ApiUrlServerFormatException, InterruptedException, IOException {
 
@@ -232,41 +203,69 @@ public class AuthorizationClient {
         boolean matches = matcher.matches();
 
         if (!matches) {
+
             throw new ApiUrlServerFormatException("1. Wrong format of api url:" + apiServersAndTicket);
-        } else {
-
-
-            String apiUrls = matcher.group(1);
-            LinkedHashMap<String, InetSocketAddress> addresses = new LinkedHashMap<>();
-            StringTokenizer tokenizer = new StringTokenizer(apiUrls, "@");
-            if (tokenizer.countTokens() == 0) {
-                throw new ApiUrlServerFormatException("2. Wrong format of api url:" + apiServersAndTicket);
-            } else if (tokenizer.countTokens() == 1) {
-                return apiServersAndTicket;
-            } else {
-                while (tokenizer.hasMoreTokens()) {
-
-                    String url = tokenizer.nextToken();
-                    addresses.put(url, getInetSocketAddress(url));
-                }
-                Map<String, Long[]> pingTimesMap = Ping.ping(addresses);
-                LinkedHashMap<Long, String> pingTimeLinkedMap = new LinkedHashMap<>();
-                pingTimesMap.forEach((s, longs) -> pingTimeLinkedMap.put(getBestTime(longs), s));
-                Long bestTime = pingTimeLinkedMap.keySet().stream().min(Long::compareTo).orElse(Long.MAX_VALUE);
-
-                String bestURL = pingTimeLinkedMap.get(bestTime);
-                LOGGER.debug("Best api url [{}] with time [{}]", bestURL, bestTime);
-                addIPAndBestPing(bestTime, bestURL);
-                String address = bestURL + "@" + matcher.group(7);
-
-                if (validAPIServerAddressFormat(address)) {
-                    return address;
-                } else {
-                    throw new ApiUrlServerFormatException("4. Wrong format of api url:" + address);
-                }
-            }
 
         }
+
+
+        String apiUrls = matcher.group(1);
+
+        StringTokenizer tokenizer = new StringTokenizer(apiUrls, "@");
+
+        if (tokenizer.countTokens() == 0) {
+            throw new ApiUrlServerFormatException("2. Wrong format of api url:" + apiServersAndTicket);
+        }
+
+        if (tokenizer.countTokens() == 1) {
+            return apiServersAndTicket;
+        }
+
+        LinkedHashMap<String, InetSocketAddress> addresses = new LinkedHashMap<>();
+
+        while (tokenizer.hasMoreTokens()) {
+
+            String url = tokenizer.nextToken();
+            addresses.put(url, getInetSocketAddress(url));
+        }
+
+        BestApiServer server = getBestApiServer(addresses);
+
+        Long bestTime = server.getPingTime();
+        String bestURL = server.getUrlAsString();
+
+        LOGGER.debug("Best api url [{}] with time [{}]", bestURL, bestTime);
+
+        addIPAndBestPing(bestTime, bestURL);
+
+        String address = bestURL + "@" + matcher.group(7);
+
+        if (validAPIServerAddressFormat(address)) {
+            return address;
+        } else {
+            throw new ApiUrlServerFormatException("4. Wrong format of api url:" + address);
+        }
+
+
+    }
+
+    /**
+     * @param addresses
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    private static BestApiServer getBestApiServer(Map<String, InetSocketAddress> addresses)
+        throws IOException, InterruptedException {
+
+        LinkedHashMap<Long, String> pingTimeLinkedMap = new LinkedHashMap<>();
+        Ping.ping(addresses).forEach((s, longs) -> pingTimeLinkedMap.put(getBestTime(longs), s));
+
+        Long bestTime = pingTimeLinkedMap.keySet().stream().min(Long::compareTo).orElse(Long.MAX_VALUE);
+
+        String bestURL = pingTimeLinkedMap.get(bestTime);
+        return new BestApiServer(bestURL, bestTime);
+
     }
 
     /**
@@ -371,7 +370,6 @@ public class AuthorizationClient {
 
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         if (connection instanceof HttpsURLConnection && Boolean.getBoolean(SSL_IGNORE_ERRORS)) {
-            LOGGER.debug("Ignoring SSL errors");
             ((HttpsURLConnection) connection).setHostnameVerifier(new DummyHostNameVerifier());
         } else {
             connection.setRequestProperty(USER_AGENT_KEY, USER_AGENT_VALUE);
@@ -460,15 +458,12 @@ public class AuthorizationClient {
 
     /**
      * @param authServerUrls
-     * @throws MalformedURLException
      */
-    public void updateConfigurationPool(Collection<String> authServerUrls) throws MalformedURLException {
+    public void updateConfigurationPool(Collection<URL> authServerUrls) {
 
         this.configurationPool.clear();
+        this.configurationPool.addAll(authServerUrls);
 
-        for (final String url : authServerUrls) {
-            this.configurationPool.add(url);
-        }
     }
 
 

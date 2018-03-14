@@ -18,32 +18,33 @@ package org.softcake.authentication;
 
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.LinkedList;
 
+/**
+ * @author René Neubert
+ */
+public class BestApiServer {
+    private String url;
+    private long bestPingTime;
 
-public class AuthorizationConfigurationPool {
-    private LinkedList<URL> authServerList = new LinkedList();
+    public BestApiServer(final String url, final long bestPingTime) {
 
-    public AuthorizationConfigurationPool() {
+        this.url = url;
+        this.bestPingTime = bestPingTime;
     }
 
-    public int size() {
-        return this.authServerList.size();
+    public long getPingTime() {
+
+        return bestPingTime;
     }
 
-    public void add(String link) throws MalformedURLException {
-        this.authServerList.addLast(new URL(link));
+    public String getUrlAsString() {
+
+        return url;
     }
 
-    public URL get() {
-        return this.authServerList.getFirst();
+    public URL getUrl() throws MalformedURLException {
+
+        return new URL(url);
     }
 
-    public void markLastUsedAsBad() {
-        this.authServerList.addLast(this.authServerList.pop());
-    }
-
-    public void clear() {
-        this.authServerList.clear();
-    }
 }
