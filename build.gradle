@@ -134,7 +134,8 @@ allprojects {
             dependency "commons-validator:commons-validator:1.6"
             dependency "org.softcake.lemon:lemon-core:1.1.0"
 
-         // dependency "com.dukascopy.dds2:DDS2-jClient-JForex:3.3.0"
+ //         dependency "com.dukascopy.dds2:DDS2-jClient-JForex:3.3.0"
+            dependency "com.dukascopy.api:JForex-API:2.13.49"
             dependency "com.dukascopy:auth-protocol-client:1.0.16"
             dependency "com.nimbusds:srp6a:1.5.4" //2.0.2
             dependency "org.json:json:20160212" //20180130
@@ -184,12 +185,13 @@ subprojects { subProject ->
             implementation "ch.qos.logback:logback-core"
 
 
-       //   implementation "com.dukascopy.dds2:DDS2-jClient-JForex"
+  //        implementation "com.dukascopy.dds2:DDS2-jClient-JForex"
             implementation "com.dukascopy:auth-protocol-client"
 //           implementation "com.dukascopy.dds4:netty-transport-client",{
 //               exclude group: "com.dukascopy", module: "dev-tools"
 //               exclude group: "com.dukascopy.dds4", module: "transport-common"
 //           }
+            implementation "com.dukascopy.api:JForex-API"
           implementation "com.dukascopy.dds4:transport-common",{
               exclude group: "com.dukascopy", module: "dev-tools"
           }

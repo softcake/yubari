@@ -16,6 +16,8 @@ module org.softcake.yubari.authentication {
     requires msg;
 
     requires java.management;
+    requires JForex.API;
+
 
     //requires transport.common;
    // requires netty.transport.client;

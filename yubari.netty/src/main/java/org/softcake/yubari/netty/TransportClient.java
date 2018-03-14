@@ -32,7 +32,8 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DROPPABLE
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DROPPABLE_MESSAGE_SERVER_TTL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DUPLICATE_SYNC_MESSAGES_TO_CLIENT_LISTENERS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_ERROR_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_WARNING_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL;
@@ -52,7 +53,8 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_RECONNECT
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SECONDARY_CONNECTION_RECONNECTS_RESET_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SECONDARY_CONNECTION_RECONNECT_ATTEMPTS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_ERROR_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_WARNING_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_CPU_INFO_TO_SERVER;
@@ -64,12 +66,16 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_CH
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_SIZE;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_MESSAGE_TIMEOUT;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_SIZE;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_QUEUE_SIZE;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_TERMINATION_MAX_AWAIT_TIMEOUT_IN_MILLIS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_TRANSPORT_POOL_SIZE;
@@ -558,8 +564,9 @@ public class TransportClient implements ITransportClient {
                                                              this.droppedMessageCounter,
                                                              this.logEventPoolThreadDumpsOnLongExecution),
                                   new ObjectName(this.checkAndGetJmxName()));
-            } catch (final MalformedObjectNameException | NotCompliantMBeanException | MBeanRegistrationException | InstanceAlreadyExistsException e) {
-                LOGGER.error("Error registering server MBean:",e);
+            } catch (final MalformedObjectNameException | NotCompliantMBeanException | MBeanRegistrationException |
+                InstanceAlreadyExistsException e) {
+                LOGGER.error("Error registering server MBean:", e);
             }
         }
 
@@ -576,7 +583,7 @@ public class TransportClient implements ITransportClient {
     @Deprecated
     public void setListener(final ClientListener listener) {
 
-       this.addListener(listener);
+        this.addListener(listener);
 
     }
 
@@ -1163,7 +1170,9 @@ public class TransportClient implements ITransportClient {
         this.sendMessageAsync(message, callback, this.asyncRequestFutureExecutor);
     }
 
-    public <V> void sendMessageAsync(final ProtocolMessage message, final FutureCallback<V> callback, final Executor executor) {
+    public <V> void sendMessageAsync(final ProtocolMessage message,
+                                     final FutureCallback<V> callback,
+                                     final Executor executor) {
 
         final ListenableFuture<V> future = this.sendMessageAsync(message);
         Futures.addCallback(future, callback, executor);
@@ -1181,7 +1190,8 @@ public class TransportClient implements ITransportClient {
      * @deprecated
      */
     @Deprecated
-    public void controlRequest(final ProtocolMessage message, final MessageSentListener messageSentListener) throws IOException {
+    public void controlRequest(final ProtocolMessage message, final MessageSentListener messageSentListener)
+        throws IOException {
 
         final TransportClientSession transportClientSessionLocal = this.transportClientSession;
         if (transportClientSessionLocal != null) {
@@ -1225,7 +1235,8 @@ public class TransportClient implements ITransportClient {
      * @deprecated
      */
     @Deprecated
-    public ProtocolMessage controlSynchRequest(final ProtocolMessage message, final Long timeoutTime) throws TimeoutException {
+    public ProtocolMessage controlSynchRequest(final ProtocolMessage message, final Long timeoutTime)
+        throws TimeoutException {
 
         final TransportClientSession transportClientSessionLocal = this.transportClientSession;
         if (transportClientSessionLocal != null) {
@@ -1237,10 +1248,9 @@ public class TransportClient implements ITransportClient {
 
     RequestListenableFuture createFailedFuture(final ProtocolMessage message) {
 
-        final RequestMessageTransportListenableFuture task = new RequestMessageTransportListenableFuture(this.transportName,
-                                                                                                         this.getNextId(),
-                                                                                                         (Map) null,
-                                                                                                         message);
+        final RequestMessageTransportListenableFuture
+            task
+            = new RequestMessageTransportListenableFuture(this.transportName, this.getNextId(), (Map) null, message);
         task.setException(new ConnectException("["
                                                + this.transportName
                                                + "] TransportClient not connected, message: "
@@ -1258,7 +1268,9 @@ public class TransportClient implements ITransportClient {
         return this.remoteCallSupport.getInterfaceImplementation(interfaceClass);
     }
 
-    public <T> T getRemoteInterface(final Class<T> remoteInterfaceClass, final long timeout, final TimeUnit timeoutUnit) {
+    public <T> T getRemoteInterface(final Class<T> remoteInterfaceClass,
+                                    final long timeout,
+                                    final TimeUnit timeoutUnit) {
 
         final TransportClientSession transportClientSessionLocal = this.transportClientSession;
         if (transportClientSessionLocal != null) {
