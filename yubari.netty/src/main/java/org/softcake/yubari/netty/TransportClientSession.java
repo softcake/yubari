@@ -376,32 +376,12 @@ class TransportClientSession implements ClientSSLContextListener {
                                                                                .getHostName())
                                                               .createSSLEngine();
                     engine.setUseClientMode(true);
-                    engine.setEnabledProtocols((String[]) sslProtocols.toArray(new String[sslProtocols.size()]));
+                    engine.setEnabledProtocols(sslProtocols.toArray(new String[sslProtocols.size()]));
                     final List<String>
                         enabledCipherSuites
                         = new ArrayList<>(Arrays.asList(engine.getSupportedCipherSuites()));
-                    final Iterator iterator = enabledCipherSuites.iterator();
+                    analyzeCipher(pipeline, engine, enabledCipherSuites);
 
-                    label36:
-                    while (true) {
-                        String cipher;
-                        do {
-                            if (!iterator.hasNext()) {
-                                engine.setEnabledCipherSuites(enabledCipherSuites.toArray(new String[enabledCipherSuites
-                                    .size()]));
-                                pipeline.addLast("ssl", new SslHandler(engine));
-                                break label36;
-                            }
-
-                            cipher = (String) iterator.next();
-                        } while (!cipher.toUpperCase().contains("EXPORT")
-                                 && !cipher.toUpperCase().contains("NULL")
-                                 && !cipher.toUpperCase().contains("ANON")
-                                 && !cipher.toUpperCase().contains("_DES_")
-                                 && !cipher.toUpperCase().contains("MD5"));
-
-                        iterator.remove();
-                    }
                 }
 
                 pipeline.addLast("protocol_version_negotiator",
@@ -426,6 +406,35 @@ class TransportClientSession implements ClientSSLContextListener {
                                                    this.pingListener);
         this.protocolHandler.setClientConnector(this.clientConnector);
         this.clientConnector.start();
+    }
+
+    private void analyzeCipher(final ChannelPipeline pipeline,
+                               final SSLEngine engine,
+                               final List<String> enabledCipherSuites) {
+
+        final Iterator iterator = enabledCipherSuites.iterator();
+
+
+        while(true) {
+            String cipher;
+            do {
+                if (!iterator.hasNext()) {
+                    engine.setEnabledCipherSuites(enabledCipherSuites.toArray(new String[enabledCipherSuites
+                        .size()]));
+                    pipeline.addLast("ssl", new SslHandler(engine));
+                    return;
+                }
+
+                cipher = (String) iterator.next();
+                LOGGER.info("Cipher= " + cipher);
+            } while (!cipher.toUpperCase().contains("EXPORT")
+                     && !cipher.toUpperCase().contains("NULL")
+                     && !cipher.toUpperCase().contains("ANON")
+                     && !cipher.toUpperCase().contains("_DES_")
+                     && !cipher.toUpperCase().contains("MD5"));
+
+            iterator.remove();
+        }
     }
 
     void connect() {
@@ -699,7 +708,7 @@ class TransportClientSession implements ClientSSLContextListener {
 
     public boolean controlRequest(final ProtocolMessage message) {
 
-        return this.controlRequest(message, (MessageSentListener) null);
+        return this.controlRequest(message, null);
     }
 
     public ProtocolMessage controlSynchRequest(final ProtocolMessage message, final Long timeoutTime)

@@ -71,8 +71,8 @@ public class SRP6Test {
         System.setProperty("jnlp.client.username", "");
         System.setProperty("jnlp.client.password", "");
         System.setProperty("sendThreadDumpsToALS", "true");
-
-        urlDemo = "https://platform.dukascopy.com/demo_3/jforex_3.jnlp";
+        urlDemo =   "http://platform.dukascopy.com/demo/jforex.jnlp";
+      //  urlDemo = "https://platform.dukascopy.com/demo_3/jforex_3.jnlp";
         url = "https://platform.dukascopy.com/live_3/jforex_3.jnlp";
         username = System.getenv("DUKA_LIVE_USER");
         password = System.getenv("DUKA_LIVE_PW");
@@ -96,7 +96,16 @@ public class SRP6Test {
         if (useDemo) {
             DClient client = new DClient();
             client.connect(urlDemo,usernameD,passwordD);
-
+            //wait for it to connect
+            int i = 10; //wait max ten seconds
+            while (i > 0 && !client.isConnected()) {
+                Thread.sleep(100000);
+                i--;
+            }
+            if (!client.isConnected()) {
+                LOGGER.error("Failed to connect Dukascopy servers");
+                System.exit(1);
+            }
            // String pin = PinDialog.showAndGetPin();
 //            serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(usernameD,
 //                                                                        passwordD,

@@ -249,7 +249,7 @@ public class TransportClient implements ITransportClient {
         this.userAgent = "NettyTransportClient " + getTransportVersion() + " - " + getLocalIpAddress().getHostAddress();
         String version = this.getClass().getPackage().getImplementationVersion();
         version = version == null ? "SNAPSHOT" : version;
-        this.userAgent = version;
+       // this.userAgent = version;
         this.reconnectDelay = DEFAULT_RECONNECT_DELAY;
         this.maxMessageSizeBytes = DEFAULT_MAX_MESSAGE_SIZE_BYTES;
         this.criticalEventQueueSize = DEFAULT_CRITICAL_EVENT_QUEUE_SIZE;

@@ -43,13 +43,21 @@ import com.dukascopy.dds3.transport.msg.acc.AccountInfoMessage;
 import com.dukascopy.dds3.transport.msg.acc.AccountInfoMessageInit;
 import com.dukascopy.dds3.transport.msg.acc.AccountInfoMessagePack;
 import com.dukascopy.dds3.transport.msg.acc.PackedAccountInfoMessage;
+import com.dukascopy.dds3.transport.msg.ddsApi.InitRequestMessage;
 import com.dukascopy.dds3.transport.msg.ddsApi.QuitRequestMessage;
+import com.dukascopy.dds3.transport.msg.news.CalendarType;
+import com.dukascopy.dds3.transport.msg.news.NewsSubscribeRequest;
 import com.dukascopy.dds4.common.ServerAddress;
 import com.dukascopy.dds4.transport.client.SecurityExceptionHandler;
 import com.dukascopy.dds4.transport.common.mina.ClientListener;
 import com.dukascopy.dds4.transport.common.mina.DisconnectedEvent;
 import com.dukascopy.dds4.transport.common.mina.ITransportClient;
+
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import com.dukascopy.dds4.transport.msg.types.EventCategory;
+import com.dukascopy.dds4.transport.msg.types.GeoRegion;
+import com.dukascopy.dds4.transport.msg.types.MarketSector;
+import com.dukascopy.dds4.transport.msg.types.StockIndex;
 import com.google.common.base.Strings;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.slf4j.Logger;
@@ -710,39 +718,38 @@ public class DClient implements ClientListener {
     }
 
     private void connectedInit() {
-        //        InitRequestMessage initRequestMessage = new InitRequestMessage();
-        //        initRequestMessage.setSendGroups(true);
-        //        initRequestMessage.setSendPacked(true);
-        //        this.transportClient.sendMessageNaive(initRequestMessage);
-        //        this.setSubscribedInstruments(this.instruments);
-        //        Iterator var2 = this.newsFilters.values().iterator();
-        //
-        //        while(var2.hasNext()) {
-        //            INewsFilter newsFilter = (INewsFilter)var2.next();
-        //            NewsSubscribeRequest newsSubscribeRequest = new NewsSubscribeRequest();
-        //            Set<com.dukascopy.dds3.transport.msg.news.NewsSource> sources = TransportHelper
-        // .toTransportSources(newsFilter.getNewsSources());
-        //            newsSubscribeRequest.setSources(sources);
-        //            newsSubscribeRequest.setHot(newsFilter.isOnlyHot());
-        //            newsSubscribeRequest.setGeoRegions(EnumConverter.convert(newsFilter.getCountries(), GeoRegion
-        // .class));
-        //            newsSubscribeRequest.setMarketSectors(EnumConverter.convert(newsFilter.getMarketSectors(),
-        // MarketSector.class));
-        //            newsSubscribeRequest.setIndicies(EnumConverter.convert(newsFilter.getStockIndicies(),
-        // StockIndex.class));
-        //            newsSubscribeRequest.setCurrencies(EnumConverter.convertByName(newsFilter.getCurrencies()));
-        //            newsSubscribeRequest.setEventCategories(EnumConverter.convert(newsFilter.getEventCategories(),
-        // EventCategory.class));
-        //            newsSubscribeRequest.setKeywords(newsFilter.getKeywords());
-        //            newsSubscribeRequest.setFrom(newsFilter.getFrom() == null ? -9223372036854775808L : newsFilter
-        // .getFrom().getTime());
-        //            newsSubscribeRequest.setTo(newsFilter.getTo() == null ? -9223372036854775808L : newsFilter
-        // .getTo().getTime());
-        //            newsSubscribeRequest.setCalendarType((CalendarType)EnumConverter.convert(newsFilter.getType(),
-        // CalendarType.class));
-        //            LOGGER.debug("Subscribing : " + newsSubscribeRequest);
-        //            this.transportClient.sendMessageNaive(newsSubscribeRequest);
-        //        }
+                InitRequestMessage initRequestMessage = new InitRequestMessage();
+                initRequestMessage.setSendGroups(true);
+                initRequestMessage.setSendPacked(true);
+                this.transportClient.sendMessageNaive(initRequestMessage);
+                this.setSubscribedInstruments(this.instruments);
+                Iterator var2 = this.newsFilters.values().iterator();
+
+                while(var2.hasNext()) {
+                    INewsFilter newsFilter = (INewsFilter)var2.next();
+                    NewsSubscribeRequest newsSubscribeRequest = new NewsSubscribeRequest();
+                    Set<com.dukascopy.dds3.transport.msg.news.NewsSource> sources = TransportHelper.toTransportSources(newsFilter.getNewsSources());
+                    newsSubscribeRequest.setSources(sources);
+                    newsSubscribeRequest.setHot(newsFilter.isOnlyHot());
+                    newsSubscribeRequest.setGeoRegions(EnumConverter.convert(newsFilter.getCountries(), GeoRegion
+         .class));
+                    newsSubscribeRequest.setMarketSectors(EnumConverter.convert(newsFilter.getMarketSectors(),
+         MarketSector.class));
+                    newsSubscribeRequest.setIndicies(EnumConverter.convert(newsFilter.getStockIndicies(),
+         StockIndex.class));
+                    newsSubscribeRequest.setCurrencies(EnumConverter.convertByName(newsFilter.getCurrencies()));
+                    newsSubscribeRequest.setEventCategories(EnumConverter.convert(newsFilter.getEventCategories(),
+         EventCategory.class));
+                    newsSubscribeRequest.setKeywords(newsFilter.getKeywords());
+                    newsSubscribeRequest.setFrom(newsFilter.getFrom() == null ? -9223372036854775808L : newsFilter
+         .getFrom().getTime());
+                    newsSubscribeRequest.setTo(newsFilter.getTo() == null ? -9223372036854775808L : newsFilter
+         .getTo().getTime());
+                    newsSubscribeRequest.setCalendarType((CalendarType)EnumConverter.convert(newsFilter.getType(),
+                                                                                             CalendarType.class));
+                    LOGGER.debug("Subscribing : " + newsSubscribeRequest);
+                    this.transportClient.sendMessageNaive(newsSubscribeRequest);
+                }
 
     }
     //

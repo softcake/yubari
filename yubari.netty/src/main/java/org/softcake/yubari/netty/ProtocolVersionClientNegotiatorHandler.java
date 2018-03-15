@@ -34,21 +34,17 @@ import java.util.Iterator;
 @Sharable
 public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler {
     public static final String TRANSPORT_HELLO_MESSAGE = "DDS4TRANSPORT";
-    public static final int SEVER_RESPONSE_MESSAGE_SIZE = "DDS4TRANSPORT".length() + 2 + 4;
+    public static final int SEVER_RESPONSE_MESSAGE_SIZE = TRANSPORT_HELLO_MESSAGE.length() + 2 + 4;
     public static final AttributeKey<ByteBuf>
         PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY
         = AttributeKey.valueOf("protocol_version_response_buffer");
     private static final Logger LOGGER = LoggerFactory.getLogger(ProtocolVersionClientNegotiatorHandler.class);
 
-    public ProtocolVersionClientNegotiatorHandler() {
-
-    }
-
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
 
         Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
         byteBufAttribute.set(ctx.alloc().buffer(SEVER_RESPONSE_MESSAGE_SIZE));
-        ByteBuf response = ctx.alloc().buffer("DDS4TRANSPORT".length()
+        ByteBuf response = ctx.alloc().buffer(TRANSPORT_HELLO_MESSAGE.length()
                                               + 2
                                               + SessionProtocolEncoder.SUPPORTED_VERSIONS.size() * 4);
         response.writeBytes("DDS4TRANSPORT".getBytes("US-ASCII"));
@@ -80,7 +76,7 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
     private void cleanUp(ChannelHandlerContext ctx) throws Exception {
 
         Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
-        ByteBuf byteBuf = (ByteBuf) byteBufAttribute.get();
+        ByteBuf byteBuf = byteBufAttribute.get();
         if (byteBuf != null) {
             byteBuf.release();
 

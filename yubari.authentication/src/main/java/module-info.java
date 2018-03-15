@@ -17,6 +17,7 @@ module org.softcake.yubari.authentication {
 
     requires java.management;
     requires JForex.API;
+    requires java.sql;
 
 
     //requires transport.common;

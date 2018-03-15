@@ -38,7 +38,6 @@ import com.dukascopy.dds4.transport.common.protocol.mina.ISessionStats;
 import com.dukascopy.dds4.transport.msg.system.BinaryPartMessage;
 import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
-import com.dukascopy.dds4.transport.msg.system.DisconnectHint;
 import com.dukascopy.dds4.transport.msg.system.DisconnectRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
@@ -53,13 +52,13 @@ import com.dukascopy.dds4.transport.msg.system.RequestInProcessMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamHeaderMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamingStatus;
 import com.dukascopy.dds4.transport.msg.types.StreamState;
-import com.dukascopy.dds4.transport.netty.AsyncSettableFuture;
 import com.dukascopy.dds4.transport.netty.NettyIoSessionWrapperAdapter;
 import com.dukascopy.dds4.transport.netty.ProtocolVersionNegotiationSuccessEvent;
 import com.dukascopy.dds4.transport.netty.RequestMessageTransportListenableFuture;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -104,11 +103,13 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     private final List<Thread> eventExecutorThreadsForLogging = Collections.synchronizedList(new ArrayList());
     private ThreadLocal<int[]> eventExecutorMessagesCounterThreadLocal = new ThreadLocal<int[]>() {
         protected int[] initialValue() {
+
             return new int[1];
         }
     };
     private ThreadLocal<int[]> sentMessagesCounterThreadLocal = new ThreadLocal<int[]>() {
         protected int[] initialValue() {
+
             return new int[1];
         }
     };
@@ -116,13 +117,16 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     private final AtomicLong lastSendingErrorTime = new AtomicLong(System.nanoTime() - 100000000000L);
     private final AtomicLong lastExecutionWarningTime = new AtomicLong(System.nanoTime() - 100000000000L);
     private final AtomicLong lastExecutionErrorTime = new AtomicLong(System.nanoTime() - 100000000000L);
-    private final Map<Class<?>, Map<String, DroppableMessageScheduling>> lastScheduledDropableMessages = new ConcurrentHashMap();
+    private final Map<Class<?>, Map<String, DroppableMessageScheduling>>
+        lastScheduledDropableMessages
+        = new ConcurrentHashMap<>();
     private final boolean logSkippedDroppableMessages;
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
-    private Map<String, BlockingBinaryStream> streams = new HashMap();
+    private Map<String, BlockingBinaryStream> streams = new HashMap<>();
     private final boolean sendCpuInfoToServer;
 
     public ClientProtocolHandler(TransportClientSession clientSession) {
+
         this.clientSession = clientSession;
         this.droppableMessagesClientTTL = clientSession.getDroppableMessagesClientTTL();
         this.logSkippedDroppableMessages = clientSession.isLogSkippedDroppableMessages();
@@ -135,73 +139,122 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     public void setClientConnector(ClientConnector clientConnector) {
+
         this.clientConnector = clientConnector;
     }
 
     private ListeningExecutorService initEventExecutor() {
-        ListeningExecutorService executor = TransportHelper.createExecutor(this.clientSession.getEventPoolSize(), this.clientSession.getEventPoolAutoCleanupInterval(), this.clientSession.getCriticalEventQueueSize(), "TransportClientEventExecutorThread", this.eventExecutorThreadsForLogging, this.clientSession.getTransportName(), true);
-        return executor;
+
+        return TransportHelper.createExecutor(this.clientSession.getEventPoolSize(),
+                                              this.clientSession.getEventPoolAutoCleanupInterval(),
+                                              this.clientSession.getCriticalEventQueueSize(),
+                                              "TransportClientEventExecutorThread",
+                                              this.eventExecutorThreadsForLogging,
+                                              this.clientSession.getTransportName(),
+                                              true);
+
     }
 
     private ListeningExecutorService initAuthEventExecutor() {
-        ListeningExecutorService executor = TransportHelper.createExecutor(this.clientSession.getAuthEventPoolSize(), this.clientSession.getAuthEventPoolAutoCleanupInterval(), this.clientSession.getCriticalAuthEventQueueSize(), "TransportClientAuthEventExecutorThread", this.eventExecutorThreadsForLogging, this.clientSession.getTransportName(), true);
-        return executor;
+
+        return TransportHelper.createExecutor(this.clientSession.getAuthEventPoolSize(),
+                                              this.clientSession.getAuthEventPoolAutoCleanupInterval(),
+                                              this.clientSession.getCriticalAuthEventQueueSize(),
+                                              "TransportClientAuthEventExecutorThread",
+                                              this.eventExecutorThreadsForLogging,
+                                              this.clientSession.getTransportName(),
+                                              true);
+
     }
 
     private ListeningExecutorService initStreamProcessingExecutor() {
-        ListeningExecutorService executor = TransportHelper.createExecutor(this.clientSession.getStreamProcessingPoolSize(), this.clientSession.getStreamProcessingPoolAutoCleanupInterval(), this.clientSession.getCriticalStreamProcessingQueueSize(), "TransportClientStreamProcessingThread", this.eventExecutorThreadsForLogging, this.clientSession.getTransportName(), false);
-        return executor;
+
+        return TransportHelper.createExecutor(this.clientSession.getStreamProcessingPoolSize(),
+                                              this.clientSession.getStreamProcessingPoolAutoCleanupInterval(),
+                                              this.clientSession.getCriticalStreamProcessingQueueSize(),
+                                              "TransportClientStreamProcessingThread",
+                                              this.eventExecutorThreadsForLogging,
+                                              this.clientSession.getTransportName(),
+                                              false);
+
     }
 
     private ListeningExecutorService initSyncRequestProcessingExecutor() {
-        ListeningExecutorService executor = TransportHelper.createExecutor(this.clientSession.getSyncRequestProcessingPoolSize(), this.clientSession.getSyncRequestProcessingPoolAutoCleanupInterval(), this.clientSession.getCriticalSyncRequestProcessingQueueSize(), "TransportClientSyncRequestProcessingThread", this.eventExecutorThreadsForLogging, this.clientSession.getTransportName(), true);
-        return executor;
+
+        return TransportHelper.createExecutor(this.clientSession.getSyncRequestProcessingPoolSize(),
+                                              this.clientSession.getSyncRequestProcessingPoolAutoCleanupInterval(),
+                                              this.clientSession.getCriticalSyncRequestProcessingQueueSize(),
+                                              "TransportClientSyncRequestProcessingThread",
+                                              this.eventExecutorThreadsForLogging,
+                                              this.clientSession.getTransportName(),
+                                              true);
+
     }
 
     ExecutorService getEventExecutor() {
+
         return this.eventExecutor;
     }
 
     public void terminate() {
-        this.shutdown(this.eventExecutor, this.clientSession.getEventPoolTerminationTimeUnitCount(), this.clientSession.getEventPoolTerminationTimeUnit());
-        this.shutdown(this.authEventExecutor, this.clientSession.getAuthEventPoolTerminationTimeUnitCount(), this.clientSession.getAuthEventPoolTerminationTimeUnit());
-        this.shutdown(this.streamProcessingExecutor, this.clientSession.getStreamProcessingPoolTerminationTimeUnitCount(), this.clientSession.getStreamProcessingPoolTerminationTimeUnit());
-        this.shutdown(this.syncRequestProcessingExecutor, this.clientSession.getSyncRequestProcessingPoolTerminationTimeUnitCount(), this.clientSession.getSyncRequestProcessingPoolTerminationTimeUnit());
+
+        this.shutdown(this.eventExecutor,
+                      this.clientSession.getEventPoolTerminationTimeUnitCount(),
+                      this.clientSession.getEventPoolTerminationTimeUnit());
+        this.shutdown(this.authEventExecutor,
+                      this.clientSession.getAuthEventPoolTerminationTimeUnitCount(),
+                      this.clientSession.getAuthEventPoolTerminationTimeUnit());
+        this.shutdown(this.streamProcessingExecutor,
+                      this.clientSession.getStreamProcessingPoolTerminationTimeUnitCount(),
+                      this.clientSession.getStreamProcessingPoolTerminationTimeUnit());
+        this.shutdown(this.syncRequestProcessingExecutor,
+                      this.clientSession.getSyncRequestProcessingPoolTerminationTimeUnitCount(),
+                      this.clientSession.getSyncRequestProcessingPoolTerminationTimeUnit());
     }
 
     private void shutdown(ListeningExecutorService executor, long waitTimeUnitCount, TimeUnit waitTimeUnit) {
+
         executor.shutdown();
 
         try {
             if (!executor.awaitTermination(waitTimeUnitCount, waitTimeUnit)) {
                 executor.shutdownNow();
             }
-        } catch (InterruptedException var6) {
-            ;
+        } catch (InterruptedException e) {
+
         }
 
     }
 
     protected void channelRead0(ChannelHandlerContext ctx, BinaryProtocolMessage msg) throws Exception {
+
         try {
-            Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel().attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
-            ChannelAttachment attachment = (ChannelAttachment)channelAttachmentAttribute.get();
+            Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel()
+                                                                         .attr(ChannelAttachment
+                                                                                   .CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+            ChannelAttachment attachment = channelAttachmentAttribute.get();
             if (LOGGER.isTraceEnabled()) {
-                LOGGER.trace("[{}] Message received {}, primary channel: {}", new Object[]{this.clientSession.getTransportName(), msg, attachment.isPrimaryConnection()});
+                LOGGER.trace("[{}] Message received {}, primary channel: {}",
+                             this.clientSession.getTransportName(),
+                             msg,
+                             attachment.isPrimaryConnection());
             }
 
             attachment.setLastReadIoTime(System.currentTimeMillis());
             this.processControlRequest(ctx, msg, attachment);
-        } catch (Exception var5) {
-            LOGGER.error("[" + this.clientSession.getTransportName() + "] " + var5.getMessage(), var5);
-            throw var5;
+        } catch (Exception e) {
+            LOGGER.error("[" + this.clientSession.getTransportName() + "] " + e.getMessage(), e);
+            throw e;
         }
     }
 
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+
         super.channelInactive(ctx);
-        Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel().attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
-        ChannelAttachment attachment = (ChannelAttachment)channelAttachmentAttribute.get();
+        Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel()
+                                                                     .attr(ChannelAttachment
+                                                                               .CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+        ChannelAttachment attachment = channelAttachmentAttribute.get();
         if (attachment != null && this.clientConnector != null) {
             if (attachment.isPrimaryConnection()) {
                 this.clientConnector.primaryChannelDisconnected();
@@ -213,8 +266,9 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+
         super.userEventTriggered(ctx, evt);
-        if (evt instanceof SslHandshakeCompletionEvent && ((SslHandshakeCompletionEvent)evt).isSuccess()) {
+        if (evt instanceof SslHandshakeCompletionEvent && ((SslHandshakeCompletionEvent) evt).isSuccess()) {
             this.clientConnector.sslHandshakeSuccess();
         } else if (evt instanceof ProtocolVersionNegotiationSuccessEvent) {
             this.clientConnector.protocolVersionHandshakeSuccess();
@@ -223,62 +277,87 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+
         LOGGER.error(cause.getMessage(), cause);
 
         ctx.close();
     }
 
     public void handleAuthorization(ClientAuthorizationProvider authorizationProvider, Channel session) {
+
         LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
         authorizationProvider.authorize(new NettyIoSessionWrapperAdapter(session) {
             public ChannelFuture write(Object message) {
-                return ClientProtocolHandler.this.writeMessage(this.channel, (BinaryProtocolMessage)message);
+
+                return writeMessage(this.channel, (BinaryProtocolMessage) message);
             }
         });
     }
 
     private void processAuthorizationMessage(ChannelHandlerContext ctx, BinaryProtocolMessage requestMessage) {
-        LOGGER.debug("[{}] Sending message [{}] to authorization provider", this.clientSession.getTransportName(), requestMessage);
+
+        LOGGER.debug("[{}] Sending message [{}] to authorization provider",
+                     this.clientSession.getTransportName(),
+                     requestMessage);
         this.clientSession.getAuthorizationProvider().messageReceived(new NettyIoSessionWrapperAdapter(ctx.channel()) {
             public ChannelFuture write(Object message) {
-                return ClientProtocolHandler.this.writeMessage(this.channel, (BinaryProtocolMessage)message);
+
+                return writeMessage(this.channel, (BinaryProtocolMessage) message);
             }
-        }, (ProtocolMessage)requestMessage);
+        }, (ProtocolMessage) requestMessage);
     }
 
     void fireAuthorizedEvent(final ClientListener clientListener, final ITransportClient transportClient) {
+
         AbstractEventExecutorTask task = new AbstractEventExecutorTask(this.clientSession, this) {
             public void run() {
+
                 try {
                     clientListener.authorized(transportClient);
                 } catch (Throwable var2) {
-                    ClientProtocolHandler.LOGGER.error("[" + ClientProtocolHandler.this.clientSession.getTransportName() + "] " + var2.getMessage(), var2);
-                    ClientProtocolHandler.this.clientConnector.disconnect(new ExtendedClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT, (DisconnectHint)null, "Exception caught while authorized called " + var2.getMessage(), var2));
+                    LOGGER.error("[" + clientSession.getTransportName() + "] " + var2.getMessage(), var2);
+                    clientConnector.disconnect(new ExtendedClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
+                                                                                  null,
+                                                                                  "Exception caught while authorized "
+                                                                                  + "called "
+                                                                                  + var2.getMessage(),
+                                                                                  var2));
                 }
 
             }
 
             public Object getOrderKey() {
+
                 return "";
             }
         };
         task.executeInExecutor(this.authEventExecutor);
     }
 
-    void fireDisconnectedEvent(final ClientListener clientListener, final ITransportClient transportClient, final DisconnectedEvent disconnectedEvent) {
+    void fireDisconnectedEvent(final ClientListener clientListener,
+                               final ITransportClient transportClient,
+                               final DisconnectedEvent disconnectedEvent) {
+
         AbstractEventExecutorTask task = new AbstractEventExecutorTask(this.clientSession, this) {
             public void run() {
+
                 try {
-                    ClientProtocolHandler.this.terminateStreams();
+                    terminateStreams();
                     clientListener.disconnected(transportClient, disconnectedEvent);
                 } catch (Throwable var2) {
-                    ClientProtocolHandler.LOGGER.error("[" + ClientProtocolHandler.this.clientSession.getTransportName() + "] " + var2.getMessage(), var2);
-                    ClientProtocolHandler.this.clientConnector.disconnect(new ExtendedClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT, (DisconnectHint)null, "Exception caught while disconnected called " + var2.getMessage(), var2));
+                    LOGGER.error("[" + clientSession.getTransportName() + "] " + var2.getMessage(), var2);
+                    clientConnector.disconnect(new ExtendedClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
+                                                                                  null,
+                                                                                  "Exception caught while "
+                                                                                  + "disconnected called "
+                                                                                  + var2.getMessage(),
+                                                                                  var2));
                 }
 
             }
 
             public Object getOrderKey() {
+
                 return "";
             }
         };
@@ -286,7 +365,8 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     public ChannelFuture writeMessage(Channel channel, BinaryProtocolMessage responseMessage) {
-        int[] messagesCounter = (int[])this.sentMessagesCounterThreadLocal.get();
+
+        int[] messagesCounter = this.sentMessagesCounterThreadLocal.get();
         ++messagesCounter[0];
         boolean notWritable = false;
         if (!channel.isWritable()) {
@@ -294,12 +374,17 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         }
 
         ChannelFuture channelFuture = channel.writeAndFlush(responseMessage);
-        ChannelAttachment ca = (ChannelAttachment)channel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
+        ChannelAttachment ca = channel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
         channelFuture.addListener(ca.getWriteIoListener());
         if (notWritable) {
             if (this.clientSession.getPrimaryConnectionPingTimeout() > 0L) {
-                ChannelWriteTimeoutChecker channelWriteTimeoutChecker = new ChannelWriteTimeoutChecker(this.clientSession, channelFuture);
-                ScheduledFuture<?> scheduledFuture = this.clientSession.getScheduledExecutorService().schedule(channelWriteTimeoutChecker, this.clientSession.getPrimaryConnectionPingTimeout(), TimeUnit.MILLISECONDS);
+                ChannelWriteTimeoutChecker
+                    channelWriteTimeoutChecker
+                    = new ChannelWriteTimeoutChecker(this.clientSession, channelFuture);
+                ScheduledFuture<?> scheduledFuture = this.clientSession.getScheduledExecutorService().schedule(
+                    channelWriteTimeoutChecker,
+                    this.clientSession.getPrimaryConnectionPingTimeout(),
+                    TimeUnit.MILLISECONDS);
                 channelWriteTimeoutChecker.setScheduledFuture(scheduledFuture);
                 channelFuture.addListener(channelWriteTimeoutChecker);
             }
@@ -307,9 +392,13 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
             if (this.clientSession.getSendCompletionErrorDelay() > 0L) {
                 this.addErrorTimeoutSendingCheck(channelFuture);
             }
-        } else if (this.clientSession.getSendCompletionErrorDelay() > 0L && this.clientSession.getSendCompletionDelayCheckEveryNTimesError() > 0 && messagesCounter[0] % this.clientSession.getSendCompletionDelayCheckEveryNTimesError() == 0) {
+        } else if (this.clientSession.getSendCompletionErrorDelay() > 0L
+                   && this.clientSession.getSendCompletionDelayCheckEveryNTimesError() > 0
+                   && messagesCounter[0] % this.clientSession.getSendCompletionDelayCheckEveryNTimesError() == 0) {
             this.addErrorTimeoutSendingCheck(channelFuture);
-        } else if (this.clientSession.getSendCompletionWarningDelay() > 0L && this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() > 0 && messagesCounter[0] % this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() == 0) {
+        } else if (this.clientSession.getSendCompletionWarningDelay() > 0L
+                   && this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() > 0
+                   && messagesCounter[0] % this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() == 0) {
             this.addWarningTimeoutSendingCheck(channelFuture);
         }
 
@@ -317,21 +406,43 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     private void addWarningTimeoutSendingCheck(final ChannelFuture channelFuture) {
+
         final long procStartTime = System.currentTimeMillis();
         this.clientSession.getScheduledExecutorService().schedule(new Runnable() {
             public void run() {
+
                 if (!channelFuture.isDone()) {
                     long nanoTime = System.nanoTime();
-                    long lastSendingWarningTimeLocal = ClientProtocolHandler.this.lastSendingWarningTime.get();
-                    if (lastSendingWarningTimeLocal + 5000000000L < nanoTime && ClientProtocolHandler.this.lastSendingWarningTime.compareAndSet(lastSendingWarningTimeLocal, nanoTime)) {
-                        ClientProtocolHandler.LOGGER.warn("[{}] Message sending takes too long time to complete: {}m and is still waiting it's turn. Timeout time: {}ms, possible network problem", new Object[]{ClientProtocolHandler.this.clientSession.getTransportName(), System.currentTimeMillis() - procStartTime, ClientProtocolHandler.this.clientSession.getSendCompletionWarningDelay()});
+                    long lastSendingWarningTimeLocal = lastSendingWarningTime.get();
+                    if (lastSendingWarningTimeLocal + 5000000000L < nanoTime && lastSendingWarningTime.compareAndSet(
+                        lastSendingWarningTimeLocal,
+                        nanoTime)) {
+                        LOGGER.warn(
+                            "[{}] Message sending takes too long time to complete: {}m and is still waiting it's turn"
+                            + ". Timeout time: {}ms, possible network problem",
+                            clientSession.getTransportName(),
+                            System.currentTimeMillis() - procStartTime,
+                            clientSession.getSendCompletionWarningDelay());
                         channelFuture.addListener(new ChannelFutureListener() {
                             public void operationComplete(ChannelFuture future) throws Exception {
+
                                 if (future.isSuccess()) {
-                                    if (ClientProtocolHandler.this.clientSession.getSendCompletionErrorDelay() > 0L && System.currentTimeMillis() - procStartTime >= ClientProtocolHandler.this.clientSession.getSendCompletionErrorDelay()) {
-                                        ClientProtocolHandler.LOGGER.error("[{}] Message sending took {}ms, critical timeout time {}ms, possible network problem", new Object[]{ClientProtocolHandler.this.clientSession.getTransportName(), System.currentTimeMillis() - procStartTime, ClientProtocolHandler.this.clientSession.getSendCompletionErrorDelay()});
+                                    if (clientSession.getSendCompletionErrorDelay() > 0L
+                                        && System.currentTimeMillis() - procStartTime
+                                           >= clientSession.getSendCompletionErrorDelay()) {
+                                        LOGGER.error(
+                                            "[{}] Message sending took {}ms, critical timeout time {}ms, possible "
+                                            + "network problem",
+                                            clientSession.getTransportName(),
+                                            System.currentTimeMillis() - procStartTime,
+                                            clientSession.getSendCompletionErrorDelay());
                                     } else {
-                                        ClientProtocolHandler.LOGGER.warn("[{}] Message sending took {}ms, timeout time {}ms, possible network problem", new Object[]{ClientProtocolHandler.this.clientSession.getTransportName(), System.currentTimeMillis() - procStartTime, ClientProtocolHandler.this.clientSession.getSendCompletionWarningDelay()});
+                                        LOGGER.warn(
+                                            "[{}] Message sending took {}ms, timeout time {}ms, possible network "
+                                            + "problem",
+                                            clientSession.getTransportName(),
+                                            System.currentTimeMillis() - procStartTime,
+                                            clientSession.getSendCompletionWarningDelay());
                                     }
                                 }
 
@@ -345,18 +456,33 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     private void addErrorTimeoutSendingCheck(final ChannelFuture channelFuture) {
+
         final long procStartTime = System.currentTimeMillis();
         this.clientSession.getScheduledExecutorService().schedule(new Runnable() {
             public void run() {
+
                 if (!channelFuture.isDone()) {
                     long nanoTime = System.nanoTime();
-                    long lastSendingErrorTimeLocal = ClientProtocolHandler.this.lastSendingErrorTime.get();
-                    if (lastSendingErrorTimeLocal + 1000000000L < nanoTime && ClientProtocolHandler.this.lastSendingErrorTime.compareAndSet(lastSendingErrorTimeLocal, nanoTime)) {
-                        ClientProtocolHandler.LOGGER.error("[{}] Message was not sent in timeout time [{}] and is still waiting it's turn, CRITICAL SEND TIME: {}ms, possible network problem", new Object[]{ClientProtocolHandler.this.clientSession.getTransportName(), ClientProtocolHandler.this.clientSession.getSendCompletionErrorDelay(), System.currentTimeMillis() - procStartTime});
+                    long lastSendingErrorTimeLocal = lastSendingErrorTime.get();
+                    if (lastSendingErrorTimeLocal + 1000000000L < nanoTime && lastSendingErrorTime.compareAndSet(
+                        lastSendingErrorTimeLocal,
+                        nanoTime)) {
+                        LOGGER.error(
+                            "[{}] Message was not sent in timeout time [{}] and is still waiting it's turn, CRITICAL "
+                            + "SEND TIME: {}ms, possible network problem",
+                            clientSession.getTransportName(),
+                            clientSession.getSendCompletionErrorDelay(),
+                            System.currentTimeMillis() - procStartTime);
                         channelFuture.addListener(new ChannelFutureListener() {
                             public void operationComplete(ChannelFuture future) throws Exception {
+
                                 if (future.isSuccess()) {
-                                    ClientProtocolHandler.LOGGER.error("[{}] Message sending took {}ms, critical timeout time {}ms, possible network problem", new Object[]{ClientProtocolHandler.this.clientSession.getTransportName(), System.currentTimeMillis() - procStartTime, ClientProtocolHandler.this.clientSession.getSendCompletionErrorDelay()});
+                                    LOGGER.error(
+                                        "[{}] Message sending took {}ms, critical timeout time {}ms, possible network"
+                                        + " problem",
+                                        clientSession.getTransportName(),
+                                        System.currentTimeMillis() - procStartTime,
+                                        clientSession.getSendCompletionErrorDelay());
                                 }
 
                             }
@@ -368,13 +494,16 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         }, this.clientSession.getSendCompletionErrorDelay(), TimeUnit.MILLISECONDS);
     }
 
-    protected void processControlRequest(ChannelHandlerContext ctx, BinaryProtocolMessage msg, ChannelAttachment attachment) {
+    protected void processControlRequest(ChannelHandlerContext ctx,
+                                         BinaryProtocolMessage msg,
+                                         ChannelAttachment attachment) {
+
         if (msg instanceof ProtocolMessage) {
-            ProtocolMessage requestMessage = (ProtocolMessage)msg;
+            ProtocolMessage requestMessage = (ProtocolMessage) msg;
             if (requestMessage instanceof HeartbeatRequestMessage) {
                 try {
                     HeartbeatOkResponseMessage okResponseMessage = new HeartbeatOkResponseMessage();
-                    okResponseMessage.setRequestTime(((HeartbeatRequestMessage)requestMessage).getRequestTime());
+                    okResponseMessage.setRequestTime(((HeartbeatRequestMessage) requestMessage).getRequestTime());
                     okResponseMessage.setReceiveTime(System.currentTimeMillis());
                     okResponseMessage.setSynchRequestId(requestMessage.getSynchRequestId());
                     PingManager pm = this.clientSession.getPingManager(attachment.isPrimaryConnection());
@@ -385,11 +514,14 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
                     okResponseMessage.setAvailableProcessors(pm.getAvailableProcessors());
                     PingStats generalStats = pm.getGeneralStats();
                     if (generalStats != null) {
-                        okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval().getRoundedLast());
+                        okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval()
+                                                                             .getRoundedLast());
                     } else {
-                        generalStats = this.clientSession.getPingManager(attachment.isPrimaryConnection()).getGeneralStats();
+                        generalStats = this.clientSession.getPingManager(attachment.isPrimaryConnection())
+                                                         .getGeneralStats();
                         if (generalStats != null) {
-                            okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval().getRoundedLast());
+                            okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval()
+                                                                                 .getRoundedLast());
                         }
                     }
 
@@ -398,31 +530,47 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
                     }
                 } catch (Throwable var10) {
                     LOGGER.error("[" + this.clientSession.getTransportName() + "] " + var10.getMessage(), var10);
-                    ErrorResponseMessage errorMessage = new ErrorResponseMessage("Error occurred while processing the message [" + requestMessage + "]. Error message: [" + var10.getClass().getName() + ":" + var10.getMessage() + "]");
+                    ErrorResponseMessage errorMessage = new ErrorResponseMessage(
+                        "Error occurred while processing the message [" + requestMessage + "]. Error message: [" + var10
+                            .getClass()
+                            .getName() + ":" + var10.getMessage() + "]");
                     errorMessage.setSynchRequestId(requestMessage.getSynchRequestId());
                     if (!this.clientSession.isTerminating()) {
                         this.writeMessage(ctx.channel(), errorMessage);
                     }
                 }
             } else if (requestMessage instanceof DisconnectRequestMessage) {
-                DisconnectRequestMessage disconnectRequestMessage = (DisconnectRequestMessage)requestMessage;
-                this.clientConnector.setDisconnectReason(new ExtendedClientDisconnectReason(disconnectRequestMessage.getReason() == null ? DisconnectReason.SERVER_APP_REQUEST : disconnectRequestMessage.getReason(), disconnectRequestMessage.getHint(), "Disconnect request received", (Throwable)null));
+                DisconnectRequestMessage disconnectRequestMessage = (DisconnectRequestMessage) requestMessage;
+                this.clientConnector.setDisconnectReason(new ExtendedClientDisconnectReason(disconnectRequestMessage
+                                                                                                .getReason()
+                                                                                            == null
+                                                                                            ? DisconnectReason
+                                                                                                .SERVER_APP_REQUEST
+                                                                                            :
+                                                                                            disconnectRequestMessage
+                                                                                                .getReason(),
+                                                                                            disconnectRequestMessage
+                                                                                                .getHint(),
+                                                                                            "Disconnect request "
+                                                                                            + "received",
+                                                                                            null));
             } else if (requestMessage instanceof PrimarySocketAuthAcceptorMessage) {
-                this.clientConnector.setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage)requestMessage);
+                this.clientConnector.setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage)
+                                                                             requestMessage);
             } else if (requestMessage instanceof ChildSocketAuthAcceptorMessage) {
-                this.clientConnector.setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage)requestMessage);
+                this.clientConnector.setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) requestMessage);
             } else if (requestMessage instanceof HeartbeatOkResponseMessage) {
                 this.processSyncResponse(requestMessage);
             } else if (requestMessage instanceof JSonSerializableWrapper) {
-                this.processSerializableRequest(ctx, (JSonSerializableWrapper)requestMessage);
+                this.processSerializableRequest(ctx, (JSonSerializableWrapper) requestMessage);
             } else if (msg instanceof BinaryPartMessage) {
-                BinaryPartMessage binaryPart = (BinaryPartMessage)msg;
+                BinaryPartMessage binaryPart = (BinaryPartMessage) msg;
                 this.streamPartReceived(ctx, attachment, binaryPart);
             } else if (msg instanceof StreamHeaderMessage) {
-                StreamHeaderMessage streamHeader = (StreamHeaderMessage)msg;
+                StreamHeaderMessage streamHeader = (StreamHeaderMessage) msg;
                 this.createStream(ctx, attachment, streamHeader);
             } else if (msg instanceof StreamingStatus) {
-                StreamingStatus status = (StreamingStatus)msg;
+                StreamingStatus status = (StreamingStatus) msg;
                 this.streamStatusReceived(status);
             } else if (this.clientConnector.isAuthorizing()) {
                 this.processAuthorizationMessage(ctx, msg);
@@ -437,30 +585,34 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
 
     }
 
-    private void streamPartReceived(final ChannelHandlerContext ctx, ChannelAttachment attachment, final BinaryPartMessage binaryPart) {
+    private void streamPartReceived(final ChannelHandlerContext ctx,
+                                    ChannelAttachment attachment,
+                                    final BinaryPartMessage binaryPart) {
+
         this.streamProcessingExecutor.submit(new Runnable() {
             public void run() {
-                BlockingBinaryStream stream = ClientProtocolHandler.this.getStream(binaryPart.getStreamId());
+
+                BlockingBinaryStream stream = getStream(binaryPart.getStreamId());
                 if (stream == null) {
                     StreamingStatus ss = new StreamingStatus();
                     ss.setStreamId(binaryPart.getStreamId());
                     ss.setState(StreamState.STATE_ERROR);
-                    ClientProtocolHandler.this.writeMessage(ctx.channel(), ss);
+                    writeMessage(ctx.channel(), ss);
                 } else {
                     boolean terminated = false;
 
                     try {
                         stream.binaryPartReceived(binaryPart);
                     } catch (IOException var6) {
-                        ClientProtocolHandler.LOGGER.error(var6.getMessage(), var6);
+                        LOGGER.error(var6.getMessage(), var6);
 
                         terminated = true;
                         stream.ioTerminate(var6.getMessage());
                     }
 
                     if (binaryPart.isEof() || terminated) {
-                        synchronized(ClientProtocolHandler.this.streams) {
-                            ClientProtocolHandler.this.streams.remove(binaryPart.getStreamId());
+                        synchronized (streams) {
+                            streams.remove(binaryPart.getStreamId());
                         }
                     }
                 }
@@ -469,14 +621,22 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         });
     }
 
-    private void createStream(final ChannelHandlerContext ctx, ChannelAttachment attachment, final StreamHeaderMessage stream) {
+    private void createStream(final ChannelHandlerContext ctx,
+                              ChannelAttachment attachment,
+                              final StreamHeaderMessage stream) {
+
         this.streamProcessingExecutor.submit(new Runnable() {
             public void run() {
-                StreamListener streamListener = ClientProtocolHandler.this.clientSession.getStreamListener();
+
+                StreamListener streamListener = clientSession.getStreamListener();
                 if (streamListener != null) {
-                    BlockingBinaryStream bbs = new BlockingBinaryStream(stream.getStreamId(), ctx, ClientProtocolHandler.this.clientSession.getStreamBufferSize(), ClientProtocolHandler.this.clientSession.getStreamChunkProcessingTimeout());
-                    synchronized(ClientProtocolHandler.this.streams) {
-                        ClientProtocolHandler.this.streams.put(stream.getStreamId(), bbs);
+                    BlockingBinaryStream bbs = new BlockingBinaryStream(stream.getStreamId(),
+                                                                        ctx,
+                                                                        clientSession.getStreamBufferSize(),
+                                                                        clientSession.getStreamChunkProcessingTimeout
+                                                                            ());
+                    synchronized (streams) {
+                        streams.put(stream.getStreamId(), bbs);
                     }
 
                     streamListener.handleStream(bbs);
@@ -486,13 +646,15 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     private void streamStatusReceived(final StreamingStatus status) {
+
         this.streamProcessingExecutor.submit(new Runnable() {
             public void run() {
-                BlockingBinaryStream bbs = ClientProtocolHandler.this.getStream(status.getStreamId());
+
+                BlockingBinaryStream bbs = getStream(status.getStreamId());
                 if (bbs != null) {
-                    ClientProtocolHandler.this.safeTerminate(bbs, "Server error " + status.getState());
-                    synchronized(ClientProtocolHandler.this.streams) {
-                        ClientProtocolHandler.this.streams.remove(bbs.getStreamId());
+                    safeTerminate(bbs, "Server error " + status.getState());
+                    synchronized (streams) {
+                        streams.remove(bbs.getStreamId());
                     }
                 }
 
@@ -501,15 +663,16 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     private void terminateStreams() {
+
         List<String> st = new ArrayList();
         Map var2 = this.streams;
-        synchronized(this.streams) {
+        synchronized (this.streams) {
             st.addAll(this.streams.keySet());
             Iterator i$ = st.iterator();
 
-            while(i$.hasNext()) {
-                String key = (String)i$.next();
-                BlockingBinaryStream bbs = (BlockingBinaryStream)this.streams.remove(key);
+            while (i$.hasNext()) {
+                String key = (String) i$.next();
+                BlockingBinaryStream bbs = this.streams.remove(key);
                 this.safeTerminate(bbs, "Connection error");
             }
 
@@ -517,6 +680,7 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     private void safeTerminate(BlockingBinaryStream bbs, String reason) {
+
         if (bbs != null) {
             try {
                 bbs.ioTerminate(reason);
@@ -534,7 +698,9 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     protected boolean processSyncResponse(final ProtocolMessage message) {
-        final RequestMessageTransportListenableFuture synchRequestFuture = this.clientSession.getSyncRequestFuture(message.getSynchRequestId());
+
+        final RequestMessageTransportListenableFuture synchRequestFuture = this.clientSession.getSyncRequestFuture(
+            message.getSynchRequestId());
         boolean result;
         if (synchRequestFuture != null) {
             if (message instanceof RequestInProcessMessage) {
@@ -543,17 +709,19 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
             } else {
                 this.syncRequestProcessingExecutor.submit(new OrderedRunnable() {
                     public void run() {
+
                         try {
                             synchRequestFuture.set(message);
                         } catch (Throwable var2) {
-                            ClientProtocolHandler.LOGGER.error("Failed to process sync response for " + message, var2);
+                            LOGGER.error("Failed to process sync response for " + message, var2);
 
                         }
 
                     }
 
                     public Object getOrderKey() {
-                        return ClientProtocolHandler.this.clientSession.getConcurrencyPolicy().getConcurrentKey(message);
+
+                        return clientSession.getConcurrencyPolicy().getConcurrentKey(message);
                     }
                 });
                 result = !this.clientSession.isDuplicateSyncMessagesToClientListeners();
@@ -565,28 +733,37 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         return result;
     }
 
-    private void processSerializableRequest(final ChannelHandlerContext ctx, final JSonSerializableWrapper jSonSerializableWrapper) {
+    private void processSerializableRequest(final ChannelHandlerContext ctx,
+                                            final JSonSerializableWrapper jSonSerializableWrapper) {
+
         Serializable data = jSonSerializableWrapper.getData();
         if (data != null) {
             if (data instanceof InvocationResult) {
-                InvocationResult invocationResult = (InvocationResult)data;
+                InvocationResult invocationResult = (InvocationResult) data;
                 this.clientSession.getRemoteCallSupport().invocationResultReceived(invocationResult);
             } else if (data instanceof InvocationRequest) {
-                final InvocationRequest invocationRequest = (InvocationRequest)data;
-                ClientProtocolHandler.EventExecutorChannelTask task = new ClientProtocolHandler.EventExecutorChannelTask(ctx, this.clientSession, invocationRequest, 0L) {
+                final InvocationRequest invocationRequest = (InvocationRequest) data;
+                EventExecutorChannelTask task = new EventExecutorChannelTask(ctx,
+                                                                             this.clientSession,
+                                                                             invocationRequest,
+                                                                             0L) {
                     public void run() {
+
                         try {
                             JSonSerializableWrapper responseMessage = new JSonSerializableWrapper();
-                            Object impl = ClientProtocolHandler.this.clientSession.getRemoteCallSupport().getInterfaceImplementation(invocationRequest.getInterfaceClass());
+                            Object impl = clientSession.getRemoteCallSupport().getInterfaceImplementation(
+                                invocationRequest.getInterfaceClass());
                             if (impl != null) {
                                 InvocationResult resultx;
                                 try {
-                                    Serializable invocationResult = (Serializable)TransportHelper.invokeRemoteRequest(invocationRequest, impl);
+                                    Serializable invocationResult = (Serializable) TransportHelper.invokeRemoteRequest(
+                                        invocationRequest,
+                                        impl);
                                     resultx = new InvocationResult(invocationResult, invocationRequest.getRequestId());
                                     resultx.setState(0);
                                     responseMessage.setData(resultx);
                                 } catch (Exception var5) {
-                                    resultx = new InvocationResult((Serializable)null, invocationRequest.getRequestId());
+                                    resultx = new InvocationResult(null, invocationRequest.getRequestId());
                                     resultx.setState(1);
                                     if (var5 instanceof InvocationTargetException) {
                                         resultx.setThrowable(var5.getCause());
@@ -597,55 +774,66 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
                                     responseMessage.setData(resultx);
                                 }
                             } else {
-                                InvocationResult result = new InvocationResult((Serializable)null, invocationRequest.getRequestId());
+                                InvocationResult result = new InvocationResult(null, invocationRequest.getRequestId());
                                 result.setState(1);
-                                result.setThrowable(new Exception("Client does not provide interface: " + invocationRequest.getInterfaceClass()));
+                                result.setThrowable(new Exception("Client does not provide interface: "
+                                                                  + invocationRequest.getInterfaceClass()));
                                 responseMessage.setData(result);
                             }
 
-                            ClientProtocolHandler.this.writeMessage(ctx.channel(), responseMessage);
+                            writeMessage(ctx.channel(), responseMessage);
                         } catch (Throwable var6) {
-                            ClientProtocolHandler.LOGGER.error("[" + ClientProtocolHandler.this.clientSession.getTransportName() + "] " + var6.getMessage(), var6);
-                            ClientProtocolHandler.this.clientConnector.disconnect(new ExtendedClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT, (DisconnectHint)null, "Exception caught during processing serialized request " + var6.getMessage(), var6));
+                            LOGGER.error("[" + clientSession.getTransportName() + "] " + var6.getMessage(), var6);
+                            clientConnector.disconnect(new ExtendedClientDisconnectReason(DisconnectReason
+                                                                                              .EXCEPTION_CAUGHT,
+                                                                                          null,
+                                                                                          "Exception caught during "
+                                                                                          + "processing serialized "
+                                                                                          + "request "
+                                                                                          + var6.getMessage(),
+                                                                                          var6));
                         }
 
                     }
 
                     public Object getOrderKey() {
-                        return ClientProtocolHandler.this.clientSession.getConcurrencyPolicy().getConcurrentKey(jSonSerializableWrapper);
+
+                        return clientSession.getConcurrencyPolicy().getConcurrentKey(jSonSerializableWrapper);
                     }
                 };
-                task.executeInExecutor(this.eventExecutor, (ISessionStats)null);
+                task.executeInExecutor(this.eventExecutor, null);
             }
         }
 
     }
 
     private DroppableMessageScheduling getDroppableScheduling(ProtocolMessage message, String instrument) {
+
         Class<?> clazz = message.getClass();
-        Map<String, DroppableMessageScheduling> lastScheduledMessagesMap = (Map)this.lastScheduledDropableMessages.get(clazz);
+        Map<String, DroppableMessageScheduling>
+            lastScheduledMessagesMap
+            = this.lastScheduledDropableMessages.get(clazz);
         if (lastScheduledMessagesMap == null) {
-            lastScheduledMessagesMap = (Map)MapHelper.getAndPutIfAbsent(this.lastScheduledDropableMessages, clazz, new MapHelper.IValueCreator<Map<String, DroppableMessageScheduling>>() {
-                public Map<String, DroppableMessageScheduling> create() {
-                    return new ConcurrentHashMap();
-                }
-            });
+            lastScheduledMessagesMap = MapHelper.getAndPutIfAbsent(this.lastScheduledDropableMessages,
+                                                                   clazz,
+                                                                   ConcurrentHashMap::new);
         }
 
-        DroppableMessageScheduling lastScheduledMessageInfo = (DroppableMessageScheduling)lastScheduledMessagesMap.get(instrument);
+        DroppableMessageScheduling lastScheduledMessageInfo = lastScheduledMessagesMap.get(instrument);
         if (lastScheduledMessageInfo == null) {
-            lastScheduledMessageInfo = (DroppableMessageScheduling)MapHelper.getAndPutIfAbsent(lastScheduledMessagesMap, instrument, new MapHelper.IValueCreator<DroppableMessageScheduling>() {
-                public DroppableMessageScheduling create() {
-                    return new DroppableMessageScheduling();
-                }
-            });
+            lastScheduledMessageInfo = MapHelper.getAndPutIfAbsent(lastScheduledMessagesMap,
+                                                                   instrument,
+                                                                   DroppableMessageScheduling::new);
         }
 
         return lastScheduledMessageInfo;
     }
 
     protected void fireFeedbackMessageReceived(ChannelHandlerContext ctx, ProtocolMessage message) {
-        long currentDropableMessageTime = this.clientSession.isSkipDroppableMessages() ? this.checkAndRecordScheduleForDroppableMessage(message) : 0L;
+
+        long currentDropableMessageTime = this.clientSession.isSkipDroppableMessages()
+                                          ? this.checkAndRecordScheduleForDroppableMessage(message)
+                                          : 0L;
         if (message instanceof CurrencyMarket) {
             this.clientSession.tickReceived();
         }
@@ -660,14 +848,20 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
             creationTime = 0L;
         }
 
-        ClientProtocolHandler.EventExecutorChannelTask task = new ClientProtocolHandler.EventExecutorChannelTask(ctx, this.clientSession, message, currentDropableMessageTime) {
+        EventExecutorChannelTask task = new EventExecutorChannelTask(ctx,
+                                                                     this.clientSession,
+                                                                     message,
+                                                                     currentDropableMessageTime) {
             public void run() {
+
                 try {
-                    boolean canProcessCurrentDroppable = ClientProtocolHandler.this.canProcessDroppableMessage(this.message, this.currentDropableMessageTime);
+                    boolean canProcessCurrentDroppable = canProcessDroppableMessage(this.message,
+                                                                                    this.currentDropableMessageTime);
                     if (!canProcessCurrentDroppable) {
-                        ClientProtocolHandler.this.clientSession.getDroppedMessageCounter().incrementAndGet();
-                        if (ClientProtocolHandler.this.logSkippedDroppableMessages) {
-                            ClientProtocolHandler.LOGGER.warn("Newer message already has arrived, current processing is skipped <{}>", this.message);
+                        clientSession.getDroppedMessageCounter().incrementAndGet();
+                        if (logSkippedDroppableMessages) {
+                            LOGGER.warn("Newer message already has arrived, current processing is skipped <{}>",
+                                        this.message);
                         }
 
                         if (stats != null) {
@@ -678,7 +872,7 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
                         return;
                     }
                 } catch (Throwable var20) {
-                    ClientProtocolHandler.LOGGER.error("[" + ClientProtocolHandler.this.clientSession.getTransportName() + "] " + var20.getMessage(), var20);
+                    LOGGER.error("[" + clientSession.getTransportName() + "] " + var20.getMessage(), var20);
 
                 }
 
@@ -686,29 +880,33 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
                 boolean var17 = false;
 
                 long afterExecution;
-                label197: {
+                label197:
+                {
                     try {
                         var17 = true;
                         if (stats != null) {
                             beforeExecution = System.currentTimeMillis();
-                            stats.messageExecutionStarted(beforeExecution, beforeExecution - creationTime, this.message);
+                            stats.messageExecutionStarted(beforeExecution,
+                                                          beforeExecution - creationTime,
+                                                          this.message);
                         }
 
                         if (this.message instanceof MessageGroup) {
-                            MessageGroup group = (MessageGroup)this.message;
+                            MessageGroup group = (MessageGroup) this.message;
                             Iterator i$x = group.getMessages().iterator();
 
-                            while(i$x.hasNext()) {
-                                ProtocolMessage m = (ProtocolMessage)i$x.next();
+                            while (i$x.hasNext()) {
+                                ProtocolMessage m = (ProtocolMessage) i$x.next();
                                 Iterator i$xx = listeners.iterator();
 
-                                while(i$xx.hasNext()) {
-                                    ClientListener clientListenerx = (ClientListener)i$xx.next();
+                                while (i$xx.hasNext()) {
+                                    ClientListener clientListenerx = (ClientListener) i$xx.next();
 
                                     try {
-                                        clientListenerx.feedbackMessageReceived(ClientProtocolHandler.this.clientSession.getTransportClient(), m);
+                                        clientListenerx.feedbackMessageReceived(clientSession.getTransportClient(), m);
                                     } catch (Throwable var19) {
-                                        ClientProtocolHandler.LOGGER.error("[" + ClientProtocolHandler.this.clientSession.getTransportName() + "] " + var19.getMessage(), var19);
+                                        LOGGER.error("[" + clientSession.getTransportName() + "] " + var19.getMessage(),
+                                                     var19);
 
                                     }
                                 }
@@ -720,13 +918,14 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
 
                         Iterator i$ = listeners.iterator();
 
-                        while(i$.hasNext()) {
-                            ClientListener clientListener = (ClientListener)i$.next();
+                        while (i$.hasNext()) {
+                            ClientListener clientListener = (ClientListener) i$.next();
 
                             try {
-                                clientListener.feedbackMessageReceived(ClientProtocolHandler.this.clientSession.getTransportClient(), this.message);
+                                clientListener.feedbackMessageReceived(clientSession.getTransportClient(),
+                                                                       this.message);
                             } catch (Throwable var18) {
-                                ClientProtocolHandler.LOGGER.error("[" + ClientProtocolHandler.this.clientSession.getTransportName() + "] " + var18.getMessage(), var18);
+                                LOGGER.error("[" + clientSession.getTransportName() + "] " + var18.getMessage(), var18);
 
                             }
                         }
@@ -734,14 +933,16 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
                         var17 = false;
                         break label197;
                     } catch (Throwable var21) {
-                        ClientProtocolHandler.LOGGER.error("[" + ClientProtocolHandler.this.clientSession.getTransportName() + "] " + var21.getMessage(), var21);
+                        LOGGER.error("[" + clientSession.getTransportName() + "] " + var21.getMessage(), var21);
 
                         var17 = false;
                     } finally {
                         if (var17) {
                             if (stats != null) {
                                 long afterExecutionx = System.currentTimeMillis();
-                                stats.messageExecutionFinished(afterExecutionx, afterExecutionx - beforeExecution, this.message);
+                                stats.messageExecutionFinished(afterExecutionx,
+                                                               afterExecutionx - beforeExecution,
+                                                               this.message);
                             }
 
                         }
@@ -763,22 +964,25 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
             }
 
             public Object getOrderKey() {
-                return ClientProtocolHandler.this.clientSession.getConcurrencyPolicy().getConcurrentKey(this.message);
+
+                return clientSession.getConcurrencyPolicy().getConcurrentKey(this.message);
             }
         };
         task.executeInExecutor(this.eventExecutor, stats);
     }
 
     protected boolean canProcessDroppableMessage(ProtocolMessage message, long currentDropableMessageTime) {
+
         if (currentDropableMessageTime > 0L && message instanceof InstrumentableLowMessage) {
-            InstrumentableLowMessage instrumentable = (InstrumentableLowMessage)message;
+            InstrumentableLowMessage instrumentable = (InstrumentableLowMessage) message;
             String instrument = instrumentable.getInstrument();
             if (instrument != null) {
                 DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
                 long lastArrivedMessageTime = scheduling.getLastScheduledTime();
                 int scheduledCount = scheduling.getScheduledCount();
                 scheduling.executed();
-                if (lastArrivedMessageTime - currentDropableMessageTime > this.droppableMessagesClientTTL && scheduledCount > 1) {
+                if (lastArrivedMessageTime - currentDropableMessageTime > this.droppableMessagesClientTTL
+                    && scheduledCount > 1) {
                     return false;
                 }
             }
@@ -788,13 +992,14 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     private long checkAndRecordScheduleForDroppableMessage(ProtocolMessage message) {
+
         long currentInstrumentableMessageTime;
         if (message instanceof InstrumentableLowMessage) {
-            InstrumentableLowMessage instrumentable = (InstrumentableLowMessage)message;
+            InstrumentableLowMessage instrumentable = (InstrumentableLowMessage) message;
             String instrument = instrumentable.getInstrument();
             if (instrumentable.isDropOnTimeout() && instrument != null) {
                 if (message instanceof CurrencyMarket) {
-                    CurrencyMarket cm = (CurrencyMarket)message;
+                    CurrencyMarket cm = (CurrencyMarket) message;
                     currentInstrumentableMessageTime = cm.getCreationTimestamp();
                 } else {
                     Long t = message.getTimestamp();
@@ -816,26 +1021,31 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     protected void checkAndLogEventPoolThreadDumps() {
+
         if (this.logEventPoolThreadDumpsOnLongExecution.get()) {
             List<Thread> threads = new ArrayList(this.eventExecutorThreadsForLogging);
             Iterator i$ = threads.iterator();
 
-            while(i$.hasNext()) {
-                Thread thread = (Thread)i$.next();
+            while (i$.hasNext()) {
+                Thread thread = (Thread) i$.next();
                 long before = System.currentTimeMillis();
                 StackTraceElement[] stackTrace = thread.getStackTrace();
-                LOGGER.warn("Transport client [{}, {}] thread's [{}] stack trace [{}], dump taking costed [{}]ms", new Object[]{this.clientSession.getTransportName(), this.clientSession.getAddress(), thread.getName(), Arrays.toString(stackTrace), System.currentTimeMillis() - before});
+                LOGGER.warn("Transport client [{}, {}] thread's [{}] stack trace [{}], dump taking costed [{}]ms",
+                            this.clientSession.getTransportName(),
+                            this.clientSession.getAddress(),
+                            thread.getName(),
+                            Arrays.toString(stackTrace),
+                            System.currentTimeMillis() - before);
             }
 
         }
     }
 
     private BlockingBinaryStream getStream(String streamId) {
-        BlockingBinaryStream bbs = null;
-        Map var3 = this.streams;
-        synchronized(this.streams) {
-            bbs = (BlockingBinaryStream)this.streams.get(streamId);
-            return bbs;
+
+        synchronized (this.streams) {
+            return this.streams.get(streamId);
+
         }
     }
 
@@ -848,7 +1058,11 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         private long procStartTime;
         private long sleepTime = 10L;
 
-        public EventExecutorChannelTask(ChannelHandlerContext ctx, TransportClientSession clientSession, ProtocolMessage message, long currentDropableMessageTime) {
+        public EventExecutorChannelTask(ChannelHandlerContext ctx,
+                                        TransportClientSession clientSession,
+                                        ProtocolMessage message,
+                                        long currentDropableMessageTime) {
+
             this.channel = ctx.channel();
             this.clientSession = clientSession;
             this.message = message;
@@ -856,63 +1070,101 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         }
 
         public void executeInExecutor(ListeningExecutorService executor, final ISessionStats stats) {
-            int[] messagesCounter = (int[])ClientProtocolHandler.this.eventExecutorMessagesCounterThreadLocal.get();
+
+            int[] messagesCounter = eventExecutorMessagesCounterThreadLocal.get();
             ++messagesCounter[0];
             final ListenableFuture future;
             final long procStartTime;
-            if (this.clientSession.getEventExecutionErrorDelay() > 0L && this.clientSession.getEventExecutionDelayCheckEveryNTimesError() > 0 && messagesCounter[0] % this.clientSession.getEventExecutionDelayCheckEveryNTimesError() == 0) {
+            if (this.clientSession.getEventExecutionErrorDelay() > 0L
+                && this.clientSession.getEventExecutionDelayCheckEveryNTimesError() > 0
+                && messagesCounter[0] % this.clientSession.getEventExecutionDelayCheckEveryNTimesError() == 0) {
                 future = this.executeInExecutor(executor, true);
                 procStartTime = System.currentTimeMillis();
                 ScheduledExecutorService scheduledExecutorService = this.clientSession.getScheduledExecutorService();
                 if (!scheduledExecutorService.isShutdown() && !scheduledExecutorService.isTerminated()) {
                     scheduledExecutorService.schedule(new Runnable() {
                         public void run() {
+
                             if (!future.isDone()) {
                                 long nanoTime = System.nanoTime();
-                                long lastExecutionErrorTimeLocal = ClientProtocolHandler.this.lastExecutionErrorTime.get();
-                                if (lastExecutionErrorTimeLocal + 1000000000L < nanoTime && ClientProtocolHandler.this.lastExecutionErrorTime.compareAndSet(lastExecutionErrorTimeLocal, nanoTime)) {
+                                long lastExecutionErrorTimeLocal = lastExecutionErrorTime.get();
+                                if (lastExecutionErrorTimeLocal + 1000000000L < nanoTime
+                                    && lastExecutionErrorTime.compareAndSet(lastExecutionErrorTimeLocal, nanoTime)) {
                                     long now = System.currentTimeMillis();
                                     long postponeInterval = now - procStartTime;
-                                    ClientProtocolHandler.LOGGER.error("[{}] Event did not execute in timeout time [{}] and is still executing, CRITICAL EXECUTION WAIT TIME: {}ms, possible application problem or deadLock, message [{}]", new Object[]{EventExecutorChannelTask.this.clientSession.getTransportName(), EventExecutorChannelTask.this.clientSession.getEventExecutionErrorDelay(), postponeInterval, StrUtils.toSafeString(EventExecutorChannelTask.this.message, 100)});
-                                    ClientProtocolHandler.this.checkAndLogEventPoolThreadDumps();
+                                    LOGGER.error(
+                                        "[{}] Event did not execute in timeout time [{}] and is still executing, "
+                                        + "CRITICAL EXECUTION WAIT TIME: {}ms, possible application problem or "
+                                        + "deadLock, message [{}]",
+                                        clientSession.getTransportName(),
+                                        clientSession.getEventExecutionErrorDelay(),
+                                        postponeInterval,
+                                        StrUtils.toSafeString(message, 100));
+                                    checkAndLogEventPoolThreadDumps();
                                     if (stats != null) {
-                                        stats.messageProcessingPostponeError(now, postponeInterval, EventExecutorChannelTask.this.message);
+                                        stats.messageProcessingPostponeError(now, postponeInterval, message);
                                     }
 
-                                    future.addListener(new Runnable() {
-                                        public void run() {
-                                            ClientProtocolHandler.LOGGER.error("[{}] Event execution took {}ms, critical timeout time {}ms, possible application problem or deadLock, message [{}]", new Object[]{EventExecutorChannelTask.this.clientSession.getTransportName(), System.currentTimeMillis() - procStartTime, EventExecutorChannelTask.this.clientSession.getEventExecutionErrorDelay(), StrUtils.toSafeString(EventExecutorChannelTask.this.message, 100)});
-                                        }
-                                    }, MoreExecutors.newDirectExecutorService());
+                                    future.addListener(() -> LOGGER.error(
+                                        "[{}] Event execution took {}ms, critical timeout time {}ms, possible"
+                                        + " application problem or deadLock, message [{}]",
+                                        clientSession.getTransportName(),
+                                        System.currentTimeMillis() - procStartTime,
+                                        clientSession.getEventExecutionErrorDelay(),
+                                        StrUtils.toSafeString(message, 100)), MoreExecutors.newDirectExecutorService());
                                 }
                             }
 
                         }
                     }, this.clientSession.getEventExecutionErrorDelay(), TimeUnit.MILLISECONDS);
                 }
-            } else if (this.clientSession.getEventExecutionWarningDelay() > 0L && this.clientSession.getEventExecutionDelayCheckEveryNTimesWarning() > 0 && messagesCounter[0] % this.clientSession.getEventExecutionDelayCheckEveryNTimesWarning() == 0) {
+            } else if (this.clientSession.getEventExecutionWarningDelay() > 0L
+                       && this.clientSession.getEventExecutionDelayCheckEveryNTimesWarning() > 0
+                       && messagesCounter[0] % this.clientSession.getEventExecutionDelayCheckEveryNTimesWarning()
+                          == 0) {
                 future = this.executeInExecutor(executor, true);
                 procStartTime = System.currentTimeMillis();
                 this.clientSession.getScheduledExecutorService().schedule(new Runnable() {
                     public void run() {
+
                         if (!future.isDone()) {
                             long nanoTime = System.nanoTime();
-                            long lastExecutionWarningTimeLocal = ClientProtocolHandler.this.lastExecutionWarningTime.get();
-                            if (lastExecutionWarningTimeLocal + 5000000000L < nanoTime && ClientProtocolHandler.this.lastExecutionWarningTime.compareAndSet(lastExecutionWarningTimeLocal, nanoTime)) {
+                            long lastExecutionWarningTimeLocal = lastExecutionWarningTime.get();
+                            if (lastExecutionWarningTimeLocal + 5000000000L < nanoTime
+                                && lastExecutionWarningTime.compareAndSet(lastExecutionWarningTimeLocal, nanoTime)) {
                                 long now = System.currentTimeMillis();
                                 long postponeInterval = now - procStartTime;
-                                ClientProtocolHandler.LOGGER.warn("[{}] Event execution takes too long, execution time: {}ms and still executing, possible application problem or deadLock, message [{}]", new Object[]{EventExecutorChannelTask.this.clientSession.getTransportName(), postponeInterval, StrUtils.toSafeString(EventExecutorChannelTask.this.message, 100)});
-                                ClientProtocolHandler.this.checkAndLogEventPoolThreadDumps();
+                                LOGGER.warn(
+                                    "[{}] Event execution takes too long, execution time: {}ms and still executing, "
+                                    + "possible application problem or deadLock, message [{}]",
+                                    clientSession.getTransportName(),
+                                    postponeInterval,
+                                    StrUtils.toSafeString(message, 100));
+                                checkAndLogEventPoolThreadDumps();
                                 if (stats != null) {
-                                    stats.messageProcessingPostponeError(now, postponeInterval, EventExecutorChannelTask.this.message);
+                                    stats.messageProcessingPostponeError(now, postponeInterval, message);
                                 }
 
                                 future.addListener(new Runnable() {
                                     public void run() {
-                                        if (EventExecutorChannelTask.this.clientSession.getEventExecutionErrorDelay() > 0L && System.currentTimeMillis() - procStartTime >= EventExecutorChannelTask.this.clientSession.getEventExecutionErrorDelay()) {
-                                            ClientProtocolHandler.LOGGER.error("[{}] Event execution took {}ms, critical timeout time {}ms, possible application problem or deadLock, message [{}]", new Object[]{EventExecutorChannelTask.this.clientSession.getTransportName(), System.currentTimeMillis() - procStartTime, EventExecutorChannelTask.this.clientSession.getEventExecutionErrorDelay(), StrUtils.toSafeString(EventExecutorChannelTask.this.message, 100)});
+
+                                        if (clientSession.getEventExecutionErrorDelay() > 0L
+                                            && System.currentTimeMillis() - procStartTime
+                                               >= clientSession.getEventExecutionErrorDelay()) {
+                                            LOGGER.error(
+                                                "[{}] Event execution took {}ms, critical timeout time {}ms, possible"
+                                                + " application problem or deadLock, message [{}]",
+                                                clientSession.getTransportName(),
+                                                System.currentTimeMillis() - procStartTime,
+                                                clientSession.getEventExecutionErrorDelay(),
+                                                StrUtils.toSafeString(message, 100));
                                         } else {
-                                            ClientProtocolHandler.LOGGER.warn("[{}] Event execution took more time than expected, execution time: {}ms, possible application problem or deadLock, message [{}]", new Object[]{EventExecutorChannelTask.this.clientSession.getTransportName(), System.currentTimeMillis() - procStartTime, StrUtils.toSafeString(EventExecutorChannelTask.this.message, 100)});
+                                            LOGGER.warn(
+                                                "[{}] Event execution took more time than expected, execution time: "
+                                                + "{}ms, possible application problem or deadLock, message [{}]",
+                                                clientSession.getTransportName(),
+                                                System.currentTimeMillis() - procStartTime,
+                                                StrUtils.toSafeString(message, 100));
                                         }
 
                                     }
@@ -929,9 +1181,12 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         }
 
         private ListenableFuture<?> executeInExecutor(final ListeningExecutorService executor, boolean withFuture) {
-            final AsyncSettableFuture future;
+
+            //final AsyncSettableFuture future;
+            final SettableFuture future;
             if (withFuture) {
-                future = AsyncSettableFuture.create();
+                future = SettableFuture.create();
+                //future = AsyncSettableFuture.create();
             } else {
                 future = null;
             }
@@ -945,36 +1200,48 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
             } catch (RejectedExecutionException var5) {
                 this.procStartTime = System.currentTimeMillis();
                 this.clientSession.getChannelTrafficBlocker().suspend(this.channel);
-                if (!ClientProtocolHandler.this.logEventPoolThreadDumpsOnLongExecution.get()) {
-                    ClientProtocolHandler.LOGGER.warn("Transport client's [{}, {}] channel reading suspended on [{}]", new Object[]{this.clientSession.getTransportName(), this.clientSession.getAddress(), this.message});
+                if (!logEventPoolThreadDumpsOnLongExecution.get()) {
+                    LOGGER.warn("Transport client's [{}, {}] channel reading suspended on [{}]",
+                                this.clientSession.getTransportName(),
+                                this.clientSession.getAddress(),
+                                this.message);
                 }
 
-                this.delayedExecutionTask = new Runnable() {
-                    public void run() {
-                        try {
-                            if (future != null) {
-                                future.setFuture(executor.submit(EventExecutorChannelTask.this));
-                            } else {
-                                executor.execute(EventExecutorChannelTask.this);
-                            }
+                this.delayedExecutionTask = () -> {
 
-                            EventExecutorChannelTask.this.clientSession.getChannelTrafficBlocker().resume(EventExecutorChannelTask.this.channel);
-                            if (!ClientProtocolHandler.this.logEventPoolThreadDumpsOnLongExecution.get()) {
-                                ClientProtocolHandler.LOGGER.warn("Transport client's [{}, {}] channel reading resumed on [{}]", new Object[]{EventExecutorChannelTask.this.clientSession.getTransportName(), EventExecutorChannelTask.this.clientSession.getAddress(), EventExecutorChannelTask.this.message});
-                            }
-                        } catch (RejectedExecutionException var4) {
-                            long currentTime = System.currentTimeMillis();
-                            if (currentTime - EventExecutorChannelTask.this.procStartTime > EventExecutorChannelTask.this.clientSession.getEventExecutionErrorDelay()) {
-                                ClientProtocolHandler.LOGGER.error("[" + EventExecutorChannelTask.this.clientSession.getTransportName() + "] Event executor queue overloaded" + ", CRITICAL EXECUTION WAIT TIME: " + (currentTime - EventExecutorChannelTask.this.procStartTime) + "ms, possible application problem or deadLock, message [" + StrUtils.toSafeString(EventExecutorChannelTask.this.message, 100) + "]");
-                                ClientProtocolHandler.this.checkAndLogEventPoolThreadDumps();
-                                EventExecutorChannelTask.this.procStartTime = currentTime;
-                                EventExecutorChannelTask.this.sleepTime = 50L;
-                            }
-
-                            EventExecutorChannelTask.this.channel.eventLoop().schedule(EventExecutorChannelTask.this.delayedExecutionTask, EventExecutorChannelTask.this.sleepTime, TimeUnit.MILLISECONDS);
+                    try {
+                        if (future != null) {
+                            future.setFuture(executor.submit(EventExecutorChannelTask.this));
+                        } else {
+                            executor.execute(EventExecutorChannelTask.this);
                         }
 
+                        clientSession.getChannelTrafficBlocker().resume(channel);
+                        if (!logEventPoolThreadDumpsOnLongExecution.get()) {
+                            LOGGER.warn("Transport client's [{}, {}] channel reading resumed on [{}]",
+                                        clientSession.getTransportName(),
+                                        clientSession.getAddress(),
+                                        message);
+                        }
+                    } catch (RejectedExecutionException var4) {
+                        long currentTime = System.currentTimeMillis();
+                        if (currentTime - procStartTime > clientSession.getEventExecutionErrorDelay()) {
+                            LOGGER.error("["
+                                         + clientSession.getTransportName()
+                                         + "] Event executor queue overloaded"
+                                         + ", CRITICAL EXECUTION WAIT TIME: "
+                                         + (currentTime - procStartTime)
+                                         + "ms, possible application problem or deadLock, message ["
+                                         + StrUtils.toSafeString(message, 100)
+                                         + "]");
+                            checkAndLogEventPoolThreadDumps();
+                            procStartTime = currentTime;
+                            sleepTime = 50L;
+                        }
+
+                        channel.eventLoop().schedule(delayedExecutionTask, sleepTime, TimeUnit.MILLISECONDS);
                     }
+
                 };
                 this.channel.eventLoop().schedule(this.delayedExecutionTask, 5L, TimeUnit.MILLISECONDS);
             }

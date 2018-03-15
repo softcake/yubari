@@ -17,11 +17,12 @@
 package org.softcake.yubari.netty;
 
 import com.dukascopy.dds4.common.orderedExecutor.OrderedThreadPoolExecutor.OrderedRunnable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public abstract class AbstractEventExecutorTask implements OrderedRunnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(AbstractEventExecutorTask.class);
@@ -47,19 +48,24 @@ public abstract class AbstractEventExecutorTask implements OrderedRunnable {
                         executor.execute(this);
                     } catch (RejectedExecutionException var4) {
                         long currentTime = System.currentTimeMillis();
-                        if (currentTime - AbstractEventExecutorTask.this.procStartTime > AbstractEventExecutorTask.this.clientSession.getEventExecutionErrorDelay()) {
-                            AbstractEventExecutorTask.LOGGER.error("[" + AbstractEventExecutorTask.this.clientSession.getTransportName() + "] Event executor queue overloaded" + ", CRITICAL EXECUTION WAIT TIME: " + (currentTime - AbstractEventExecutorTask.this.procStartTime) + "ms, possible application problem or deadlock");
-                            AbstractEventExecutorTask.this.clientProtocolHandler.checkAndLogEventPoolThreadDumps();
-                            AbstractEventExecutorTask.this.procStartTime = currentTime;
-                            AbstractEventExecutorTask.this.sleepTime = 50L;
+                        if (currentTime - procStartTime >clientSession.getEventExecutionErrorDelay()) {
+                           LOGGER.error("[{}] Event executor queue overloaded"
+                                        + ", CRITICAL EXECUTION WAIT TIME: {}ms,"
+                                        + " possible application problem or deadlock"
+                                        ,clientSession.getTransportName(),(currentTime - procStartTime));
+                            clientProtocolHandler.checkAndLogEventPoolThreadDumps();
+                            procStartTime = currentTime;
+                           sleepTime = 50L;
                         }
 
-                        AbstractEventExecutorTask.this.clientSession.getScheduledExecutorService().schedule(AbstractEventExecutorTask.this.delayedExecutionTask, AbstractEventExecutorTask.this.sleepTime, TimeUnit.MILLISECONDS);
+                        clientSession.getScheduledExecutorService()
+                                     .schedule(delayedExecutionTask, sleepTime, TimeUnit.MILLISECONDS);
                     }
 
                 }
             };
-            this.clientSession.getScheduledExecutorService().schedule(this.delayedExecutionTask, 5L, TimeUnit.MILLISECONDS);
+            this.clientSession.getScheduledExecutorService()
+                              .schedule(this.delayedExecutionTask, 5L, TimeUnit.MILLISECONDS);
         }
 
     }

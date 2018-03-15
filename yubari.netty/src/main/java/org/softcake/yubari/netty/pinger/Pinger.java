@@ -46,7 +46,7 @@ public class Pinger {
     private final AbstractStaticSessionDictionary staticSessionDictionary;
 
     public Pinger(AbstractStaticSessionDictionary staticSessionDictionary, List<PingTarget> targets) {
-        this(staticSessionDictionary, targets, 10240, 10L, DEFAULT_MAX_PING_TIME_OUT_UNIT, 10, false);
+        this(staticSessionDictionary, targets, DEFAULT_PING_DATA_SIZE, DEFAULT_MAX_PING_TIME_OUT, DEFAULT_MAX_PING_TIME_OUT_UNIT, DEFAULT_MAX_PING_THREADS_COUNT, false);
     }
 
     public Pinger(AbstractStaticSessionDictionary staticSessionDictionary, List<PingTarget> targets, int pingDataSizeInBytes, long pingTimeout, TimeUnit pingTimeoutTimeUnit, int maxPingThreadsCount, boolean waitForDisconnect) {

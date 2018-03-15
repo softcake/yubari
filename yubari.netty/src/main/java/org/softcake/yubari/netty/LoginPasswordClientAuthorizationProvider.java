@@ -56,16 +56,14 @@ public class LoginPasswordClientAuthorizationProvider extends AbstractClientAuth
         haloRequestMessage.setSecondaryConnectionMessagesTTL(this.getDroppableMessageServerTTL());
         haloRequestMessage.setSessionName(this.getSessionName());
         final ChannelFuture future = (ChannelFuture)session.write(haloRequestMessage);
-        future.addListener(new GenericFutureListener<ChannelFuture>() {
-            public void operationComplete(final ChannelFuture future) throws Exception {
-                try {
-                    future.get();
-                } catch (final Exception var3) {
-                    LoginPasswordClientAuthorizationProvider.LOGGER.error(var3.getMessage(), var3);
-                    LoginPasswordClientAuthorizationProvider.this.getListener().authorizationError(session, var3.getLocalizedMessage());
-                }
-
+        future.addListener((GenericFutureListener<ChannelFuture>) future1 -> {
+            try {
+                future1.get();
+            } catch (final Exception var3) {
+                LOGGER.error(var3.getMessage(), var3);
+                getListener().authorizationError(session, var3.getLocalizedMessage());
             }
+
         });
     }
 
@@ -79,16 +77,14 @@ public class LoginPasswordClientAuthorizationProvider extends AbstractClientAuth
             loginRequestMessage.setSessionId(this.haloResponseMessage.getSessionId());
             loginRequestMessage.setMode(-2147483648);
             final ChannelFuture future = (ChannelFuture)session.write(loginRequestMessage);
-            future.addListener(new GenericFutureListener<ChannelFuture>() {
-                public void operationComplete(final ChannelFuture future) throws Exception {
-                    try {
-                        future.get();
-                    } catch (final Exception var3) {
-                        LoginPasswordClientAuthorizationProvider.LOGGER.error(var3.getMessage(), var3);
-                        LoginPasswordClientAuthorizationProvider.this.getListener().authorizationError(session, var3.getLocalizedMessage());
-                    }
-
+            future.addListener((GenericFutureListener<ChannelFuture>) future1 -> {
+                try {
+                    future1.get();
+                } catch (final Exception var3) {
+                    LOGGER.error(var3.getMessage(), var3);
+                    getListener().authorizationError(session, var3.getLocalizedMessage());
                 }
+
             });
         } else if (message instanceof OkResponseMessage && this.haloResponseMessage != null) {
             this.getListener().authorized(this.haloResponseMessage.getSessionId(), session, "anonymous");

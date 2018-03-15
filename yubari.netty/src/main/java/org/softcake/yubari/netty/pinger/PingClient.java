@@ -64,8 +64,8 @@ public class PingClient {
     private final ProtocolVersionClientNegotiatorHandler protocolVersionClientNegotiatorHandler;
     private Channel channel;
     private Bootstrap channelBootstrap;
-    private final Map<String, ProtocolMessage> syncRequestsMap = new ConcurrentHashMap();
-    private final Map<String, ProtocolMessage> syncResponsesMap = new ConcurrentHashMap();
+    private final Map<String, ProtocolMessage> syncRequestsMap = new ConcurrentHashMap<>();
+    private final Map<String, ProtocolMessage> syncResponsesMap = new ConcurrentHashMap<>();
     private final AtomicBoolean online = new AtomicBoolean(false);
     private final IPingClientListener clientListener;
 
