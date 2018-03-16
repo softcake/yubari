@@ -20,8 +20,13 @@ package org.softcake.authentication;
 //import static com.dukascopy.api.impl.connect.ActivityLogger.getInstance;
 
 import org.softcake.yubari.connect.authorization.AuthorizationPropertiesFactory;
+import org.softcake.yubari.netty.ITransportClient;
 import org.softcake.yubari.netty.TransportClient;
 import org.softcake.yubari.netty.TransportClientBuilder;
+import org.softcake.yubari.netty.mina.ClientListener;
+import org.softcake.yubari.netty.mina.DisconnectedEvent;
+import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
+import org.softcake.yubari.netty.mina.ServerAddress;
 
 import com.dukascopy.api.ConsoleAdapter;
 import com.dukascopy.api.IChart;
@@ -47,12 +52,6 @@ import com.dukascopy.dds3.transport.msg.ddsApi.InitRequestMessage;
 import com.dukascopy.dds3.transport.msg.ddsApi.QuitRequestMessage;
 import com.dukascopy.dds3.transport.msg.news.CalendarType;
 import com.dukascopy.dds3.transport.msg.news.NewsSubscribeRequest;
-import com.dukascopy.dds4.common.ServerAddress;
-import com.dukascopy.dds4.transport.client.SecurityExceptionHandler;
-import com.dukascopy.dds4.transport.common.mina.ClientListener;
-import com.dukascopy.dds4.transport.common.mina.DisconnectedEvent;
-import com.dukascopy.dds4.transport.common.mina.ITransportClient;
-
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.types.EventCategory;
 import com.dukascopy.dds4.transport.msg.types.GeoRegion;

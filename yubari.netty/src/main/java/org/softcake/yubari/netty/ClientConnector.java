@@ -17,15 +17,16 @@
 package org.softcake.yubari.netty;
 
 
+import org.softcake.yubari.netty.mina.ClientListener;
+import org.softcake.yubari.netty.mina.DisconnectedEvent;
+import org.softcake.yubari.netty.mina.ExtendedClientDisconnectReason;
+import org.softcake.yubari.netty.mina.IoSessionWrapper;
+import org.softcake.yubari.netty.mina.MessageSentListener;
+import org.softcake.yubari.netty.mina.RequestListenableFuture;
+
 import com.dukascopy.dds4.ping.IPingListener;
 import com.dukascopy.dds4.ping.PingManager;
-import com.dukascopy.dds4.transport.RequestListenableFuture;
-import com.dukascopy.dds4.transport.authorization.AuthorizationProviderListener;
-import com.dukascopy.dds4.transport.common.mina.ClientListener;
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
-import com.dukascopy.dds4.transport.common.mina.DisconnectedEvent;
-import com.dukascopy.dds4.transport.common.mina.ExtendedClientDisconnectReason;
-import com.dukascopy.dds4.transport.common.protocol.mina.IoSessionWrapper;
 import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
@@ -45,7 +46,6 @@ import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.Iterator;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +56,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @SuppressWarnings("squid:S128")
 class ClientConnector extends Thread implements AuthorizationProviderListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientConnector.class);
+    public static final long SESSION_CLOSE_WAIT_TIME = 5L;
+    public static final String STATE_CHANGED_TO = "[{}] State changed to {}";
     private final Bootstrap channelBootstrap;
     private final TransportClientSession clientSession;
     private final ClientProtocolHandler protocolHandler;
@@ -87,7 +89,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                            final ClientProtocolHandler protocolHandler,
                            final IPingListener pingListener) {
 
-        super((clientSession.getTransportName() != null ? "(" + clientSession.getTransportName() + ") " : "")
+        super((clientSession.getTransportName() != null ? String.format("(%s) ", clientSession.getTransportName()) : "")
               + "ClientConnector");
         this.clientState = new AtomicReference<>(ClientState.DISCONNECTED);
         this.stateWaitLock = new Object();
@@ -173,11 +175,8 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                     }
 
                     this.disconnectReason = disconnectReason;
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("[{}] State changed to {}",
-                                     this.clientSession.getTransportName(),
-                                     ClientState.DISCONNECTING);
-                    }
+
+                    LOGGER.debug(STATE_CHANGED_TO, this.clientSession.getTransportName(), ClientState.DISCONNECTING);
 
 
                     synchronized (this.stateWaitLock) {
@@ -232,256 +231,206 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
     public void run() {
 
         while (true) {
-            boolean shouldDisconnect = false;
+            boolean interrupted = false;
 
             try {
+                if (this.terminating) {
 
-                if (!this.terminating) {
-                    try {
-                        final ClientState state = this.getClientState();
+                    this.clientState.set(ClientState.DISCONNECTED);
+                    this.cleanUp();
 
-                        final long timeToWait;
-                        switch (state) {
-                            case CONNECTING:
-                                this.processConnecting();
-                                continue;
-                            case SSL_HANDSHAKE_WAITING:
-                                if (this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout()
-                                    < System.currentTimeMillis()) {
-                                    LOGGER.info("[{}] SSL handshake timeout", this.clientSession.getTransportName());
-                                    this.setState(ClientState.SSL_HANDSHAKE_WAITING,
-                                                  ClientState.DISCONNECTING,
-                                                  new ExtendedClientDisconnectReason(DisconnectReason
-                                                                                         .SSL_HANDSHAKE_TIMEOUT,
-                                                                                     null,
-                                                                                     "SSL handshake timeout",
-                                                                                     null));
-                                    continue;
-                                }
+                    synchronized (this.executorThreadTerminationLocker) {
+                        this.isExecutorThreadTerminated.set(true);
+                        this.executorThreadTerminationLocker.notifyAll();
+                    }
 
-                                timeToWait = this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout()
-                                             - System.currentTimeMillis();
-                                if (timeToWait <= 0L) {
-                                    continue;
-                                }
+                    return;
+                }
 
 
-                                synchronized (this.stateWaitLock) {
-                                    if (this.getClientState() == ClientState.SSL_HANDSHAKE_WAITING) {
-                                        this.stateWaitLock.wait(timeToWait);
-                                    }
-                                    continue;
-                                }
+                final ClientState state = this.getClientState();
 
-                            case SSL_HANDSHAKE_SUCCESSFUL:
-                                if (this.tryToSetState(ClientState.SSL_HANDSHAKE_SUCCESSFUL,
-                                                       ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
-                                                       null)) {
-                                    this.protocolVersionNegotiationStartTime = System.currentTimeMillis();
-                                }
-                                continue;
-                            case PROTOCOL_VERSION_NEGOTIATION_WAITING:
-                                if (this.protocolVersionNegotiationStartTime
-                                    + this.clientSession.getProtocolVersionNegotiationTimeout()
-                                    < System.currentTimeMillis()) {
-                                    LOGGER.info("[{}] Protocol version negotiation timeout",
-                                                this.clientSession.getTransportName());
-                                    this.setState(ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
-                                                  ClientState.DISCONNECTING,
-                                                  new ExtendedClientDisconnectReason(DisconnectReason
-                                                                                         .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
-                                                                                     null,
-                                                                                     "Protocol version negotiation "
-                                                                                     + "timeout",
-                                                                                     null));
-                                    continue;
-                                }
-
-                                timeToWait = this.protocolVersionNegotiationStartTime
-                                             + this.clientSession.getProtocolVersionNegotiationTimeout()
-                                             - System.currentTimeMillis();
-                                if (timeToWait <= 0L) {
-                                    continue;
-                                }
-
-
-                                synchronized (this.stateWaitLock) {
-                                    if (this.getClientState() == ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING) {
-                                        this.stateWaitLock.wait(timeToWait);
-                                    }
-                                    continue;
-                                }
-
-                            case PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL:
-                                if (this.tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL,
-                                                       ClientState.AUTHORIZING,
-                                                       null)) {
-                                    this.authorizationStartTime = System.currentTimeMillis();
-                                    this.protocolHandler.handleAuthorization(this.authorizationProvider,
-                                                                             this.primarySession);
-                                }
-                                continue;
-                            case AUTHORIZING:
-                                if (this.authorizationStartTime + this.clientSession.getAuthorizationTimeout()
-                                    < System.currentTimeMillis()) {
-                                    LOGGER.info("[{}] Authorization timeout", this.clientSession.getTransportName());
-                                    this.setState(ClientState.AUTHORIZING,
-                                                  ClientState.DISCONNECTING,
-                                                  new ExtendedClientDisconnectReason(DisconnectReason
-                                                                                         .AUTHORIZATION_TIMEOUT,
-                                                                                     null,
-                                                                                     "Authorization timeout",
-                                                                                     null));
-                                    continue;
-                                }
-
-                                timeToWait = this.authorizationStartTime + this.clientSession.getAuthorizationTimeout()
-                                             - System.currentTimeMillis();
-                                if (timeToWait <= 0L) {
-                                    continue;
-                                }
-
-
-                                synchronized (this.stateWaitLock) {
-                                    if (this.getClientState() == ClientState.AUTHORIZING) {
-                                        this.stateWaitLock.wait(timeToWait);
-                                    }
-                                    continue;
-                                }
-
-                            case ONLINE:
-                                final boolean sleep = this.processOnline();
-                                if (!sleep) {
-                                    continue;
-                                }
-
-
-                                synchronized (this.stateWaitLock) {
-                                    if (this.getClientState() == ClientState.ONLINE) {
-                                        this.stateWaitLock.wait(100L);
-                                    }
-                                    continue;
-                                }
-
-                            case DISCONNECTING:
-                                try {
-                                    this.cleanUp();
-                                } catch (final Exception var69) {
-                                    LOGGER.error("["
-                                                 + this.clientSession.getTransportName()
-                                                 + "] "
-                                                 + var69.getMessage(), var69);
-
-                                }
-
-                                this.setState(ClientState.DISCONNECTING, ClientState.DISCONNECTED);
-                                this.fireDisconnected(this.disconnectReason);
-                                continue;
-                            case DISCONNECTED:
-
-                                synchronized (this.stateWaitLock) {
-                                    if (this.getClientState() == ClientState.DISCONNECTED) {
-                                        this.stateWaitLock.wait(10000L);
-                                    }
-                                    continue;
-                                }
-
-                            default:
-                                throw new IllegalArgumentException("Unsupported state " + state);
-                        }
-                    } catch (final Throwable var74) {
-                        LOGGER.error("State processing error: " + var74.getMessage(), var74);
+                final long timeToWait;
+                switch (state) {
+                    case CONNECTING:
+                        this.processConnecting();
                         continue;
-                    }
-                }
-
-                shouldDisconnect = true;
-            } finally {
-                if (shouldDisconnect) {
-
-
-                    try {
-                        shouldDisconnect = true;
-                        this.clientState.set(ClientState.DISCONNECTED);
-                        this.cleanUp();
-                        shouldDisconnect = false;
-                    } finally {
-                        if (shouldDisconnect) {
-
-                            synchronized(this.executorThreadTerminationLocker) {
-                                this.isExecutorThreadTerminated.set(true);
-                                this.executorThreadTerminationLocker.notifyAll();
-                            }
+                    case SSL_HANDSHAKE_WAITING:
+                        if (this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout()
+                            < System.currentTimeMillis()) {
+                            LOGGER.info("[{}] SSL handshake timeout", this.clientSession.getTransportName());
+                            this.setState(ClientState.SSL_HANDSHAKE_WAITING,
+                                          ClientState.DISCONNECTING,
+                                          new ExtendedClientDisconnectReason(DisconnectReason.SSL_HANDSHAKE_TIMEOUT,
+                                                                             null,
+                                                                             "SSL handshake timeout",
+                                                                             null));
+                            continue;
                         }
-                    }
 
-                    synchronized(this.executorThreadTerminationLocker) {
+                        timeToWait = this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout()
+                                     - System.currentTimeMillis();
+                        if (timeToWait <= 0L) {
+                            continue;
+                        }
+
+
+                        synchronized (this.stateWaitLock) {
+                            if (this.getClientState() == ClientState.SSL_HANDSHAKE_WAITING) {
+                                this.stateWaitLock.wait(timeToWait);
+                            }
+                            continue;
+                        }
+
+                    case SSL_HANDSHAKE_SUCCESSFUL:
+                        if (this.tryToSetState(ClientState.SSL_HANDSHAKE_SUCCESSFUL,
+                                               ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
+                                               null)) {
+                            this.protocolVersionNegotiationStartTime = System.currentTimeMillis();
+                        }
+                        continue;
+                    case PROTOCOL_VERSION_NEGOTIATION_WAITING:
+                        if (this.protocolVersionNegotiationStartTime
+                            + this.clientSession.getProtocolVersionNegotiationTimeout() < System.currentTimeMillis()) {
+                            LOGGER.info("[{}] Protocol version negotiation timeout",
+                                        this.clientSession.getTransportName());
+                            this.setState(ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
+                                          ClientState.DISCONNECTING,
+                                          new ExtendedClientDisconnectReason(DisconnectReason
+                                                                                 .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
+                                                                             null,
+                                                                             "Protocol version negotiation "
+                                                                             + "timeout",
+                                                                             null));
+                            continue;
+                        }
+
+                        timeToWait = this.protocolVersionNegotiationStartTime
+                                     + this.clientSession.getProtocolVersionNegotiationTimeout()
+                                     - System.currentTimeMillis();
+                        if (timeToWait <= 0L) {
+                            continue;
+                        }
+
+
+                        synchronized (this.stateWaitLock) {
+                            if (this.getClientState() == ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING) {
+                                this.stateWaitLock.wait(timeToWait);
+                            }
+                            continue;
+                        }
+
+                    case PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL:
+                        if (this.tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL,
+                                               ClientState.AUTHORIZING,
+                                               null)) {
+                            this.authorizationStartTime = System.currentTimeMillis();
+                            this.protocolHandler.handleAuthorization(this.authorizationProvider, this.primarySession);
+                        }
+                        continue;
+                    case AUTHORIZING:
+                        if (this.authorizationStartTime + this.clientSession.getAuthorizationTimeout()
+                            < System.currentTimeMillis()) {
+                            LOGGER.info("[{}] Authorization timeout", this.clientSession.getTransportName());
+                            this.setState(ClientState.AUTHORIZING,
+                                          ClientState.DISCONNECTING,
+                                          new ExtendedClientDisconnectReason(DisconnectReason.AUTHORIZATION_TIMEOUT,
+                                                                             null,
+                                                                             "Authorization timeout",
+                                                                             null));
+                            continue;
+                        }
+
+                        timeToWait = this.authorizationStartTime + this.clientSession.getAuthorizationTimeout() - System
+                            .currentTimeMillis();
+                        if (timeToWait <= 0L) {
+                            continue;
+                        }
+
+
+                        synchronized (this.stateWaitLock) {
+                            if (this.getClientState() == ClientState.AUTHORIZING) {
+                                this.stateWaitLock.wait(timeToWait);
+                            }
+                            continue;
+                        }
+
+                    case ONLINE:
+                        final boolean sleep = this.processOnline();
+                        if (!sleep) {
+                            continue;
+                        }
+
+
+                        synchronized (this.stateWaitLock) {
+                            if (this.getClientState() == ClientState.ONLINE) {
+                                this.stateWaitLock.wait(100L);
+                            }
+                            continue;
+                        }
+
+                    case DISCONNECTING:
+
+                        this.cleanUp();
+
+
+                        this.setState(ClientState.DISCONNECTING, ClientState.DISCONNECTED);
+                        this.fireDisconnected(this.disconnectReason);
+                        continue;
+                    case DISCONNECTED:
+
+                        synchronized (this.stateWaitLock) {
+                            if (this.getClientState() == ClientState.DISCONNECTED) {
+                                this.stateWaitLock.wait(10000L);
+                            }
+                            continue;
+                        }
+
+                    default:
+                        throw new IllegalArgumentException("Unsupported state " + state);
+                }
+            } catch (final InterruptedException e) {
+                LOGGER.error("Thread is interrupted...", e);
+                interrupted = true;
+                try {
+                    this.clientState.set(ClientState.DISCONNECTED);
+                    this.cleanUp();
+
+
+                } catch (InterruptedException ex) {
+                    interrupted = true;
+                    LOGGER.error("Thread is interrupted...", ex);
+                } finally {
+                    synchronized (this.executorThreadTerminationLocker) {
                         this.isExecutorThreadTerminated.set(true);
                         this.executorThreadTerminationLocker.notifyAll();
                     }
+                    if (interrupted) {Thread.currentThread().interrupt();}
+
                 }
-            }
 
-
-
-            try {
-                shouldDisconnect = true;
-                this.clientState.set(ClientConnector.ClientState.DISCONNECTED);
-                this.cleanUp();
-                shouldDisconnect = false;
             } finally {
-                if (shouldDisconnect) {
-
-                    synchronized(this.executorThreadTerminationLocker) {
-                        this.isExecutorThreadTerminated.set(true);
-                        this.executorThreadTerminationLocker.notifyAll();
-                    }
+                synchronized (this.executorThreadTerminationLocker) {
+                    this.isExecutorThreadTerminated.set(true);
+                    this.executorThreadTerminationLocker.notifyAll();
                 }
+
+                if (interrupted) {Thread.currentThread().interrupt();}
+
             }
 
 
-            synchronized(this.executorThreadTerminationLocker) {
-                this.isExecutorThreadTerminated.set(true);
-                this.executorThreadTerminationLocker.notifyAll();
-                return;
-            }
         }
     }
 
     private void processConnecting() throws InterruptedException {
 
-       this.cleanUp();
+        this.cleanUp();
         this.disconnectReason = null;
         this.authorizationProvider = this.clientSession.getAuthorizationProvider();
         this.authorizationProvider.setListener(this);
         this.primarySessionChannelAttachment = new ChannelAttachment(true);
         this.secondarySessionChannelAttachment = new ChannelAttachment(false);
-
-        try {
-            final InetSocketAddress newAddress = this.authorizationProvider.getAddress();
-            if (newAddress != null) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("[{}] Got new address from authorization provider {}",
-                                 this.clientSession.getTransportName(),
-                                 newAddress);
-                }
-
-                this.address = newAddress;
-            }
-        } catch (final Exception var4) {
-            LOGGER.error("["
-                         + this.clientSession.getTransportName()
-                         + "] AbstractClientAuthorizationProvider.getAddress error: "
-                         + var4.getMessage(), var4);
-            final DisconnectReason reason = DisconnectReason.CONNECTION_PROBLEM;
-            this.setState(ClientState.CONNECTING,
-                          ClientState.DISCONNECTING,
-                          new ExtendedClientDisconnectReason(reason,
-                                                             null,
-                                                             "Exception during adrres resolving " + var4.getMessage(),
-                                                             var4));
-            return;
-        }
 
         if (this.address == null) {
             LOGGER.error(
@@ -493,80 +442,80 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                                                              null,
                                                              "Address is not set in transport client",
                                                              null));
-        } else {
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("[{}] Connecting to [{}]", this.clientSession.getTransportName(), this.address);
+
+            return;
+        }
+
+        LOGGER.debug("[{}] Connecting to [{}]", this.clientSession.getTransportName(), this.address);
+
+
+        final ChannelFuture connectFuture = this.channelBootstrap.connect(this.address);
+        connectFuture.await(this.clientSession.getConnectionTimeout());
+
+        if (connectFuture.isSuccess()) {
+
+            LOGGER.debug("[{}] Successfully connected to [{}]", this.clientSession.getTransportName(), this.address);
+
+
+            final Channel channel = connectFuture.channel();
+            final Attribute<ChannelAttachment>
+                attachmentAttribute
+                = channel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+            attachmentAttribute.set(this.primarySessionChannelAttachment);
+            this.primarySession = channel;
+
+            LOGGER.debug("[{}] primarySession = {}", this.clientSession.getTransportName(), this.primarySession);
+
+
+            if (this.clientSession.isUseSSL()) {
+                if (this.tryToSetState(ClientState.CONNECTING, ClientState.SSL_HANDSHAKE_WAITING, null)) {
+                    this.sslHandshakeStartTime = System.currentTimeMillis();
+                }
+            } else if (this.tryToSetState(ClientState.CONNECTING,
+                                          ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
+                                          null)) {
+                this.protocolVersionNegotiationStartTime = System.currentTimeMillis();
             }
+        } else if (connectFuture.isDone() && connectFuture.cause() != null) {
+            final Throwable cause = connectFuture.cause();
 
-            final ChannelFuture connectFuture = this.channelBootstrap.connect(this.address);
-            connectFuture.await(this.clientSession.getConnectionTimeout());
-            if (connectFuture.isSuccess()) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("[{}] Successfully connected to [{}]",
-                                 this.clientSession.getTransportName(),
-                                 this.address);
-                }
+            LOGGER.debug("[{}] Connect call failed because of {}: {}",
+                         this.clientSession.getTransportName(),
+                         cause.getClass().getSimpleName(),
+                         cause.getMessage());
 
-                final Channel channel = connectFuture.channel();
-                final Attribute<ChannelAttachment>
-                    attachmentAttribute
-                    = channel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
-                attachmentAttribute.set(this.primarySessionChannelAttachment);
-                this.primarySession = channel;
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("[{}] primarySession = {}",
-                                 this.clientSession.getTransportName(),
-                                 this.primarySession);
-                }
 
-                if (this.clientSession.isUseSSL()) {
-                    if (this.tryToSetState(ClientState.CONNECTING, ClientState.SSL_HANDSHAKE_WAITING, null)) {
-                        this.sslHandshakeStartTime = System.currentTimeMillis();
-                    }
-                } else if (this.tryToSetState(ClientState.CONNECTING,
-                                              ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
-                                              null)) {
-                    this.protocolVersionNegotiationStartTime = System.currentTimeMillis();
-                }
-            } else if (connectFuture.isDone() && connectFuture.cause() != null) {
-                final Throwable cause = connectFuture.cause();
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("[{}] Connect call failed because of {}: {}",
-                                 this.clientSession.getTransportName(),
-                                 cause.getClass().getSimpleName(),
-                                 cause.getMessage());
-                }
-
-                if (!(cause instanceof CertificateException)
-                    && !(cause instanceof javax.security.cert.CertificateException)) {
-                    this.setState(ClientState.CONNECTING,
-                                  ClientState.DISCONNECTING,
-                                  new ExtendedClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                                     null,
-                                                                     "Unexpected exception " + cause.getMessage(),
-                                                                     cause));
-                } else {
-                    this.setState(ClientState.CONNECTING,
-                                  ClientState.DISCONNECTING,
-                                  new ExtendedClientDisconnectReason(DisconnectReason.CERTIFICATE_EXCEPTION,
-                                                                     null,
-                                                                     "Certificate exception " + cause.getMessage(),
-                                                                     cause));
-                }
+            if (cause instanceof CertificateException) {
+                this.setState(ClientState.CONNECTING,
+                              ClientState.DISCONNECTING,
+                              new ExtendedClientDisconnectReason(DisconnectReason.CERTIFICATE_EXCEPTION,
+                                                                 null,
+                                                                 "Certificate exception " + cause.getMessage(),
+                                                                 cause));
             } else {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("[{}] Connect call failed", this.clientSession.getTransportName());
-                }
-
                 this.setState(ClientState.CONNECTING,
                               ClientState.DISCONNECTING,
                               new ExtendedClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
                                                                  null,
-                                                                 "Connect call failed",
-                                                                 null));
-            }
+                                                                 "Unexpected exception " + cause.getMessage(),
+                                                                 cause));
 
+
+            }
+        } else {
+
+            LOGGER.debug("[{}] Connect call failed", this.clientSession.getTransportName());
+
+
+            this.setState(ClientState.CONNECTING,
+                          ClientState.DISCONNECTING,
+                          new ExtendedClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                             null,
+                                                             "Connect call failed",
+                                                             null));
         }
+
+
     }
 
     private boolean processOnline() throws InterruptedException {
@@ -661,6 +610,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
                         final ChannelFuture connectFuture = this.channelBootstrap.connect(this.address);
                         connectFuture.await(this.clientSession.getConnectionTimeout());
+
                         if (connectFuture.isSuccess()) {
                             final Channel channel = connectFuture.channel();
                             final Attribute<ChannelAttachment> channelAttachmentAttribute = channel.attr(
@@ -668,38 +618,30 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                             channelAttachmentAttribute.set(this.secondarySessionChannelAttachment);
                             final ChannelFuture channelFuture = this.protocolHandler.writeMessage(channel,
                                                                                                   this.childSocketAuthAcceptorMessage);
-                            channelFuture.addListener(new GenericFutureListener<Future<Void>>() {
-                                public void operationComplete(final Future<Void> future) {
+                            channelFuture.addListener((GenericFutureListener<Future<Void>>) future -> {
 
-                                    try {
-                                        channelFuture.get();
-                                    } catch (final Exception var5) {
-                                        boolean reportException = true;
-                                        if (var5 instanceof ExecutionException) {
-                                            final Throwable t = var5.getCause();
-                                            if (t instanceof ClosedChannelException && !isOnline()) {
-                                                reportException = false;
-                                            }
-                                        }
+                                try {
+                                    channelFuture.get();
+                                } catch (ExecutionException | InterruptedException e) {
+                                    boolean reportException = true;
 
-                                        if (reportException) {
-                                            LOGGER.error("["
-                                                         + clientSession.getTransportName()
-                                                         + "] "
-                                                         + var5.getMessage(), var5);
-                                            disconnect(new ExtendedClientDisconnectReason(DisconnectReason
-                                                                                              .CONNECTION_PROBLEM,
-                                                                                          null,
-                                                                                          "Secondary session error '"
-                                                                                          + var5.getMessage()
-                                                                                          + "' while writting "
-                                                                                          +
-                                                                                          childSocketAuthAcceptorMessage,
-                                                                                          var5));
-                                        }
+                                    if (e.getCause() instanceof ClosedChannelException && !isOnline()) {
+                                        reportException = false;
                                     }
 
+                                    if (reportException) {
+                                        LOGGER.error("[" + clientSession.getTransportName() + "] " + e.getMessage(), e);
+                                        disconnect(new ExtendedClientDisconnectReason(DisconnectReason
+                                                                                          .CONNECTION_PROBLEM,
+                                                                                      null,
+                                                                                      "Secondary session error '"
+                                                                                      + e.getMessage()
+                                                                                      + "' while writting "
+                                                                                      + childSocketAuthAcceptorMessage,
+                                                                                      e));
+                                    }
                                 }
+
                             });
                             this.childSession = channel;
                             return false;
@@ -707,15 +649,14 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
                         if (connectFuture.isDone() && connectFuture.cause() != null) {
                             final Throwable cause = connectFuture.cause();
-                            if (LOGGER.isDebugEnabled()) {
-                                LOGGER.debug("[{}] Secondary connection connect call failed because of {}: {}",
-                                             this.clientSession.getTransportName(),
-                                             cause.getClass().getSimpleName(),
-                                             cause.getMessage());
-                            }
 
-                            if (cause instanceof CertificateException
-                                || cause instanceof javax.security.cert.CertificateException) {
+                            LOGGER.debug("[{}] Secondary connection connect call failed because of {}: {}",
+                                         this.clientSession.getTransportName(),
+                                         cause.getClass().getSimpleName(),
+                                         cause.getMessage());
+
+
+                            if (cause instanceof CertificateException) {
                                 this.disconnectReason
                                     = new ExtendedClientDisconnectReason(DisconnectReason.CERTIFICATE_EXCEPTION,
                                                                          null,
@@ -723,7 +664,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                                                                          + cause.getMessage(),
                                                                          cause);
                             }
-                        } else if (LOGGER.isDebugEnabled()) {
+                        } else {
                             LOGGER.debug("[{}] Secondary connection connect call failed",
                                          this.clientSession.getTransportName());
                         }
@@ -760,33 +701,29 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         if (!this.primarySocketAuthAcceptorMessageSent && this.primarySocketAuthAcceptorMessage != null) {
             final ChannelFuture channelFuture = this.protocolHandler.writeMessage(this.primarySession,
                                                                                   this.primarySocketAuthAcceptorMessage);
-            channelFuture.addListener(new GenericFutureListener<Future<Void>>() {
-                public void operationComplete(final Future<Void> future) {
+            channelFuture.addListener((GenericFutureListener<Future<Void>>) future -> {
 
-                    try {
-                        channelFuture.get();
-                    } catch (final Exception var5) {
-                        boolean reportException = true;
-                        if (var5 instanceof ExecutionException) {
-                            final Throwable t = var5.getCause();
-                            if (t instanceof ClosedChannelException && !isOnline()) {
-                                reportException = false;
-                            }
-                        }
+                try {
+                    channelFuture.get();
+                } catch (ExecutionException | InterruptedException e) {
+                    boolean reportException = true;
 
-                        if (reportException) {
-                            LOGGER.error("[" + clientSession.getTransportName() + "] " + var5.getMessage(), var5);
-                            disconnect(new ExtendedClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                                          null,
-                                                                          "Primary session error '"
-                                                                          + var5.getMessage()
-                                                                          + "' while writting "
-                                                                          + primarySocketAuthAcceptorMessage,
-                                                                          var5));
-                        }
+                    if (e.getCause() instanceof ClosedChannelException && !isOnline()) {
+                        reportException = false;
                     }
 
+                    if (reportException) {
+                        LOGGER.error("[" + clientSession.getTransportName() + "] " + e.getMessage(), e);
+                        disconnect(new ExtendedClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                                      null,
+                                                                      "Primary session error '"
+                                                                      + e.getMessage()
+                                                                      + "' while writting "
+                                                                      + primarySocketAuthAcceptorMessage,
+                                                                      e));
+                    }
                 }
+
             });
             this.primarySocketAuthAcceptorMessageSent = true;
         }
@@ -803,41 +740,37 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         attachment.setLastPingRequestTime(startTime);
         pingRequestMessage.setRequestTime(startTime);
         final PingManager pingManager = this.clientSession.getPingManager(isPrimary);
-        final AtomicLong pingSocketWriteInterval = new AtomicLong(9223372036854775807L);
-        final RequestListenableFuture f = this.clientSession.sendRequestAsync(pingRequestMessage,
-                                                                              channel,
-                                                                              pingTimeout,
-                                                                              true,
-                                                                              message -> {
+        final AtomicLong pingSocketWriteInterval = new AtomicLong(Long.MAX_VALUE);
 
-                                                                                  if (LOGGER.isTraceEnabled()) {
-                                                                                      LOGGER.trace(
-                                                                                          "Ping sent in channel, "
-                                                                                          + "primary: {}",
-                                                                                          isPrimary);
-                                                                                  }
+        MessageSentListener messageSentListener = message -> {
+            LOGGER.trace("Ping sent in channel, primary:" + " {}", isPrimary);
+            pingSocketWriteInterval.set(System.currentTimeMillis() - startTime);
+        };
 
-                                                                                  pingSocketWriteInterval.set(System
-                                                                                                                  .currentTimeMillis()
-                                                                                                              -
-                                                                                                              startTime);
-                                                                              });
-        if (LOGGER.isTraceEnabled()) {
-            LOGGER.trace("[{}] Sending {} connection ping request: {}",
-                         this.clientSession.getTransportName(),
-                         isPrimary ? "primary" : "secondary",
-                         pingRequestMessage);
-        }
+        final RequestListenableFuture future = this.clientSession.sendRequestAsync(pingRequestMessage,
+                                                                                   channel,
+                                                                                   pingTimeout,
+                                                                                   Boolean.TRUE,
+                                                                                   messageSentListener);
 
-        f.addListener(() -> {
+        LOGGER.trace("[{}] Sending {} connection ping request: {}",
+                     this.clientSession.getTransportName(),
+                     isPrimary ? "primary" : "secondary",
+                     pingRequestMessage);
+
+
+        future.addListener(() -> {
 
             /**/
             final long now = System.currentTimeMillis();
 
             try {
-                final ProtocolMessage heartbeatResponseMessage = f.get();
-                if (heartbeatResponseMessage instanceof HeartbeatOkResponseMessage) {
-                    final HeartbeatOkResponseMessage okResponse = (HeartbeatOkResponseMessage) heartbeatResponseMessage;
+                final ProtocolMessage protocolMessage = future.get();
+
+                if (protocolMessage instanceof HeartbeatOkResponseMessage) {
+                    final HeartbeatOkResponseMessage
+                        heartbeatOkResponseMessage
+                        = (HeartbeatOkResponseMessage) protocolMessage;
                     final long turnOverTime = now - startTime;
                     attachment.pingSuccessfull();
                     final Double systemCpuLoad = sendCpuInfoToServer ? pingManager.getSystemCpuLoad() : null;
@@ -846,53 +779,50 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                                         pingSocketWriteInterval.get(),
                                         systemCpuLoad,
                                         processCpuLoad,
-                                        okResponse.getSocketWriteInterval(),
-                                        okResponse.getSystemCpuLoad(),
-                                        okResponse.getProcessCpuLoad());
+                                        heartbeatOkResponseMessage.getSocketWriteInterval(),
+                                        heartbeatOkResponseMessage.getSystemCpuLoad(),
+                                        heartbeatOkResponseMessage.getProcessCpuLoad());
 
-                    try {
-                        if (pingListener != null) {
-                            pingListener.pingSucceded(turnOverTime,
-                                                      pingSocketWriteInterval.get(),
-                                                      systemCpuLoad,
-                                                      processCpuLoad,
-                                                      okResponse.getSocketWriteInterval(),
-                                                      okResponse.getSystemCpuLoad(),
-                                                      okResponse.getProcessCpuLoad());
-                        }
-                    } catch (final Throwable var14) {
-                        LOGGER.error(var14.getLocalizedMessage(), var14);
+
+                    if (pingListener != null) {
+                        pingListener.pingSucceded(turnOverTime,
+                                                  pingSocketWriteInterval.get(),
+                                                  systemCpuLoad,
+                                                  processCpuLoad,
+                                                  heartbeatOkResponseMessage.getSocketWriteInterval(),
+                                                  heartbeatOkResponseMessage.getSystemCpuLoad(),
+                                                  heartbeatOkResponseMessage.getProcessCpuLoad());
                     }
 
-                    if (LOGGER.isTraceEnabled()) {
-                        LOGGER.trace("{} Synch ping response received: {}, time: {}",
-                                     isPrimary ? "primary" : "secondary",
-                                     heartbeatResponseMessage,
-                                     turnOverTime);
-                    }
+
+                    LOGGER.trace("{} Synch ping response received: {}, time: {}",
+                                 isPrimary ? "primary" : "secondary",
+                                 protocolMessage,
+                                 turnOverTime);
+
                 } else {
                     attachment.pingFailed();
                     pingManager.pingFailed();
-                    safeNotifyPingFailed();
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("Server has returned unknown response type for ping request! Time - " + (now
-                                                                                                              -
-                                                                                                              startTime));
-                    }
+                    ClientConnector.this.safeNotifyPingFailed();
+
+                    LOGGER.debug("Server has returned unknown response type for ping request! Time - {}",
+                                 (now - startTime));
+
                 }
-            } catch (final Exception var15) {
-                if (isOnline()) {
+            } catch (InterruptedException | ExecutionException e) {
+
+                if (ClientConnector.this.isOnline()) {
                     attachment.pingFailed();
                     pingManager.pingFailed();
-                    safeNotifyPingFailed();
+                    ClientConnector.this.safeNotifyPingFailed();
                     LOGGER.error("{} session ping failed: {}, timeout: {}, synchRequestId: {}",
                                  isPrimary ? "Primary" : "Secondary",
-                                 var15.getMessage(),
+                                 e.getMessage(),
                                  pingTimeout,
                                  pingRequestMessage.getSynchRequestId());
                 }
             } finally {
-                checkPingFailed(isPrimary, attachment, pingTimeout, now);
+                ClientConnector.this.checkPingFailed(isPrimary, attachment, pingTimeout, now);
             }
 
         }, MoreExecutors.newDirectExecutorService());
@@ -903,54 +833,45 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                                  final long pingTimeout,
                                  final long now) {
 
-        try {
-            if (this.isOnline()) {
-                final boolean pingFailed = this.isPingFailed(attachment, pingTimeout, now);
-                if (pingFailed) {
-                    final Channel channel;
-                    if (isPrimary) {
-                        channel = this.primarySession;
-                        if (channel != null) {
-                            channel.disconnect();
-                            channel.close();
-                        }
+        if (!this.isOnline()) {
+            return;
+        }
 
-                        LOGGER.warn("[{}] Primary session ping timeout {}ms. Disconnecting...",
-                                    this.clientSession.getTransportName(),
-                                    this.clientSession.getPrimaryConnectionPingTimeout());
-                        if (this.disconnectReason == null) {
-                            this.disconnectReason
-                                = new ExtendedClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                                     null,
-                                                                     "Primary session ping timeout",
-                                                                     null);
-                        }
 
-                        this.setState(ClientState.ONLINE, ClientState.DISCONNECTING);
-                        final Object var9 = this.stateWaitLock;
-                        synchronized (this.stateWaitLock) {
-                            this.stateWaitLock.notifyAll();
-                        }
-                    } else {
-                        LOGGER.warn("[{}] Secondary session ping timeout {}ms. Disconnecting secondary session...",
-                                    this.clientSession.getTransportName(),
-                                    this.clientSession.getSecondaryConnectionPingTimeout());
-                        channel = this.childSession;
-                        if (channel != null) {
-                            channel.disconnect();
-                            channel.close();
-                        }
-                    }
+        if (this.isPingFailed(attachment, pingTimeout, now)) {
+            final Channel channel;
+            if (isPrimary) {
+                channel = this.primarySession;
+                if (channel != null) {
+                    channel.disconnect();
+                    channel.close();
+                }
+
+                LOGGER.warn("[{}] Primary session ping timeout {}ms. Disconnecting...",
+                            this.clientSession.getTransportName(),
+                            this.clientSession.getPrimaryConnectionPingTimeout());
+                if (this.disconnectReason == null) {
+                    this.disconnectReason = new ExtendedClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                                               null,
+                                                                               "Primary session ping timeout",
+                                                                               null);
+                }
+
+                this.setState(ClientState.ONLINE, ClientState.DISCONNECTING);
+
+                synchronized (this.stateWaitLock) {
+                    this.stateWaitLock.notifyAll();
+                }
+            } else {
+                LOGGER.warn("[{}] Secondary session ping timeout {}ms. Disconnecting secondary session...",
+                            this.clientSession.getTransportName(),
+                            this.clientSession.getSecondaryConnectionPingTimeout());
+                channel = this.childSession;
+                if (channel != null) {
+                    channel.disconnect();
+                    channel.close();
                 }
             }
-        } catch (final Throwable var12) {
-            LOGGER.error(this.clientSession.getTransportName()
-                         + " failed to check ping for "
-                         + (isPrimary
-                            ? "primary"
-                            : "secondary")
-                         + " connection", var12);
-
         }
 
     }
@@ -959,23 +880,18 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
         final long failedPingCount = attachment.getLastSubsequentFailedPingCount();
         final boolean ioProcessing = this.isIoProcessing(attachment, pingTimeout, now);
-        final boolean result = failedPingCount >= this.maxSubsequentPingFailedCount && !ioProcessing;
-        return result;
+        return failedPingCount >= this.maxSubsequentPingFailedCount && !ioProcessing;
+
     }
 
     private void safeNotifyPingFailed() {
 
-        try {
-            if (this.pingListener != null) {
-                this.pingListener.pingFailed();
-            }
-        } catch (final Throwable var2) {
-            LOGGER.error(var2.getLocalizedMessage(), var2);
+        if (this.pingListener != null) {
+            this.pingListener.pingFailed();
         }
-
     }
 
-    private void cleanUp() {
+    private void cleanUp() throws InterruptedException {
 
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("[{}] Closing all sockets and cleaning references", this.clientSession.getTransportName());
@@ -996,15 +912,14 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         this.authorizationStartTime = null;
     }
 
-    private void closeAllSessions() {
+    private void closeAllSessions() throws InterruptedException {
 
         if (this.primarySession != null) {
             this.primarySession.disconnect();
 
-            try {
-                this.primarySession.close().await(5L, TimeUnit.SECONDS);
-            } catch (final InterruptedException var3) {
-            }
+
+            this.primarySession.close().await(SESSION_CLOSE_WAIT_TIME, TimeUnit.SECONDS);
+
 
             this.primarySession = null;
         }
@@ -1012,10 +927,9 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         if (this.childSession != null) {
             this.childSession.disconnect();
 
-            try {
-                this.childSession.close().await(5L, TimeUnit.SECONDS);
-            } catch (final InterruptedException var2) {
-            }
+
+            this.childSession.close().await(SESSION_CLOSE_WAIT_TIME, TimeUnit.SECONDS);
+
 
             this.childSession = null;
         }
@@ -1036,12 +950,11 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                 ClientState state;
                 do {
                     state = this.clientState.get();
-                } while (state != ClientState.DISCONNECTING && state != ClientState.DISCONNECTED && !(
-                    stateChanged
-                        = this.clientState.compareAndSet(state, ClientState.DISCONNECTING)));
+                    stateChanged = this.clientState.compareAndSet(state, ClientState.DISCONNECTING);
+                } while (state != ClientState.DISCONNECTING && state != ClientState.DISCONNECTED && !(stateChanged));
 
                 if (stateChanged && LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("[{}] State changed to {}", this.clientSession.getTransportName(), newState);
+                    LOGGER.debug(STATE_CHANGED_TO, this.clientSession.getTransportName(), newState);
                 }
             } else if (this.clientState.get() != newState) {
                 throw new IllegalStateException("["
@@ -1054,7 +967,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                                                 + "]");
             }
         } else if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("[{}] State changed to {}", this.clientSession.getTransportName(), newState);
+            LOGGER.debug(STATE_CHANGED_TO, this.clientSession.getTransportName(), newState);
         }
 
 
@@ -1074,15 +987,14 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                 ClientState state;
                 do {
                     state = this.clientState.get();
-                } while (state != ClientState.DISCONNECTING && state != ClientState.DISCONNECTED && !(
-                    stateChanged
-                        = this.clientState.compareAndSet(state, ClientState.DISCONNECTING)));
+                    stateChanged = this.clientState.compareAndSet(state, ClientState.DISCONNECTING);
+                } while (state != ClientState.DISCONNECTING && state != ClientState.DISCONNECTED && !(stateChanged));
 
                 if (stateChanged) {
                     this.disconnectReason = reason;
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("[{}] State changed to {}", this.clientSession.getTransportName(), newState);
-                    }
+
+                    LOGGER.debug(STATE_CHANGED_TO, this.clientSession.getTransportName(), newState);
+
                 }
             } else if (this.clientState.get() != newState) {
                 throw new IllegalStateException("["
@@ -1096,9 +1008,9 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
             }
         } else {
             this.disconnectReason = reason;
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("[{}] State changed to {}", this.clientSession.getTransportName(), newState);
-            }
+
+            LOGGER.debug(STATE_CHANGED_TO, this.clientSession.getTransportName(), newState);
+
         }
 
 
@@ -1118,24 +1030,23 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                 ClientState state;
                 do {
                     state = this.clientState.get();
-                } while (state != ClientState.DISCONNECTING && state != ClientState.DISCONNECTED && !(
-                    stateChanged
-                        = this.clientState.compareAndSet(state, ClientState.DISCONNECTING)));
+                    stateChanged = this.clientState.compareAndSet(state, ClientState.DISCONNECTING);
+                } while (state != ClientState.DISCONNECTING && state != ClientState.DISCONNECTED && !(stateChanged));
 
                 if (stateChanged) {
                     this.disconnectReason = reason;
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("[{}] State changed to {}", this.clientSession.getTransportName(), newState);
-                    }
+
+                    LOGGER.debug(STATE_CHANGED_TO, this.clientSession.getTransportName(), newState);
+
                 }
             } else if (this.clientState.get() != newState) {
                 return false;
             }
         } else {
             this.disconnectReason = reason;
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("[{}] State changed to {}", this.clientSession.getTransportName(), newState);
-            }
+
+            LOGGER.debug(STATE_CHANGED_TO, this.clientSession.getTransportName(), newState);
+
         }
 
 
@@ -1210,18 +1121,16 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         }
 
         final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
-        final Iterator i$ = listeners.iterator();
 
-        while (i$.hasNext()) {
-            final ClientListener clientListener = (ClientListener) i$.next();
-            this.protocolHandler.fireDisconnectedEvent(clientListener,
-                                                       this.clientSession.getTransportClient(),
-                                                       new DisconnectedEvent(this.clientSession.getTransportClient(),
-                                                                             disconnectReason.getDisconnectReason(),
-                                                                             disconnectReason.getDisconnectHint(),
-                                                                             disconnectReason.getError(),
-                                                                             disconnectReason.getDisconnectComments()));
-        }
+        DisconnectedEvent disconnectedEvent = new DisconnectedEvent(clientSession.getTransportClient(),
+                                                                    disconnectReason.getDisconnectReason(),
+                                                                    disconnectReason.getDisconnectHint(),
+                                                                    disconnectReason.getError(),
+                                                                    disconnectReason.getDisconnectComments());
+        listeners.forEach(clientListener -> protocolHandler.fireDisconnectedEvent(clientListener,
+                                                                                  clientSession.getTransportClient(),
+                                                                                  disconnectedEvent));
+
 
         this.logDisconnectInQueue(disconnectReason);
         this.clientSession.terminate();
@@ -1252,7 +1161,8 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
         final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
 
-       listeners.forEach(clientListener -> protocolHandler.fireAuthorizedEvent(clientListener, clientSession.getTransportClient()));
+        listeners.forEach(clientListener -> protocolHandler.fireAuthorizedEvent(clientListener,
+                                                                                clientSession.getTransportClient()));
 
 
         LOGGER.info("Authorize task in queue, server address [{}], transport name [{}]",
@@ -1270,17 +1180,10 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                      + this.clientSession.getTransportName()
                      + "] CERTIFICATE_EXCEPTION: "
                      + certificateException.getMessage(), certificateException);
-        if (this.clientSession.getSecurityExceptionHandler() == null) {
-            this.setState(ClientState.SSL_HANDSHAKE_WAITING,
-                          ClientState.DISCONNECTING,
-                          new ExtendedClientDisconnectReason(DisconnectReason.CERTIFICATE_EXCEPTION,
-                                                             null,
-                                                             "Certificate exception "
-                                                             + certificateException.getMessage(),
-                                                             certificateException));
-        } else if (!this.clientSession.getSecurityExceptionHandler().isIgnoreSecurityException(chain,
-                                                                                               authType,
-                                                                                               certificateException)) {
+        if (this.clientSession.getSecurityExceptionHandler() == null
+            || !this.clientSession.getSecurityExceptionHandler().isIgnoreSecurityException(chain,
+                                                                                           authType,
+                                                                                           certificateException)) {
             this.setState(ClientState.SSL_HANDSHAKE_WAITING,
                           ClientState.DISCONNECTING,
                           new ExtendedClientDisconnectReason(DisconnectReason.CERTIFICATE_EXCEPTION,
@@ -1298,12 +1201,9 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
             return false;
         } else {
             final long lastIoTime = attachment.getLastIoTime();
-            if (lastIoTime > 0L) {
-                final boolean result = now - lastIoTime < pingTimeout;
-                return result;
-            } else {
-                return false;
-            }
+
+            return lastIoTime > 0L && now - lastIoTime < pingTimeout;
+
         }
     }
 
@@ -1323,12 +1223,18 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         if (terminationAwaitMaxTimeoutInMillis > 0L && !this.isExecutorThreadTerminated.get()) {
 
             synchronized (this.executorThreadTerminationLocker) {
-                if (!this.isExecutorThreadTerminated.get()) {
+                boolean interrupted = false;
+                while (!this.isExecutorThreadTerminated.get()) {
+
                     try {
                         this.executorThreadTerminationLocker.wait(terminationAwaitMaxTimeoutInMillis);
-                    } catch (final InterruptedException var6) {
-
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                        LOGGER.error("Error occurred...", e);
+                    } finally {
+                        if (interrupted) {Thread.currentThread().interrupt();}
                     }
+
                 }
             }
         }

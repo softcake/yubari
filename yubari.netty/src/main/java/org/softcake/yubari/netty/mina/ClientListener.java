@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty;
+package org.softcake.yubari.netty.mina;
 
 
+import org.softcake.yubari.netty.ITransportClient;
 
-public interface ClientAuthorizationProvider extends AuthorizationProvider {
-    void setUserAgent(String var1);
+import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 
-    void setSecondaryConnectionDisabled(boolean var1);
+public interface ClientListener {
+    void authorized(ITransportClient var1);
 
-    void setDroppableMessageServerTTL(long var1);
+    void feedbackMessageReceived(ITransportClient var1, ProtocolMessage var2);
 
-    void setSessionName(String var1);
-
-    void setListener(AuthorizationProviderListener var1);
+    void disconnected(ITransportClient var1, DisconnectedEvent var2);
 }

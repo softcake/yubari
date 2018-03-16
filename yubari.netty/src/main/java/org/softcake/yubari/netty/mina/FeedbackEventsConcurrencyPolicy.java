@@ -14,18 +14,12 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty;
+package org.softcake.yubari.netty.mina;
 
+import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 
+public interface FeedbackEventsConcurrencyPolicy {
+    String ALL_SYNC_KEY = "";
 
-public interface ClientAuthorizationProvider extends AuthorizationProvider {
-    void setUserAgent(String var1);
-
-    void setSecondaryConnectionDisabled(boolean var1);
-
-    void setDroppableMessageServerTTL(long var1);
-
-    void setSessionName(String var1);
-
-    void setListener(AuthorizationProviderListener var1);
+    Object getConcurrentKey(ProtocolMessage var1);
 }

@@ -16,9 +16,6 @@
 
 package org.softcake.yubari.netty;
 
-import com.dukascopy.dds4.transport.authorization.AuthorizationProviderListener;
-
-import java.net.InetSocketAddress;
 
 public abstract class AbstractClientAuthorizationProvider implements ClientAuthorizationProvider {
     protected AuthorizationProviderListener listener;
@@ -61,14 +58,7 @@ public abstract class AbstractClientAuthorizationProvider implements ClientAutho
         this.droppableMessageServerTTL = droppableMessageServerTTL;
     }
 
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    public InetSocketAddress getAddress() {
 
-        return null;
-    }
 
     public AuthorizationProviderListener getListener() {
 

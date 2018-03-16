@@ -16,7 +16,7 @@
 
 package org.softcake.yubari.netty;
 
-import com.dukascopy.dds4.transport.netty.AbstractChannelAttachment;
+
 import io.netty.util.AttributeKey;
 
 public class ChannelAttachment extends AbstractChannelAttachment {

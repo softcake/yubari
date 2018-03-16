@@ -14,18 +14,25 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty;
+package org.softcake.yubari.netty.mina;
 
+import java.net.SocketAddress;
+import java.util.concurrent.Future;
 
+public interface IoSessionWrapper {
+    SocketAddress getRemoteAddress();
 
-public interface ClientAuthorizationProvider extends AuthorizationProvider {
-    void setUserAgent(String var1);
+    void close();
 
-    void setSecondaryConnectionDisabled(boolean var1);
+    boolean isConnected();
 
-    void setDroppableMessageServerTTL(long var1);
+    boolean isClosing();
 
-    void setSessionName(String var1);
+    Future<Void> write(Object var1);
 
-    void setListener(AuthorizationProviderListener var1);
+    long getLastIoTime();
+
+    long getLastReadTime();
+
+    long getLastWriteTime();
 }

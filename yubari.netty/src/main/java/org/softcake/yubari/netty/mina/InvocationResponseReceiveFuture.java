@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty;
+package org.softcake.yubari.netty.mina;
 
+public class InvocationResponseReceiveFuture {
+    public volatile InvocationResult response;
 
+    public InvocationResult getResponse() {
 
-public interface ClientAuthorizationProvider extends AuthorizationProvider {
-    void setUserAgent(String var1);
+        return this.response;
+    }
 
-    void setSecondaryConnectionDisabled(boolean var1);
+    public void setResponse(InvocationResult response) {
 
-    void setDroppableMessageServerTTL(long var1);
-
-    void setSessionName(String var1);
-
-    void setListener(AuthorizationProviderListener var1);
+        this.response = response;
+    }
 }

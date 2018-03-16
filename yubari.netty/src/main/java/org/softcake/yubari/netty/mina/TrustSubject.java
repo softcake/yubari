@@ -14,18 +14,11 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty;
+package org.softcake.yubari.netty.mina;
 
+public enum TrustSubject {
+    ANDROID;
 
-
-public interface ClientAuthorizationProvider extends AuthorizationProvider {
-    void setUserAgent(String var1);
-
-    void setSecondaryConnectionDisabled(boolean var1);
-
-    void setDroppableMessageServerTTL(long var1);
-
-    void setSessionName(String var1);
-
-    void setListener(AuthorizationProviderListener var1);
+    TrustSubject() {
+    }
 }

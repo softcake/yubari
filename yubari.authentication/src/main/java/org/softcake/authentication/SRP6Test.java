@@ -97,15 +97,15 @@ public class SRP6Test {
             DClient client = new DClient();
             client.connect(urlDemo,usernameD,passwordD);
             //wait for it to connect
-            int i = 10; //wait max ten seconds
-            while (i > 0 && !client.isConnected()) {
-                Thread.sleep(100000);
-                i--;
-            }
-            if (!client.isConnected()) {
-                LOGGER.error("Failed to connect Dukascopy servers");
-                System.exit(1);
-            }
+//            int i = 10; //wait max ten seconds
+//            while (i > 0 && !client.isConnected()) {
+//                Thread.sleep(100000);
+//                i--;
+//            }
+//            if (!client.isConnected()) {
+//                LOGGER.error("Failed to connect Dukascopy servers");
+//                System.exit(1);
+//            }
            // String pin = PinDialog.showAndGetPin();
 //            serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(usernameD,
 //                                                                        passwordD,

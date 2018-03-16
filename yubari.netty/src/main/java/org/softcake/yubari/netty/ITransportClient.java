@@ -16,19 +16,23 @@
 
 package org.softcake.yubari.netty;
 
-import com.dukascopy.dds4.transport.RequestListenableFuture;
-import com.dukascopy.dds4.transport.common.mina.MessageSentListener;
+
+import org.softcake.yubari.netty.mina.ClientListener;
+import org.softcake.yubari.netty.mina.MessageSentListener;
+import org.softcake.yubari.netty.mina.RequestListenableFuture;
+
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import java.io.IOException;
 import java.net.ConnectException;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public interface ITransportClient extends com.dukascopy.dds4.transport.common.mina.ITransportClient {
+public interface ITransportClient  {
     /**
      * @deprecated
      */
@@ -73,4 +77,5 @@ public interface ITransportClient extends com.dukascopy.dds4.transport.common.mi
     <T> T getRemoteInterface(Class<T> var1, long var2, TimeUnit var4);
 
 
+    List<ClientListener> getListeners();
 }

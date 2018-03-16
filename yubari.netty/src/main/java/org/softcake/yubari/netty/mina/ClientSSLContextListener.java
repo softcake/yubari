@@ -14,18 +14,13 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty;
+package org.softcake.yubari.netty.mina;
 
 
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 
-public interface ClientAuthorizationProvider extends AuthorizationProvider {
-    void setUserAgent(String var1);
 
-    void setSecondaryConnectionDisabled(boolean var1);
-
-    void setDroppableMessageServerTTL(long var1);
-
-    void setSessionName(String var1);
-
-    void setListener(AuthorizationProviderListener var1);
+public interface ClientSSLContextListener {
+    void securityException(X509Certificate[] chain, String authType, CertificateException exception);
 }

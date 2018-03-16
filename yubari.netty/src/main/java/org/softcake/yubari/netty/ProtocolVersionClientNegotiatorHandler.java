@@ -17,8 +17,7 @@
 package org.softcake.yubari.netty;
 
 import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolEncoder;
-import com.dukascopy.dds4.transport.netty.ProtocolEncoderDecoder;
-import com.dukascopy.dds4.transport.netty.ProtocolVersionNegotiationSuccessEvent;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler.Sharable;

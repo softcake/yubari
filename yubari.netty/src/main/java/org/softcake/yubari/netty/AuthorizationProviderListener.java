@@ -16,16 +16,10 @@
 
 package org.softcake.yubari.netty;
 
+import org.softcake.yubari.netty.mina.IoSessionWrapper;
 
+public interface AuthorizationProviderListener {
+    void authorized(String var1, IoSessionWrapper var2, String var3);
 
-public interface ClientAuthorizationProvider extends AuthorizationProvider {
-    void setUserAgent(String var1);
-
-    void setSecondaryConnectionDisabled(boolean var1);
-
-    void setDroppableMessageServerTTL(long var1);
-
-    void setSessionName(String var1);
-
-    void setListener(AuthorizationProviderListener var1);
+    void authorizationError(IoSessionWrapper var1, String var2);
 }

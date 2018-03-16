@@ -16,8 +16,9 @@
 
 package org.softcake.yubari.netty;
 
+import org.softcake.yubari.netty.mina.IoSessionWrapper;
+
 import com.dukascopy.dds4.common.MD5;
-import com.dukascopy.dds4.transport.common.protocol.mina.IoSessionWrapper;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HaloRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.HaloResponseMessage;

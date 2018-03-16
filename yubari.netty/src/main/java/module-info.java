@@ -21,7 +21,9 @@ module org.softcake.yubari.netty {
     requires io.netty.codec;
     requires io.netty.handler;
     requires io.netty.buffer;
+    requires java.rmi;
     exports org.softcake.yubari.netty;
+    exports org.softcake.yubari.netty.mina;
     exports org.softcake.yubari.netty.stream;
     //requires transport.common;
     // requires netty.transport.client;

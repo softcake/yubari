@@ -17,30 +17,24 @@
 package org.softcake.yubari.netty;
 
 
+import org.softcake.yubari.netty.mina.ClientListener;
+import org.softcake.yubari.netty.mina.ClientSSLContextListener;
+import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
+import org.softcake.yubari.netty.mina.ISessionStats;
+import org.softcake.yubari.netty.mina.IoSessionWrapper;
+import org.softcake.yubari.netty.mina.MessageSentListener;
+import org.softcake.yubari.netty.mina.RemoteCallSupport;
+import org.softcake.yubari.netty.mina.RequestListenableFuture;
+import org.softcake.yubari.netty.mina.SSLContextFactory;
+import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
 import com.dukascopy.dds4.ping.PingManager;
-import com.dukascopy.dds4.transport.FeedbackEventsConcurrencyPolicy;
-import com.dukascopy.dds4.transport.RequestListenableFuture;
-import com.dukascopy.dds4.transport.client.SecurityExceptionHandler;
-import com.dukascopy.dds4.transport.common.mina.ClientListener;
-import com.dukascopy.dds4.transport.common.mina.MessageSentListener;
-import com.dukascopy.dds4.transport.common.mina.RemoteCallSupport;
-import com.dukascopy.dds4.transport.common.mina.ssl.ClientSSLContextListener;
-import com.dukascopy.dds4.transport.common.mina.ssl.SSLContextFactory;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
-import com.dukascopy.dds4.transport.common.protocol.mina.ISessionStats;
-import com.dukascopy.dds4.transport.common.protocol.mina.IoSessionWrapper;
 import com.dukascopy.dds4.transport.msg.system.OkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.dukascopy.dds4.transport.netty.ChannelTrafficBlocker;
-import com.dukascopy.dds4.transport.netty.MessageListenableFuture;
-import com.dukascopy.dds4.transport.netty.NettyIoSessionWrapperAdapter;
-import com.dukascopy.dds4.transport.netty.ProtocolEncoderDecoder;
-import com.dukascopy.dds4.transport.netty.RequestMessageTransportListenableFuture;
-import com.dukascopy.dds4.transport.netty.SyncMessageTimeoutChecker;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -134,7 +128,7 @@ class TransportClientSession implements ClientSSLContextListener {
     private final SecurityExceptionHandler securityExceptionHandler;
     private final ChannelHandler protocolEncoderDecoder;
     private final ChannelTrafficBlocker channelTrafficBlocker;
-    private final Map<Long, RequestMessageTransportListenableFuture> syncRequests = new ConcurrentHashMap();
+    private final Map<Long, RequestMessageTransportListenableFuture> syncRequests = new ConcurrentHashMap<>();
     private final ISessionStats sessionStats;
     private final IPingListener pingListener;
     private final long syncMessageTimeout;
@@ -175,7 +169,7 @@ class TransportClientSession implements ClientSSLContextListener {
     private IoSessionWrapper sessionWrapper = new NettyIoSessionWrapperAdapter() {
         public Future<Void> write(final Object message) {
 
-            return TransportClientSession.this.protocolHandler.writeMessage(this.channel,
+            return protocolHandler.writeMessage(this.channel,
                                                                             (BinaryProtocolMessage) message);
         }
     };
@@ -344,7 +338,7 @@ class TransportClientSession implements ClientSSLContextListener {
 
                 return new Thread(r,
                                   "["
-                                  + TransportClientSession.this.transportName
+                                  + transportName
                                   + "] NettyTransportThread - "
                                   + this.counter.getAndIncrement());
             }
@@ -365,14 +359,14 @@ class TransportClientSession implements ClientSSLContextListener {
             protected void initChannel(final SocketChannel ch) throws Exception {
 
                 final ChannelPipeline pipeline = ch.pipeline();
-                if (TransportClientSession.this.useSSL) {
-                    final Set<String> sslProtocols = TransportClientSession.this.enabledSslProtocols == null
-                                                     || TransportClientSession.this.enabledSslProtocols.isEmpty()
+                if (useSSL) {
+                    final Set<String> sslProtocols = enabledSslProtocols == null
+                                                     || enabledSslProtocols.isEmpty()
                                                      ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS
-                                                     : TransportClientSession.this.enabledSslProtocols;
+                                                     : enabledSslProtocols;
                     final SSLEngine engine = SSLContextFactory.getInstance(false,
                                                                            TransportClientSession.this,
-                                                                           TransportClientSession.this.address
+                                                                           address
                                                                                .getHostName())
                                                               .createSSLEngine();
                     engine.setUseClientMode(true);
@@ -385,18 +379,18 @@ class TransportClientSession implements ClientSSLContextListener {
                 }
 
                 pipeline.addLast("protocol_version_negotiator",
-                                 TransportClientSession.this.protocolVersionClientNegotiatorHandler);
+                                 protocolVersionClientNegotiatorHandler);
                 pipeline.addLast("frame_handler",
-                                 new LengthFieldBasedFrameDecoder(TransportClientSession.this.maxMessageSizeBytes,
+                                 new LengthFieldBasedFrameDecoder(maxMessageSizeBytes,
                                                                   0,
                                                                   4,
                                                                   0,
                                                                   4,
                                                                   true));
                 pipeline.addLast("frame_encoder", new LengthFieldPrepender(4, false));
-                pipeline.addLast("protocol_encoder_decoder", TransportClientSession.this.protocolEncoderDecoder);
-                pipeline.addLast("traffic_blocker", TransportClientSession.this.channelTrafficBlocker);
-                pipeline.addLast("handler", TransportClientSession.this.protocolHandler);
+                pipeline.addLast("protocol_encoder_decoder", protocolEncoderDecoder);
+                pipeline.addLast("traffic_blocker", channelTrafficBlocker);
+                pipeline.addLast("handler", protocolHandler);
             }
         });
         this.clientConnector = new ClientConnector(this.address,
@@ -592,7 +586,7 @@ class TransportClientSession implements ClientSSLContextListener {
                                                                              cause.getMessage()});
                         } else {
                             TransportClientSession.LOGGER.error("[{}] Request send failed",
-                                                                TransportClientSession.this.getTransportName());
+                                                                getTransportName());
                         }
 
                     }
@@ -623,7 +617,7 @@ class TransportClientSession implements ClientSSLContextListener {
                         try {
                             final AbstractEventExecutorTask eventTask = new AbstractEventExecutorTask(
                                 TransportClientSession.this,
-                                TransportClientSession.this.protocolHandler) {
+                                protocolHandler) {
                                 public Object getOrderKey() {
 
                                     return null;
@@ -648,7 +642,7 @@ class TransportClientSession implements ClientSSLContextListener {
                                         }
                                     } catch (final Exception var3) {
                                         TransportClientSession.LOGGER.error("["
-                                                                            + TransportClientSession.this.transportName
+                                                                            + transportName
                                                                             + "] "
                                                                             + var3.getMessage(), var3);
 
@@ -656,10 +650,10 @@ class TransportClientSession implements ClientSSLContextListener {
 
                                 }
                             };
-                            eventTask.executeInExecutor(TransportClientSession.this.protocolHandler.getEventExecutor());
+                            eventTask.executeInExecutor(protocolHandler.getEventExecutor());
                         } catch (final Throwable var2) {
                             TransportClientSession.LOGGER.error("["
-                                                                + TransportClientSession.this.transportName
+                                                                + transportName
                                                                 + "] "
                                                                 + var2.getMessage(), var2);
 

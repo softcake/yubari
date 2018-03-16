@@ -16,9 +16,8 @@
 
 package org.softcake.authentication;
 
+import org.softcake.yubari.netty.AuthorizationProviderListener;
 import org.softcake.yubari.netty.ClientAuthorizationProvider;
-
-import com.dukascopy.dds4.transport.authorization.AuthorizationProviderListener;
 
 import java.net.InetSocketAddress;
 

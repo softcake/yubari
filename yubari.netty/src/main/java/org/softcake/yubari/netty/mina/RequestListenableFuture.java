@@ -14,18 +14,13 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty;
+package org.softcake.yubari.netty.mina;
 
+import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import com.google.common.util.concurrent.ListenableFuture;
 
+public interface RequestListenableFuture extends ListenableFuture<ProtocolMessage> {
+    long getInProcessResponseLastTime();
 
-public interface ClientAuthorizationProvider extends AuthorizationProvider {
-    void setUserAgent(String var1);
-
-    void setSecondaryConnectionDisabled(boolean var1);
-
-    void setDroppableMessageServerTTL(long var1);
-
-    void setSessionName(String var1);
-
-    void setListener(AuthorizationProviderListener var1);
+    ProtocolMessage getRequestMessage();
 }

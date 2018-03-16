@@ -32,33 +32,28 @@ class ChannelWriteTimeoutChecker implements Runnable, GenericFutureListener<Futu
     private ScheduledFuture<?> scheduledFuture;
 
     public ChannelWriteTimeoutChecker(TransportClientSession transportSession, ChannelFuture channelFuture) {
+
         this.transportSession = transportSession;
         this.channelFuture = channelFuture;
     }
 
     void setScheduledFuture(ScheduledFuture<?> scheduledFuture) {
+
         this.scheduledFuture = scheduledFuture;
     }
 
-    public void operationComplete(Future<Object> future) throws Exception {
-        try {
-            this.scheduledFuture.cancel(false);
-        } catch (Throwable var3) {
-            LOGGER.error(var3.getMessage(), var3);
+    public void operationComplete(Future<Object> future) {
 
-        }
+        this.scheduledFuture.cancel(false);
 
     }
 
     public void run() {
-        try {
-            if (!this.channelFuture.isDone()) {
-                LOGGER.warn("[{}] Failed to send message in timeout time, disconnecting", this.transportSession.getTransportName());
-                this.transportSession.terminate();
-            }
-        } catch (Throwable var2) {
-            LOGGER.error(var2.getMessage(), var2);
 
+        if (!this.channelFuture.isDone()) {
+            LOGGER.warn("[{}] Failed to send message in timeout time, disconnecting",
+                        this.transportSession.getTransportName());
+            this.transportSession.terminate();
         }
 
     }

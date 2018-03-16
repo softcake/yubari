@@ -32,7 +32,8 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DROPPABLE
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DROPPABLE_MESSAGE_SERVER_TTL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DUPLICATE_SYNC_MESSAGES_TO_CLIENT_LISTENERS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_ERROR_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_WARNING_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL;
@@ -52,7 +53,8 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_RECONNECT
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SECONDARY_CONNECTION_RECONNECTS_RESET_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SECONDARY_CONNECTION_RECONNECT_ATTEMPTS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_ERROR_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_WARNING_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_CPU_INFO_TO_SERVER;
@@ -64,36 +66,39 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_CH
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_SIZE;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_MESSAGE_TIMEOUT;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_SIZE;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
+import static org.softcake.yubari.netty.TransportClientBuilder
+    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_QUEUE_SIZE;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_TERMINATION_MAX_AWAIT_TIMEOUT_IN_MILLIS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_TRANSPORT_POOL_SIZE;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_USE_FEEDER_SOCKET;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_USE_SSL;
 
+import org.softcake.yubari.netty.mina.ClientListener;
+import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
+import org.softcake.yubari.netty.mina.ISessionStats;
+import org.softcake.yubari.netty.mina.MessageSentListener;
+import org.softcake.yubari.netty.mina.ProxyInterfaceFactory;
+import org.softcake.yubari.netty.mina.RemoteCallSupport;
+import org.softcake.yubari.netty.mina.RequestListenableFuture;
+import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
+import org.softcake.yubari.netty.mina.ServerAddress;
+import org.softcake.yubari.netty.mina.SyncInstrumentsAndAllOtherConcurrencyPolicy;
+import org.softcake.yubari.netty.mina.TransportClientJMXBean;
 import org.softcake.yubari.netty.stream.StreamListener;
 
-import com.dukascopy.dds4.common.ServerAddress;
 import com.dukascopy.dds4.ping.IPingListener;
 import com.dukascopy.dds4.ping.PingManager;
-import com.dukascopy.dds4.transport.FeedbackEventsConcurrencyPolicy;
-import com.dukascopy.dds4.transport.RequestListenableFuture;
-import com.dukascopy.dds4.transport.SyncInstrumentsAndAllOtherConcurrencyPolicy;
-import com.dukascopy.dds4.transport.client.SecurityExceptionHandler;
-import com.dukascopy.dds4.transport.client.jmx.TransportClientJMXBean;
-import com.dukascopy.dds4.transport.common.mina.ClientListener;
-import com.dukascopy.dds4.transport.common.mina.MessageSentListener;
-import com.dukascopy.dds4.transport.common.mina.ProxyInterfaceFactory;
-import com.dukascopy.dds4.transport.common.mina.RemoteCallSupport;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
-import com.dukascopy.dds4.transport.common.protocol.mina.ISessionStats;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.dukascopy.dds4.transport.netty.RequestMessageTransportListenableFuture;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
