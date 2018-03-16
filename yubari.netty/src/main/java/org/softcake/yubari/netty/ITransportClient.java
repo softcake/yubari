@@ -71,4 +71,6 @@ public interface ITransportClient extends com.dukascopy.dds4.transport.common.mi
     <T> T getExportedForRemoteCallsImplementation(Class<T> var1);
 
     <T> T getRemoteInterface(Class<T> var1, long var2, TimeUnit var4);
+
+
 }

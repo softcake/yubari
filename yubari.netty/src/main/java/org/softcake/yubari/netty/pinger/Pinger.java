@@ -16,8 +16,8 @@
 
 package org.softcake.yubari.netty.pinger;
 
-import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -143,11 +143,8 @@ public class Pinger {
     private Long doPing(PingTarget target, List<Future<?>> transportTerminationFutures) throws Throwable {
         long before = System.currentTimeMillis();
         final Throwable[] exceptions = new Throwable[1];
-        final PingClient pingerNettyClient = new PingClient(target, this.staticSessionDictionary, new IPingClientListener() {
-            public void disconnected(Throwable t, DisconnectReason reason) {
-                exceptions[0] = t;
-            }
-        }, this.pingDataSizeInBytes + 1024);
+        final PingClient pingerNettyClient = new PingClient(target, this.staticSessionDictionary,
+                                                            (t, reason) -> exceptions[0] = t, this.pingDataSizeInBytes + 1024);
         long timeout = this.pingTimeoutTimeUnit.toMillis(this.pingTimeout);
 
         Long var10;
@@ -166,11 +163,7 @@ public class Pinger {
 
             throw var14;
         } finally {
-            transportTerminationFutures.add(this.executor.submit(new Runnable() {
-                public void run() {
-                    pingerNettyClient.disconnect();
-                }
-            }));
+            transportTerminationFutures.add(this.executor.submit(pingerNettyClient::disconnect));
         }
 
         return var10;

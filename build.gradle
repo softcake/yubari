@@ -182,14 +182,20 @@ subprojects { subProject ->
 
 
   //        implementation "com.dukascopy.dds2:DDS2-jClient-JForex"
-            implementation "com.dukascopy:auth-protocol-client"
+            implementation "com.dukascopy:auth-protocol-client",{
+                exclude group: "com.dukascopy", module: "dev-tools"
+            }
 //           implementation "com.dukascopy.dds4:netty-transport-client",{
 //               exclude group: "com.dukascopy", module: "dev-tools"
 //               exclude group: "com.dukascopy.dds4", module: "transport-common"
 //           }
             implementation "com.dukascopy.api:JForex-API"
-          implementation "com.dukascopy.dds4:transport-common"
-              implementation  "com.dukascopy.dds2:msg"
+          implementation "com.dukascopy.dds4:transport-common",{
+              exclude group: "com.dukascopy", module: "dev-tools"
+          }
+              implementation  "com.dukascopy.dds2:msg",{
+               exclude group: "com.dukascopy", module: "dev-tools"
+           }
             implementation "com.nimbusds:srp6a"
             implementation "org.json:json"
             implementation "commons-codec:commons-codec"

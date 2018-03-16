@@ -20,32 +20,39 @@ import com.dukascopy.dds4.transport.netty.AbstractChannelAttachment;
 import io.netty.util.AttributeKey;
 
 public class ChannelAttachment extends AbstractChannelAttachment {
-    public static final AttributeKey<ChannelAttachment> CHANNEL_ATTACHMENT_ATTRIBUTE_KEY = AttributeKey.valueOf("channel_attachment");
+    public static final AttributeKey<ChannelAttachment> CHANNEL_ATTACHMENT_ATTRIBUTE_KEY = AttributeKey.valueOf(
+        "channel_attachment");
     private final boolean isPrimaryConnection;
-    private long lastConnectAttemptTime = -9223372036854775808L;
+    private long lastConnectAttemptTime = Long.MIN_VALUE;
     private int reconnectAttempt = -1;
 
-    public ChannelAttachment(boolean primaryConnection) {
+    public ChannelAttachment(final boolean primaryConnection) {
+
         this.isPrimaryConnection = primaryConnection;
     }
 
     public boolean isPrimaryConnection() {
+
         return this.isPrimaryConnection;
     }
 
     public long getLastConnectAttemptTime() {
+
         return this.lastConnectAttemptTime;
     }
 
-    public void setLastConnectAttemptTime(long lastConnectAttemptTime) {
+    public void setLastConnectAttemptTime(final long lastConnectAttemptTime) {
+
         this.lastConnectAttemptTime = lastConnectAttemptTime;
     }
 
     public int getReconnectAttempt() {
+
         return this.reconnectAttempt;
     }
 
-    public void setReconnectAttempt(int reconnectAttempt) {
+    public void setReconnectAttempt(final int reconnectAttempt) {
+
         this.reconnectAttempt = reconnectAttempt;
     }
 }

@@ -28,65 +28,65 @@ import io.netty.util.concurrent.GenericFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.ExecutionException;
+
 public class AnonymousClientAuthorizationProvider extends AbstractClientAuthorizationProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(AnonymousClientAuthorizationProvider.class);
     private HaloResponseMessage haloResponseMessage;
 
     public AnonymousClientAuthorizationProvider() {
+
     }
 
     public void authorize(final IoSessionWrapper session) {
-        HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
+
+        final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
         haloRequestMessage.setPingable(true);
         haloRequestMessage.setUseragent(this.getUserAgent());
         haloRequestMessage.setSecondaryConnectionDisabled(this.isSecondaryConnectionDisabled());
         haloRequestMessage.setSecondaryConnectionMessagesTTL(this.getDroppableMessageServerTTL());
         haloRequestMessage.setSessionName(this.getSessionName());
-        ChannelFuture future = (ChannelFuture)session.write(haloRequestMessage);
-        future.addListener(new GenericFutureListener<ChannelFuture>() {
-            public void operationComplete(ChannelFuture future) throws Exception {
-                try {
-                    future.get();
-                } catch (Exception var3) {
-                    AnonymousClientAuthorizationProvider.LOGGER.error(var3.getMessage(), var3);
-                    AnonymousClientAuthorizationProvider.this.getListener().authorizationError(session, var3.getLocalizedMessage());
-                }
-
-            }
-        });
+        final ChannelFuture future = (ChannelFuture) session.write(haloRequestMessage);
+        future.addListener(getChannelFutureGenericFutureListener(session));
     }
 
-    public void messageReceived(final IoSessionWrapper session, ProtocolMessage message) {
+    public void messageReceived(final IoSessionWrapper session, final ProtocolMessage message) {
+
         if (message instanceof HaloResponseMessage) {
-            this.haloResponseMessage = (HaloResponseMessage)message;
-            LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
+            this.haloResponseMessage = (HaloResponseMessage) message;
+            final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
             loginRequestMessage.setUsername("anonymous");
             loginRequestMessage.setTicket(this.haloResponseMessage.getChallenge());
             loginRequestMessage.setSessionId(this.haloResponseMessage.getSessionId());
             loginRequestMessage.setMode(-2147483648);
-            ChannelFuture future = (ChannelFuture)session.write(loginRequestMessage);
-            future.addListener(new GenericFutureListener<ChannelFuture>() {
-                public void operationComplete(ChannelFuture future) throws Exception {
-                    try {
-                        future.get();
-                    } catch (Exception var3) {
-                        AnonymousClientAuthorizationProvider.LOGGER.error(var3.getMessage(), var3);
-                        AnonymousClientAuthorizationProvider.this.getListener().authorizationError(session, var3.getLocalizedMessage());
-                    }
-
-                }
-            });
+            final ChannelFuture future = (ChannelFuture) session.write(loginRequestMessage);
+            future.addListener(getChannelFutureGenericFutureListener(session));
         } else if (message instanceof OkResponseMessage && this.haloResponseMessage != null) {
             this.getListener().authorized(this.haloResponseMessage.getSessionId(), session, "anonymous");
         } else if (message instanceof ErrorResponseMessage) {
-            this.getListener().authorizationError(session, ((ErrorResponseMessage)message).getReason());
+            this.getListener().authorizationError(session, ((ErrorResponseMessage) message).getReason());
         } else if (this.haloResponseMessage == null) {
             this.getListener().authorizationError(session, "No halo response message");
         }
 
     }
 
+    public GenericFutureListener<ChannelFuture> getChannelFutureGenericFutureListener(final IoSessionWrapper session) {
+
+        return channelFuture -> {
+
+            try {
+                channelFuture.get();
+            } catch (InterruptedException | ExecutionException e) {
+                LOGGER.error("Error occurred...", e);
+                getListener().authorizationError(session, e.getLocalizedMessage());
+            }
+
+        };
+    }
+
     public void cleanUp() {
+
         this.haloResponseMessage = null;
         super.cleanUp();
     }

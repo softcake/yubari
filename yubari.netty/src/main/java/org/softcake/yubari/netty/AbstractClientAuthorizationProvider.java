@@ -17,6 +17,7 @@
 package org.softcake.yubari.netty;
 
 import com.dukascopy.dds4.transport.authorization.AuthorizationProviderListener;
+
 import java.net.InetSocketAddress;
 
 public abstract class AbstractClientAuthorizationProvider implements ClientAuthorizationProvider {
@@ -27,55 +28,70 @@ public abstract class AbstractClientAuthorizationProvider implements ClientAutho
     protected String sessionName;
 
     public AbstractClientAuthorizationProvider() {
+
     }
 
     public String getUserAgent() {
+
         return this.userAgent;
     }
 
-    public void setUserAgent(String userAgent) {
+    public void setUserAgent(final String userAgent) {
+
         this.userAgent = userAgent;
     }
 
     public boolean isSecondaryConnectionDisabled() {
+
         return this.secondaryConnectionDisabled;
     }
 
-    public void setSecondaryConnectionDisabled(boolean secondaryConnectionDisabled) {
+    public void setSecondaryConnectionDisabled(final boolean secondaryConnectionDisabled) {
+
         this.secondaryConnectionDisabled = secondaryConnectionDisabled;
     }
 
     public long getDroppableMessageServerTTL() {
+
         return this.droppableMessageServerTTL;
     }
 
-    public void setDroppableMessageServerTTL(long droppableMessageServerTTL) {
+    public void setDroppableMessageServerTTL(final long droppableMessageServerTTL) {
+
         this.droppableMessageServerTTL = droppableMessageServerTTL;
     }
 
-    /** @deprecated */
+    /**
+     * @deprecated
+     */
     @Deprecated
     public InetSocketAddress getAddress() {
+
         return null;
     }
 
     public AuthorizationProviderListener getListener() {
+
         return this.listener;
     }
 
-    public void setListener(AuthorizationProviderListener listener) {
+    public void setListener(final AuthorizationProviderListener listener) {
+
         this.listener = listener;
     }
 
     public void cleanUp() {
+
         this.listener = null;
     }
 
     public String getSessionName() {
+
         return this.sessionName;
     }
 
-    public void setSessionName(String sessionName) {
+    public void setSessionName(final String sessionName) {
+
         this.sessionName = sessionName;
     }
 }

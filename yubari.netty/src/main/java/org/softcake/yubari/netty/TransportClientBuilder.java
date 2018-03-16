@@ -42,6 +42,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+@SuppressWarnings({"squid:S109","squid:CallToDeprecatedMethod"})
 public class TransportClientBuilder {
     public static final int DEFAULT_TRANSPORT_POOL_SIZE = Math.max(Runtime.getRuntime().availableProcessors() / 4, 4);
     public static final int DEFAULT_EVENT_POOL_SIZE = Math.max(Runtime.getRuntime().availableProcessors() / 2, 10);
@@ -54,9 +55,6 @@ public class TransportClientBuilder {
     public static final TimeUnit DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT;
     public static final TimeUnit DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
     public static final Set<String> DEFAULT_SSL_PROTOCOLS;
-    private static final String TLS_V_1 = "TLSv1";
-    private static final String TLS_V_1_1 = "TLSv1.1";
-    private static final String TLS_V_1_2 = "TLSv1.2";
     public static final boolean DEFAULT_USE_FEEDER_SOCKET = true;
     public static final long DEFAULT_CONNECTION_TIMEOUT = 15000L;
     public static final long DEFAULT_AUTHORIZATION_TIMEOUT = 15000L;
@@ -108,8 +106,14 @@ public class TransportClientBuilder {
     public static final long DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
     public static final long DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
     public static final long DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
+    public static final long MAX_PING_TIMEOUT = TimeUnit.HOURS.toMillis(1);
+    public static final long MAX_PING_INTERVAL = TimeUnit.HOURS.toMillis(1);
+    private static final String TLS_V_1 = "TLSv1";
+    private static final String TLS_V_1_1 = "TLSv1.1";
+    private static final String TLS_V_1_2 = "TLSv1.2";
 
     static {
+
         DEFAULT_STREAM_CHUNK_PROCESSING_TIMEOUT = (int) TimeUnit.SECONDS.toMillis(15L);
         DEFAULT_EVENT_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
         DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
@@ -131,6 +135,7 @@ public class TransportClientBuilder {
         DEFAULT_SSL_PROTOCOLS = Collections.unmodifiableSet(sslProtocols);
     }
 
+    private final Map<ChannelOption<?>, Object> channelOptions;
     private ServerAddress address;
     private ClientAuthorizationProvider authorizationProvider = new AnonymousClientAuthorizationProvider();
     private CopyOnWriteArrayList<ClientListener> listeners;
@@ -156,7 +161,6 @@ public class TransportClientBuilder {
     private long droppableMessageClientTTL;
     private boolean skipDroppableMessages;
     private boolean logSkippedDroppableMessages;
-    private Map<ChannelOption<?>, Object> channelOptions;
     private String userAgent;
     private String transportName;
     private long reconnectDelay;
@@ -338,7 +342,7 @@ public class TransportClientBuilder {
 
     public TransportClientBuilder withPrimaryConnectionPingInterval(long primaryConnectionPingInterval) {
 
-        if (primaryConnectionPingInterval < 1L || primaryConnectionPingInterval > 3600000L) {
+        if (primaryConnectionPingInterval < 1L || primaryConnectionPingInterval > MAX_PING_INTERVAL) {
             primaryConnectionPingInterval = 0L;
         }
 
@@ -348,7 +352,7 @@ public class TransportClientBuilder {
 
     public TransportClientBuilder withSecondaryConnectionPingInterval(long secondaryConnectionPingInterval) {
 
-        if (secondaryConnectionPingInterval < 1L || secondaryConnectionPingInterval > 3600000L) {
+        if (secondaryConnectionPingInterval < 1L || secondaryConnectionPingInterval > MAX_PING_INTERVAL) {
             secondaryConnectionPingInterval = 0L;
         }
 
@@ -358,7 +362,7 @@ public class TransportClientBuilder {
 
     public TransportClientBuilder withPrimaryConnectionPingTimeout(long primaryConnectionPingTimeout) {
 
-        if (primaryConnectionPingTimeout < 1L || primaryConnectionPingTimeout > 3600000L) {
+        if (primaryConnectionPingTimeout < 1L || primaryConnectionPingTimeout > MAX_PING_TIMEOUT) {
             primaryConnectionPingTimeout = 0L;
         }
 
@@ -368,7 +372,7 @@ public class TransportClientBuilder {
 
     public TransportClientBuilder withSecondaryConnectionPingTimeout(long secondaryConnectionPingTimeout) {
 
-        if (secondaryConnectionPingTimeout < 1L || secondaryConnectionPingTimeout > 3600000L) {
+        if (secondaryConnectionPingTimeout < 1L || secondaryConnectionPingTimeout > MAX_PING_TIMEOUT) {
             secondaryConnectionPingTimeout = 0L;
         }
 

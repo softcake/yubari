@@ -32,40 +32,47 @@ public abstract class AbstractEventExecutorTask implements OrderedRunnable {
     private long procStartTime;
     private long sleepTime = 10L;
 
-    public AbstractEventExecutorTask(TransportClientSession clientSession, ClientProtocolHandler clientProtocolHandler) {
+    public AbstractEventExecutorTask(final TransportClientSession clientSession,
+                                     final ClientProtocolHandler clientProtocolHandler) {
+
         this.clientSession = clientSession;
         this.clientProtocolHandler = clientProtocolHandler;
     }
 
     public void executeInExecutor(final ExecutorService executor) {
+
         try {
             executor.execute(this);
-        } catch (RejectedExecutionException var3) {
+        } catch (final RejectedExecutionException var3) {
             this.procStartTime = System.currentTimeMillis();
             this.delayedExecutionTask = new Runnable() {
                 public void run() {
+
                     try {
                         executor.execute(this);
-                    } catch (RejectedExecutionException var4) {
-                        long currentTime = System.currentTimeMillis();
-                        if (currentTime - procStartTime >clientSession.getEventExecutionErrorDelay()) {
-                           LOGGER.error("[{}] Event executor queue overloaded"
-                                        + ", CRITICAL EXECUTION WAIT TIME: {}ms,"
-                                        + " possible application problem or deadlock"
-                                        ,clientSession.getTransportName(),(currentTime - procStartTime));
+                    } catch (final RejectedExecutionException var4) {
+                        final long currentTime = System.currentTimeMillis();
+                        if (currentTime - procStartTime > clientSession.getEventExecutionErrorDelay()) {
+                            LOGGER.error("[{}] Event executor queue overloaded"
+                                         + ", CRITICAL EXECUTION WAIT TIME: {}ms,"
+                                         + " possible application problem or deadlock",
+                                         clientSession.getTransportName(),
+                                         (currentTime - procStartTime));
                             clientProtocolHandler.checkAndLogEventPoolThreadDumps();
                             procStartTime = currentTime;
-                           sleepTime = 50L;
+                            sleepTime = 50L;
                         }
 
-                        clientSession.getScheduledExecutorService()
-                                     .schedule(delayedExecutionTask, sleepTime, TimeUnit.MILLISECONDS);
+                        clientSession.getScheduledExecutorService().schedule(delayedExecutionTask,
+                                                                             sleepTime,
+                                                                             TimeUnit.MILLISECONDS);
                     }
 
                 }
             };
-            this.clientSession.getScheduledExecutorService()
-                              .schedule(this.delayedExecutionTask, 5L, TimeUnit.MILLISECONDS);
+            this.clientSession.getScheduledExecutorService().schedule(this.delayedExecutionTask,
+                                                                      5L,
+                                                                      TimeUnit.MILLISECONDS);
         }
 
     }

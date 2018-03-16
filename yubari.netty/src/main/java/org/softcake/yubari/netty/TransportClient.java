@@ -32,8 +32,7 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DROPPABLE
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DROPPABLE_MESSAGE_SERVER_TTL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DUPLICATE_SYNC_MESSAGES_TO_CLIENT_LISTENERS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_ERROR_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_WARNING_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL;
@@ -53,8 +52,7 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_RECONNECT
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SECONDARY_CONNECTION_RECONNECTS_RESET_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SECONDARY_CONNECTION_RECONNECT_ATTEMPTS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_ERROR_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_WARNING_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_CPU_INFO_TO_SERVER;
@@ -66,16 +64,12 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_CH
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_SIZE;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_MESSAGE_TIMEOUT;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_SIZE;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_QUEUE_SIZE;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_TERMINATION_MAX_AWAIT_TIMEOUT_IN_MILLIS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_TRANSPORT_POOL_SIZE;
@@ -131,13 +125,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.management.InstanceAlreadyExistsException;
+import javax.management.InstanceNotFoundException;
 import javax.management.MBeanRegistrationException;
 import javax.management.MBeanServer;
 import javax.management.MalformedObjectNameException;
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 
-public class TransportClient implements ITransportClient {
+public class TransportClient implements org.softcake.yubari.netty.ITransportClient {
+    public static final int PROTOCOL_MESSAGE_EXCEPTION_LENGTH = 400;
     private static final Logger LOGGER = LoggerFactory.getLogger(TransportClient.class);
     private static final AtomicInteger defaultTransportCounter = new AtomicInteger();
     private final CopyOnWriteArrayList<ClientListener> listeners;
@@ -249,7 +245,7 @@ public class TransportClient implements ITransportClient {
         this.userAgent = "NettyTransportClient " + getTransportVersion() + " - " + getLocalIpAddress().getHostAddress();
         String version = this.getClass().getPackage().getImplementationVersion();
         version = version == null ? "SNAPSHOT" : version;
-       // this.userAgent = version;
+        // this.userAgent = version;
         this.reconnectDelay = DEFAULT_RECONNECT_DELAY;
         this.maxMessageSizeBytes = DEFAULT_MAX_MESSAGE_SIZE_BYTES;
         this.criticalEventQueueSize = DEFAULT_CRITICAL_EVENT_QUEUE_SIZE;
@@ -450,6 +446,7 @@ public class TransportClient implements ITransportClient {
         return new TransportClientBuilder();
     }
 
+
     public static InetAddress getLocalIpAddress() {
 
         InetAddress ipv4Local = null;
@@ -457,76 +454,60 @@ public class TransportClient implements ITransportClient {
         InetAddress ipv6Local = null;
         InetAddress ipv6Remote = null;
 
+
         try {
-            final Enumeration interfaces = NetworkInterface.getNetworkInterfaces();
 
-            label90:
-            while (true) {
-                NetworkInterface iface;
-                do {
-                    do {
-                        if (!interfaces.hasMoreElements()) {
-                            if (ipv4Remote != null) {
-                                return ipv4Remote;
-                            }
-
-                            if (ipv4Local != null) {
-                                return ipv4Local;
-                            }
-
-                            if (ipv6Remote != null) {
-                                return ipv6Remote;
-                            }
-
-                            if (ipv6Local != null) {
-                                return ipv6Local;
-                            }
-
-                            try {
-                                return InetAddress.getByAddress(new byte[]{127, 0, 0, 1});
-                            } catch (final UnknownHostException var9) {
-                                LOGGER.error(var9.getMessage(), var9);
-
-                                return null;
-                            }
-                        }
-
-                        iface = (NetworkInterface) interfaces.nextElement();
-                    } while (iface.isLoopback());
-                } while (!iface.isUp());
-
-                final Enumeration addresses = iface.getInetAddresses();
-
-                while (true) {
-                    while (true) {
-                        InetAddress addr;
-                        do {
-                            if (!addresses.hasMoreElements()) {
-                                continue label90;
-                            }
-
-                            addr = (InetAddress) addresses.nextElement();
-                        } while (addr.isLoopbackAddress());
-
-                        if (!addr.isSiteLocalAddress() && !addr.isLinkLocalAddress()) {
-                            if (addr instanceof Inet6Address) {
-                                ipv6Remote = addr;
+            // Iterate all NICs (network interface cards)...
+            for (final Enumeration ifaces = NetworkInterface.getNetworkInterfaces(); ifaces.hasMoreElements(); ) {
+                final NetworkInterface iface = (NetworkInterface) ifaces.nextElement();
+                // Iterate all IP addresses assigned to each card...
+                for (final Enumeration inetAddrs = iface.getInetAddresses(); inetAddrs.hasMoreElements(); ) {
+                    final InetAddress inetAddr = (InetAddress) inetAddrs.nextElement();
+                    if (!inetAddr.isLoopbackAddress()) {
+                        if (!inetAddr.isSiteLocalAddress() && !inetAddr.isLinkLocalAddress()) {
+                            if (inetAddr instanceof Inet6Address) {
+                                ipv6Remote = inetAddr;
                             } else {
-                                ipv4Remote = addr;
+                                ipv4Remote = inetAddr;
                             }
-                        } else if (addr instanceof Inet6Address) {
-                            ipv6Local = addr;
+                        } else if (inetAddr instanceof Inet6Address) {
+                            ipv6Local = inetAddr;
                         } else {
-                            ipv4Local = addr;
+                            ipv4Local = inetAddr;
                         }
+
                     }
                 }
             }
-        } catch (final SocketException var10) {
+            if (ipv4Remote != null) {
+                return ipv4Remote;
+            }
+
+            if (ipv4Local != null) {
+                return ipv4Local;
+            }
+
+            if (ipv6Remote != null) {
+                return ipv6Remote;
+            }
+
+            if (ipv6Local != null) {
+                return ipv6Local;
+            }
+
+            // At this point, we did not find a non-loopback address.
+            // Fall back to returning whatever InetAddress.getLocalHost() returns...
+            final InetAddress localHost = InetAddress.getLocalHost();
+            if (localHost == null) {
+                throw new UnknownHostException("The InetAddress.getLocalHost() method unexpectedly returned null.");
+            }
+            return localHost;
+        } catch (SocketException | UnknownHostException e) {
+            LOGGER.error("1. Failed to determine LAN address: ", e);
             try {
                 return InetAddress.getByAddress(new byte[]{127, 0, 0, 1});
             } catch (final UnknownHostException var8) {
-                LOGGER.error(var8.getMessage(), var8);
+                LOGGER.error("2. Failed to determine LAN address: ", e);
 
                 return null;
             }
@@ -966,120 +947,127 @@ public class TransportClient implements ITransportClient {
     public synchronized void connect() {
 
         this.checkAndSetTransportName();
-        TransportClientSession transportClientSession;
+        TransportClientSession clientSession;
         if (this.transportClientSession != null) {
             if (this.transportClientSession.isOnline() || this.transportClientSession.isConnecting()) {
                 return;
             }
 
-            transportClientSession = this.transportClientSession;
+            clientSession = this.transportClientSession;
             this.transportClientSession = null;
-            transportClientSession.terminate();
+            clientSession.terminate();
         }
 
         if (this.address == null) {
             throw new NullPointerException("[" + this.transportName + "] address is not set");
-        } else if (this.listeners != null && !this.listeners.isEmpty()) {
-            if (this.authorizationProvider == null) {
-                throw new NullPointerException("[" + this.transportName + "] ClientAuthorizationProvider is not set");
-            } else {
-                this.authorizationProvider.setUserAgent(this.userAgent);
-                this.authorizationProvider.setSecondaryConnectionDisabled(!this.useFeederSocket);
-                this.authorizationProvider.setDroppableMessageServerTTL(this.droppableMessageServerTTL);
-                if (this.concurrencyPolicy == null) {
-                    throw new NullPointerException("["
-                                                   + this.transportName
-                                                   + "] FeedbackEventsConcurrencyPolicy is not set");
-                } else if (this.staticSessionDictionary == null) {
-                    throw new NullPointerException("[" + this.transportName + "] staticSessionDictionary is not set");
-                } else if (this.maxSubsequentPingFailedCount <= 0L) {
-                    throw new IllegalArgumentException("maxSubsequentPingFailedCount must be greater than zero");
-                } else {
-                    this.droppedMessageCounter.set(0L);
-                    transportClientSession = new TransportClientSession(this,
-                                                                        this.address.toInetSocketAddress(),
-                                                                        this.authorizationProvider,
-                                                                        this.listeners,
-                                                                        this.useSSL,
-                                                                        this.sslHandshakeTimeout,
-                                                                        this.protocolVersionNegotiationTimeout,
-                                                                        this.useFeederSocket,
-                                                                        this.connectionTimeout,
-                                                                        this.authorizationTimeout,
-                                                                        this.transportPoolSize,
-                                                                        this.eventPoolSize,
-                                                                        this.eventPoolAutoCleanupInterval,
-                                                                        this.authEventPoolSize,
-                                                                        this.authEventPoolAutoCleanupInterval,
-                                                                        this.criticalAuthEventQueueSize,
-                                                                        this.primaryConnectionPingInterval,
-                                                                        this.secondaryConnectionPingInterval,
-                                                                        this.primaryConnectionPingTimeout,
-                                                                        this.secondaryConnectionPingTimeout,
-                                                                        this.secondaryConnectionReconnectAttempts,
-                                                                        this.secondaryConnectionReconnectsResetDelay,
-                                                                        this.droppableMessageServerTTL,
-                                                                        this.droppableMessageClientTTL,
-                                                                        this.skipDroppableMessages,
-                                                                        this.logSkippedDroppableMessages,
-                                                                        this.channelOptions,
-                                                                        this.transportName,
-                                                                        this.reconnectDelay,
-                                                                        this.maxMessageSizeBytes,
-                                                                        this.criticalEventQueueSize,
-                                                                        this.eventExecutionWarningDelay,
-                                                                        this.eventExecutionErrorDelay,
-                                                                        this.eventExecutionDelayCheckEveryNTimesWarning,
-                                                                        this.eventExecutionDelayCheckEveryNTimesError,
-                                                                        this.sendCompletionWarningDelay,
-                                                                        this.sendCompletionErrorDelay,
-                                                                        this.sendCompletionDelayCheckEveryNTimesWarning,
-                                                                        this.sendCompletionDelayCheckEveryNTimesError,
-                                                                        this.concurrencyPolicy,
-                                                                        this.securityExceptionHandler,
-                                                                        this.staticSessionDictionary,
-                                                                        this.sessionStats,
-                                                                        this.pingListener,
-                                                                        this.syncMessageTimeout,
-                                                                        this.duplicateSyncMessagesToClientListeners,
-                                                                        this.droppedMessageCounter,
-                                                                        this.logEventPoolThreadDumpsOnLongExecution,
-                                                                        this.streamListener,
-                                                                        this.streamChunkProcessingTimeout,
-                                                                        this.streamBufferSize,
-                                                                        this.streamProcessingPoolSize,
-                                                                        this.streamProcessingPoolAutoCleanupInterval,
-                                                                        this.criticalStreamProcessingQueueSize,
-                                                                        this.sendCpuInfoToServer,
-                                                                        this.syncRequestProcessingPoolSize,
-                                                                        this.syncRequestProcessingPoolAutoCleanupInterval,
-                                                                        this.criticalSyncRequestProcessingQueueSize,
-                                                                        this.terminationMaxAwaitTimeoutInMillis,
-                                                                        this.maxSubsequentPingFailedCount,
-                                                                        this.transportClientSessionStateHandler,
-                                                                        this.eventPoolTerminationTimeUnitCount,
-                                                                        this.eventPoolTerminationTimeUnit,
-                                                                        this.authEventPoolTerminationTimeUnitCount,
-                                                                        this.authEventPoolTerminationTimeUnit,
-                                                                        this.streamProcessingPoolTerminationTimeUnitCount,
-                                                                        this.streamProcessingPoolTerminationTimeUnit,
-                                                                        this.syncRequestProcessingPoolTerminationTimeUnitCount,
-                                                                        this.syncRequestProcessingPoolTerminationTimeUnit,
-                                                                        this.enabledSslProtocols);
+        }
 
-                    try {
-                        transportClientSession.init();
-                        transportClientSession.connect();
-                        this.transportClientSession = transportClientSession;
-                    } catch (final Throwable var3) {
-                        transportClientSession.terminate();
-                        throw var3;
-                    }
-                }
-            }
-        } else {
+        if (this.listeners == null || this.listeners.isEmpty()) {
             throw new NullPointerException("[" + this.transportName + "] ClientListeners are not set");
         }
+
+        if (this.authorizationProvider == null) {
+            throw new NullPointerException("[" + this.transportName + "] ClientAuthorizationProvider is not set");
+        }
+
+        if (this.concurrencyPolicy == null) {
+            throw new NullPointerException("[" + this.transportName + "] FeedbackEventsConcurrencyPolicy is not set");
+        }
+
+        if (this.staticSessionDictionary == null) {
+            throw new NullPointerException("[" + this.transportName + "] staticSessionDictionary is not set");
+        }
+
+        if (this.maxSubsequentPingFailedCount <= 0L) {
+            throw new IllegalArgumentException("maxSubsequentPingFailedCount must be greater than zero");
+        }
+
+        this.authorizationProvider.setUserAgent(this.userAgent);
+        this.authorizationProvider.setSecondaryConnectionDisabled(!this.useFeederSocket);
+        this.authorizationProvider.setDroppableMessageServerTTL(this.droppableMessageServerTTL);
+        this.droppedMessageCounter.set(0L);
+
+        clientSession = new TransportClientSession(this,
+                                                   this.address.toInetSocketAddress(),
+                                                   this.authorizationProvider,
+                                                   this.listeners,
+                                                   this.useSSL,
+                                                   this.sslHandshakeTimeout,
+                                                   this.protocolVersionNegotiationTimeout,
+                                                   this.useFeederSocket,
+                                                   this.connectionTimeout,
+                                                   this.authorizationTimeout,
+                                                   this.transportPoolSize,
+                                                   this.eventPoolSize,
+                                                   this.eventPoolAutoCleanupInterval,
+                                                   this.authEventPoolSize,
+                                                   this.authEventPoolAutoCleanupInterval,
+                                                   this.criticalAuthEventQueueSize,
+                                                   this.primaryConnectionPingInterval,
+                                                   this.secondaryConnectionPingInterval,
+                                                   this.primaryConnectionPingTimeout,
+                                                   this.secondaryConnectionPingTimeout,
+                                                   this.secondaryConnectionReconnectAttempts,
+                                                   this.secondaryConnectionReconnectsResetDelay,
+                                                   this.droppableMessageServerTTL,
+                                                   this.droppableMessageClientTTL,
+                                                   this.skipDroppableMessages,
+                                                   this.logSkippedDroppableMessages,
+                                                   this.channelOptions,
+                                                   this.transportName,
+                                                   this.reconnectDelay,
+                                                   this.maxMessageSizeBytes,
+                                                   this.criticalEventQueueSize,
+                                                   this.eventExecutionWarningDelay,
+                                                   this.eventExecutionErrorDelay,
+                                                   this.eventExecutionDelayCheckEveryNTimesWarning,
+                                                   this.eventExecutionDelayCheckEveryNTimesError,
+                                                   this.sendCompletionWarningDelay,
+                                                   this.sendCompletionErrorDelay,
+                                                   this.sendCompletionDelayCheckEveryNTimesWarning,
+                                                   this.sendCompletionDelayCheckEveryNTimesError,
+                                                   this.concurrencyPolicy,
+                                                   this.securityExceptionHandler,
+                                                   this.staticSessionDictionary,
+                                                   this.sessionStats,
+                                                   this.pingListener,
+                                                   this.syncMessageTimeout,
+                                                   this.duplicateSyncMessagesToClientListeners,
+                                                   this.droppedMessageCounter,
+                                                   this.logEventPoolThreadDumpsOnLongExecution,
+                                                   this.streamListener,
+                                                   this.streamChunkProcessingTimeout,
+                                                   this.streamBufferSize,
+                                                   this.streamProcessingPoolSize,
+                                                   this.streamProcessingPoolAutoCleanupInterval,
+                                                   this.criticalStreamProcessingQueueSize,
+                                                   this.sendCpuInfoToServer,
+                                                   this.syncRequestProcessingPoolSize,
+                                                   this.syncRequestProcessingPoolAutoCleanupInterval,
+                                                   this.criticalSyncRequestProcessingQueueSize,
+                                                   this.terminationMaxAwaitTimeoutInMillis,
+                                                   this.maxSubsequentPingFailedCount,
+                                                   this.transportClientSessionStateHandler,
+                                                   this.eventPoolTerminationTimeUnitCount,
+                                                   this.eventPoolTerminationTimeUnit,
+                                                   this.authEventPoolTerminationTimeUnitCount,
+                                                   this.authEventPoolTerminationTimeUnit,
+                                                   this.streamProcessingPoolTerminationTimeUnitCount,
+                                                   this.streamProcessingPoolTerminationTimeUnit,
+                                                   this.syncRequestProcessingPoolTerminationTimeUnitCount,
+                                                   this.syncRequestProcessingPoolTerminationTimeUnit,
+                                                   this.enabledSslProtocols);
+
+        try {
+            clientSession.init();
+            clientSession.connect();
+            this.transportClientSession = clientSession;
+        } catch (final Throwable t) {
+            clientSession.terminate();
+            throw t;
+        }
+
+
     }
 
     public String getTransportSessionId() {
@@ -1121,12 +1109,15 @@ public class TransportClient implements ITransportClient {
 
         this.listeners.clear();
         if (this.needJmxBean) {
+
+
             try {
                 final MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
                 mbs.unregisterMBean(new ObjectName(this.checkAndGetJmxName()));
-            } catch (final Exception var2) {
-                LOGGER.error("Error unregistering server MBean: " + var2.getMessage(), var2);
+            } catch (InstanceNotFoundException | MalformedObjectNameException | MBeanRegistrationException e) {
+                LOGGER.error("Error unregistered server MBean: ", e);
             }
+
         }
 
     }
@@ -1149,20 +1140,24 @@ public class TransportClient implements ITransportClient {
         if (transportClientSessionLocal != null) {
             return transportClientSessionLocal.sendRequest(message, timeout, timeoutUnits);
         } else {
-            throw new ConnectException("[" + this.transportName + "] TransportClient not connected, message: " + message
-                .toString(400));
+            final String exMessage = String.format("[%s] TransportClient not connected, message: %s",
+                                                   this.transportName,
+                                                   message.toString(PROTOCOL_MESSAGE_EXCEPTION_LENGTH));
+            throw new ConnectException(exMessage);
         }
     }
 
     public <V> ListenableFuture<V> sendMessageAsync(final ProtocolMessage message) {
 
         final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-        return transportClientSessionLocal != null
-               ? transportClientSessionLocal.sendMessageAsync(message)
-               : Futures.immediateFailedFuture(new ConnectException("["
-                                                                    + this.transportName
-                                                                    + "] TransportClient not connected, message: "
-                                                                    + message.toString(400)));
+        if (transportClientSessionLocal != null) {
+            return transportClientSessionLocal.sendMessageAsync(message);
+        } else {
+            final String exMessage = String.format("[%s] TransportClient not connected, message: %s",
+                                                   this.transportName,
+                                                   message.toString(PROTOCOL_MESSAGE_EXCEPTION_LENGTH));
+            return Futures.immediateFailedFuture(new ConnectException(exMessage));
+        }
     }
 
     public <V> void sendMessageAsync(final ProtocolMessage message, final FutureCallback<V> callback) {
@@ -1197,7 +1192,7 @@ public class TransportClient implements ITransportClient {
         if (transportClientSessionLocal != null) {
             transportClientSessionLocal.controlRequest(message, messageSentListener);
         } else {
-            throw new IOException("[" + this.transportName + "] TransportClient not connected");
+            throw new IOException(String.format("[%s] TransportClient not connected",this.transportName));
         }
     }
 
@@ -1212,7 +1207,7 @@ public class TransportClient implements ITransportClient {
         if (transportClientSessionLocal != null) {
             return transportClientSessionLocal.controlBlockingRequest(message, timeoutTime);
         } else {
-            throw new IOException("[" + this.transportName + "] TransportClient not connected");
+            throw new IOException(String.format("[%s] TransportClient not connected",this.transportName));
         }
     }
 
@@ -1227,7 +1222,7 @@ public class TransportClient implements ITransportClient {
             transportClientSessionLocal.controlRequest(message);
             return null;
         } else {
-            throw new RuntimeException("[" + this.transportName + "] TransportClient not connected");
+            throw new RuntimeException(String.format("[%s] TransportClient not connected",this.transportName));
         }
     }
 
@@ -1242,19 +1237,18 @@ public class TransportClient implements ITransportClient {
         if (transportClientSessionLocal != null) {
             return transportClientSessionLocal.controlSynchRequest(message, timeoutTime);
         } else {
-            throw new RuntimeException("[" + this.transportName + "] TransportClient not connected");
+            throw new RuntimeException(String.format("[%s] TransportClient not connected",this.transportName));
         }
     }
 
     RequestListenableFuture createFailedFuture(final ProtocolMessage message) {
-
+        final String exMessage = String.format("[%s] TransportClient not connected, message: %s",
+                                               this.transportName,
+                                               message.toString(PROTOCOL_MESSAGE_EXCEPTION_LENGTH));
         final RequestMessageTransportListenableFuture
             task
-            = new RequestMessageTransportListenableFuture(this.transportName, this.getNextId(), (Map) null, message);
-        task.setException(new ConnectException("["
-                                               + this.transportName
-                                               + "] TransportClient not connected, message: "
-                                               + message.toString(400)));
+            = new RequestMessageTransportListenableFuture(this.transportName, this.getNextId(), null, message);
+        task.setException(new ConnectException(exMessage));
         return task;
     }
 
@@ -1279,7 +1273,7 @@ public class TransportClient implements ITransportClient {
                                                              timeout,
                                                              timeoutUnit);
         } else {
-            throw new RuntimeException("[" + this.transportName + "] TransportClient not connected");
+            throw new RuntimeException(String.format("[%s] TransportClient not connected",this.transportName));
         }
     }
 

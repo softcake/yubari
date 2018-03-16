@@ -30,7 +30,6 @@ import com.dukascopy.dds4.transport.common.mina.ClientListener;
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.mina.DisconnectedEvent;
 import com.dukascopy.dds4.transport.common.mina.ExtendedClientDisconnectReason;
-import com.dukascopy.dds4.transport.common.mina.ITransportClient;
 import com.dukascopy.dds4.transport.common.mina.InvocationResult;
 import com.dukascopy.dds4.transport.common.mina.TransportHelper;
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
