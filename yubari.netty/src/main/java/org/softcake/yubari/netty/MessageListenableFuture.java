@@ -23,31 +23,31 @@ import io.netty.util.concurrent.GenericFutureListener;
 public class MessageListenableFuture<V> extends AbstractFuture<V> {
     private ChannelFuture channelFuture;
 
-    public MessageListenableFuture(ChannelFuture channelFuture) {
+    public MessageListenableFuture(final ChannelFuture channelFuture) {
         this.channelFuture = channelFuture;
         this.addChannelListener();
     }
 
-    protected boolean set(V value) {
-        boolean result = super.set(value);
+    protected boolean set(final V value) {
+        final boolean result = super.set(value);
         this.cleanup(false);
         return result;
     }
 
-    protected boolean setException(Throwable throwable) {
-        boolean result = super.setException(throwable);
+    protected boolean setException(final Throwable throwable) {
+        final boolean result = super.setException(throwable);
         this.cleanup(false);
         return result;
     }
 
-    public boolean cancel(boolean mayInterruptIfRunning) {
-        boolean result = super.cancel(mayInterruptIfRunning);
+    public boolean cancel(final boolean mayInterruptIfRunning) {
+        final boolean result = super.cancel(mayInterruptIfRunning);
         this.cleanup(mayInterruptIfRunning);
         return result;
     }
 
-    private void cleanup(boolean mayInterruptIfRunning) {
-        ChannelFuture localChannelFuture = this.channelFuture;
+    private void cleanup(final boolean mayInterruptIfRunning) {
+        final ChannelFuture localChannelFuture = this.channelFuture;
         if (localChannelFuture != null) {
             if (!localChannelFuture.isDone()) {
                 localChannelFuture.cancel(mayInterruptIfRunning);
@@ -60,7 +60,7 @@ public class MessageListenableFuture<V> extends AbstractFuture<V> {
 
     private void addChannelListener() {
         this.channelFuture.addListener(new GenericFutureListener<ChannelFuture>() {
-            public void operationComplete(ChannelFuture future) throws Exception {
+            public void operationComplete(final ChannelFuture future) throws Exception {
                 MessageListenableFuture.this.channelFuture = null;
                 if (future.isSuccess()) {
                     MessageListenableFuture.this.set(null);

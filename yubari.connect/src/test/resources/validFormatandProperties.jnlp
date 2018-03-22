@@ -33,8 +33,8 @@
     </security>
     <update check="timeout" policy="always"/>
     <platform-res>
-        <property name="jnlp.platform.logo.url" value="images/logo/dukascopy-sw_32x32.png"/>
-        <property name="jnlp.company.logo.url" value="images/dukascopy-sw.png"/>
+        <property name="jnlp.platform.logo.port" value="images/logo/dukascopy-sw_32x32.png"/>
+        <property name="jnlp.company.logo.port" value="images/dukascopy-sw.png"/>
     </platform-res>
   <resources>
     <property name="jnlp.platform.mode" value="jforex"/>
@@ -43,14 +43,14 @@
     <property name="jnlp.packEnabled" value="True"/>
     <property name="sun.java2d.d3d" value="false"/>
     <property name="jnlp.platform.name" value="JForex"/>
-    <property name="jnlp.localize.reg.form.url" value="true"/>
+    <property name="jnlp.localize.reg.form.port" value="true"/>
     <property name="java.net.preferIPv4Stack" value="true"/>
     <property name="jnlp.href" value="jforex_3.jnlp" />        
-    <property name="jnlp.login.url" value="https://login.dukascopy.com/authorization-1/demo,https://login.online-trading-solutions.com/authorization-1/demo,https://login.dukascopy.com/authorization-2/demo"/>
-    <property name="jnlp.srp6.login.url" value="https://login.dukascopy.com/authorization-1/demo,https://login.online-trading-solutions.com/authorization-1/demo,https://login.dukascopy.com/authorization-2/demo"/>
-    <property name="jnlp.register.new.demo.url" value="https://demo-login.dukascopy.com/fo/register/demo_new"/>
-    <property name="jnlp.forgotten.url" value="https://demo-login.dukascopy.com/fo/password/forgot/"/>
-    <property name="jnlp.open.live.url" value="https://live-login.dukascopy.com/bankrto"/>
+    <property name="jnlp.login.port" value="https://login.dukascopy.com/authorization-1/demo,https://login.online-trading-solutions.com/authorization-1/demo,https://login.dukascopy.com/authorization-2/demo"/>
+    <property name="jnlp.srp6.login.port" value="https://login.dukascopy.com/authorization-1/demo,https://login.online-trading-solutions.com/authorization-1/demo,https://login.dukascopy.com/authorization-2/demo"/>
+    <property name="jnlp.register.new.demo.port" value="https://demo-login.dukascopy.com/fo/register/demo_new"/>
+    <property name="jnlp.forgotten.port" value="https://demo-login.dukascopy.com/fo/password/forgot/"/>
+    <property name="jnlp.open.live.port" value="https://live-login.dukascopy.com/bankrto"/>
     <java version="1.8+" java-vm-args="-Xmx512m -Xms32m" />
     <extension name="AppFramework" href="https://platform.dukascopy.com/demo_3/libs_3.jnlp"/>
   </resources>

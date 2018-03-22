@@ -16,8 +16,6 @@
 
 package org.softcake.yubari.netty.data;
 
-import com.google.common.base.Objects;
-
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -46,38 +44,25 @@ public class DroppableMessageScheduling {
     }
 
     @Override
-    public int hashCode() {
+    public boolean equals(final Object o) {
 
-        return Objects.hashCode(lastScheduledTime, scheduledCount);
+        if (this == o) { return true; }
+        if (!(o instanceof DroppableMessageScheduling)) { return false; }
+
+        final DroppableMessageScheduling that = (DroppableMessageScheduling) o;
+
+        if (lastScheduledTime != null
+            ? !lastScheduledTime.equals(that.lastScheduledTime)
+            : that.lastScheduledTime != null) { return false; }
+        return scheduledCount != null ? scheduledCount.equals(that.scheduledCount) : that.scheduledCount == null;
     }
 
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        } else if (obj == null) {
-            return false;
-        } else if (this.getClass() != obj.getClass()) {
-            return false;
-        } else {
-            DroppableMessageScheduling other = (DroppableMessageScheduling)obj;
-            if (this.lastScheduledTime == null) {
-                if (other.lastScheduledTime != null) {
-                    return false;
-                }
-            } else if (!this.lastScheduledTime.equals(other.lastScheduledTime)) {
-                return false;
-            }
+    @Override
+    public int hashCode() {
 
-            if (this.scheduledCount == null) {
-                if (other.scheduledCount != null) {
-                    return false;
-                }
-            } else if (!this.scheduledCount.equals(other.scheduledCount)) {
-                return false;
-            }
-
-            return true;
-        }
+        int result = lastScheduledTime != null ? lastScheduledTime.hashCode() : 0;
+        result = 31 * result + (scheduledCount != null ? scheduledCount.hashCode() : 0);
+        return result;
     }
 
     public String toString() {

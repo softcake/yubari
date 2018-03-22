@@ -122,6 +122,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -964,23 +965,25 @@ public class TransportClient implements org.softcake.yubari.netty.ITransportClie
         }
 
         if (this.address == null) {
-            throw new NullPointerException("[" + this.transportName + "] address is not set");
+            throw new NullPointerException(String.format("[%s] address is not set", this.transportName));
         }
 
         if (this.listeners == null || this.listeners.isEmpty()) {
-            throw new NullPointerException("[" + this.transportName + "] ClientListeners are not set");
+            throw new NullPointerException(String.format("[%s] ClientListeners are not set", this.transportName));
         }
 
         if (this.authorizationProvider == null) {
-            throw new NullPointerException("[" + this.transportName + "] ClientAuthorizationProvider is not set");
+            throw new NullPointerException(String.format("[%s] ClientAuthorizationProvider is not set",
+                                                         this.transportName));
         }
 
         if (this.concurrencyPolicy == null) {
-            throw new NullPointerException("[" + this.transportName + "] FeedbackEventsConcurrencyPolicy is not set");
+            throw new NullPointerException(String.format("[%s] FeedbackEventsConcurrencyPolicy is not set",
+                                                         this.transportName));
         }
 
         if (this.staticSessionDictionary == null) {
-            throw new NullPointerException("[" + this.transportName + "] staticSessionDictionary is not set");
+            throw new NullPointerException(String.format("[%s] staticSessionDictionary is not set", this.transportName));
         }
 
         if (this.maxSubsequentPingFailedCount <= 0L) {
@@ -1139,7 +1142,7 @@ public class TransportClient implements org.softcake.yubari.netty.ITransportClie
     }
 
     public ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
-        throws InterruptedException, TimeoutException, ConnectException {
+        throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
 
         final TransportClientSession transportClientSessionLocal = this.transportClientSession;
         if (transportClientSessionLocal != null) {
@@ -1206,7 +1209,7 @@ public class TransportClient implements org.softcake.yubari.netty.ITransportClie
      */
     @Deprecated
     public ProtocolMessage controlBlockingRequest(final ProtocolMessage message, final Long timeoutTime)
-        throws InterruptedException, IOException {
+        throws InterruptedException, IOException, TimeoutException, ExecutionException {
 
         final TransportClientSession transportClientSessionLocal = this.transportClientSession;
         if (transportClientSessionLocal != null) {

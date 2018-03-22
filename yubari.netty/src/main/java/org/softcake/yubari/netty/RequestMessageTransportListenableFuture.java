@@ -31,46 +31,55 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class RequestMessageTransportListenableFuture extends AbstractFuture<ProtocolMessage> implements
-    RequestListenableFuture {
+public class RequestMessageTransportListenableFuture extends AbstractFuture<ProtocolMessage>
+    implements RequestListenableFuture {
     private static final Logger LOGGER = LoggerFactory.getLogger(RequestMessageTransportListenableFuture.class);
     private final Object channelFutureLock = new Object();
-    private String transportName;
+    private final ProtocolMessage requestMessage;
+    private final String transportName;
     private Long syncRequestId;
     private Map<Long, RequestMessageTransportListenableFuture> syncRequests;
-    private final ProtocolMessage requestMessage;
-    private long inProcessResponseLastTime = -9223372036854775808L;
+    private long inProcessResponseLastTime = Long.MIN_VALUE;
     private ChannelFuture channelFuture;
     private ScheduledFuture<?> timeoutScheduledFuture;
 
-    public RequestMessageTransportListenableFuture(String transportName, Long syncRequestId, Map<Long, RequestMessageTransportListenableFuture> syncRequests, ProtocolMessage requestMessage) {
+    public RequestMessageTransportListenableFuture(final String transportName,
+                                                   final Long syncRequestId,
+                                                   final Map<Long, RequestMessageTransportListenableFuture>
+                                                       syncRequests,
+                                                   final ProtocolMessage requestMessage) {
+
         this.transportName = transportName;
         this.syncRequestId = syncRequestId;
         this.syncRequests = syncRequests;
         this.requestMessage = requestMessage;
     }
 
-    public boolean set(ProtocolMessage value) {
-        boolean result = super.set(value);
-        this.cleanup(false);
+    public boolean set(final ProtocolMessage value) {
+
+        final boolean result = super.set(value);
+        this.cleanup(Boolean.FALSE);
         return result;
     }
 
-    public boolean setException(Throwable throwable) {
-        boolean result = super.setException(throwable);
-        this.cleanup(false);
+    public boolean setException(final Throwable throwable) {
+
+        final boolean result = super.setException(throwable);
+        this.cleanup(Boolean.FALSE);
         return result;
     }
 
-    public boolean cancel(boolean mayInterruptIfRunning) {
-        boolean result = super.cancel(mayInterruptIfRunning);
+    public boolean cancel(final boolean mayInterruptIfRunning) {
+
+        final boolean result = super.cancel(mayInterruptIfRunning);
         this.cleanup(mayInterruptIfRunning);
         return result;
     }
 
-    private void cleanup(boolean mayInterruptIfRunning) {
-        Map<Long, RequestMessageTransportListenableFuture> localSyncRequests = this.syncRequests;
-        Long syncRequestIdLocal = this.syncRequestId;
+    private void cleanup(final boolean mayInterruptIfRunning) {
+
+        final Map<Long, RequestMessageTransportListenableFuture> localSyncRequests = this.syncRequests;
+        final Long syncRequestIdLocal = this.syncRequestId;
         if (localSyncRequests != null && syncRequestIdLocal != null) {
             localSyncRequests.remove(syncRequestIdLocal);
         }
@@ -81,8 +90,7 @@ public class RequestMessageTransportListenableFuture extends AbstractFuture<Prot
             this.timeoutScheduledFuture.cancel(false);
         }
 
-        Object var4 = this.channelFutureLock;
-        synchronized(this.channelFutureLock) {
+        synchronized (this.channelFutureLock) {
             if (this.channelFuture != null) {
                 this.channelFuture.cancel(mayInterruptIfRunning);
                 this.channelFuture = null;
@@ -92,70 +100,75 @@ public class RequestMessageTransportListenableFuture extends AbstractFuture<Prot
     }
 
     public void timeout() {
-        Object var1 = this.channelFutureLock;
-        synchronized(this.channelFutureLock) {
+
+        synchronized (this.channelFutureLock) {
             if (this.channelFuture != null) {
                 this.channelFuture.cancel(true);
                 this.channelFuture = null;
             }
         }
 
-        this.setException(new TimeoutException("[" + this.transportName + "] Timeout while waiting for response"));
+        this.setException(new TimeoutException(String.format("[%s] Timeout while waiting for response",
+                                                             this.transportName)));
     }
 
-    public void setInProcessResponseLastTime(long inProcessResponseLastTime) {
-        this.inProcessResponseLastTime = inProcessResponseLastTime;
-    }
+    public void scheduleTimeoutCheck(final SyncMessageTimeoutChecker timeoutChecker) {
 
-    public void scheduleTimeoutCheck(SyncMessageTimeoutChecker timeoutChecker) {
         this.timeoutScheduledFuture = timeoutChecker.scheduleCheck();
     }
 
-    void scheduleTimeoutCheck(SyncMessageTimeoutChecker timeoutChecker, long timeout, TimeUnit timeoutUnits) {
+    public void scheduleTimeoutCheck(final SyncMessageTimeoutChecker timeoutChecker,
+                              final long timeout,
+                              final TimeUnit timeoutUnits) {
+
         this.timeoutScheduledFuture = timeoutChecker.scheduleCheck(timeout, timeoutUnits);
     }
 
-    public void setChannelFuture(ChannelFuture cf) {
+    public void setChannelFuture(final ChannelFuture cf) {
+
         if (cf == null) {
             throw new NullPointerException("Passed channel future is null");
         } else {
-            Object var2 = this.channelFutureLock;
-            synchronized(this.channelFutureLock) {
+
+            synchronized (this.channelFutureLock) {
                 this.channelFuture = cf;
-                cf.addListener(new GenericFutureListener<ChannelFuture>() {
-                    public void operationComplete(ChannelFuture future) throws Exception {
-                        try {
-                            synchronized(RequestMessageTransportListenableFuture.this.channelFutureLock) {
-                                RequestMessageTransportListenableFuture.this.channelFuture = null;
-                            }
+                cf.addListener((GenericFutureListener<ChannelFuture>) future -> {
 
-                            if (!future.isSuccess()) {
-                                if (future.isCancelled()) {
-                                    if (!RequestMessageTransportListenableFuture.this.isCancelled()) {
-                                        RequestMessageTransportListenableFuture.this.cancel(false);
-                                    }
-                                } else if (future.isDone() && future.cause() != null) {
-                                    RequestMessageTransportListenableFuture.this.setException(future.cause());
-                                } else {
-                                    RequestMessageTransportListenableFuture.this.setException(new Exception("[" + RequestMessageTransportListenableFuture.this.transportName + "] Unexpected future state"));
-                                }
-                            }
-                        } catch (Throwable var5) {
-                            RequestMessageTransportListenableFuture.LOGGER.error(var5.getMessage(), var5);
-
+                        synchronized (channelFutureLock) {
+                            channelFuture = null;
                         }
 
-                    }
+                        if (!future.isSuccess()) {
+                            if (future.isCancelled()) {
+                                if (!isCancelled()) {
+                                    cancel(Boolean.FALSE);
+                                }
+                            } else if (future.isDone() && future.cause() != null) {
+                                setException(future.cause());
+                            } else {
+                                setException(new Exception(String.format("[%s] Unexpected future state",
+                                                                         transportName)));
+                            }
+                        }
+
+
                 });
             }
         }
     }
 
     public long getInProcessResponseLastTime() {
+
         return this.inProcessResponseLastTime;
     }
 
+    public void setInProcessResponseLastTime(final long inProcessResponseLastTime) {
+
+        this.inProcessResponseLastTime = inProcessResponseLastTime;
+    }
+
     public ProtocolMessage getRequestMessage() {
+
         return this.requestMessage;
     }
 }

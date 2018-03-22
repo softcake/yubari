@@ -17,7 +17,6 @@
 package org.softcake.yubari.netty;
 
 import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolEncoder;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -28,8 +27,6 @@ import io.netty.util.AttributeKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Iterator;
-
 @Sharable
 public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler {
     public static final String TRANSPORT_HELLO_MESSAGE = "DDS4TRANSPORT";
@@ -39,43 +36,40 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
         = AttributeKey.valueOf("protocol_version_response_buffer");
     private static final Logger LOGGER = LoggerFactory.getLogger(ProtocolVersionClientNegotiatorHandler.class);
 
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    @Override
+    public void channelActive(final ChannelHandlerContext ctx) throws Exception {
 
-        Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
+        final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
         byteBufAttribute.set(ctx.alloc().buffer(SEVER_RESPONSE_MESSAGE_SIZE));
-        ByteBuf response = ctx.alloc().buffer(TRANSPORT_HELLO_MESSAGE.length()
-                                              + 2
-                                              + SessionProtocolEncoder.SUPPORTED_VERSIONS.size() * 4);
+        final ByteBuf response = ctx.alloc().buffer(TRANSPORT_HELLO_MESSAGE.length()
+                                                    + 2
+                                                    + SessionProtocolEncoder.SUPPORTED_VERSIONS.size() * 4);
         response.writeBytes("DDS4TRANSPORT".getBytes("US-ASCII"));
         response.writeShort(SessionProtocolEncoder.SUPPORTED_VERSIONS.size() * 4);
-        Iterator i$ = SessionProtocolEncoder.SUPPORTED_VERSIONS.iterator();
 
-        while (i$.hasNext()) {
-            Integer supportedVersion = (Integer) i$.next();
-            response.writeInt(supportedVersion);
-        }
+        SessionProtocolEncoder.SUPPORTED_VERSIONS.forEach(response::writeInt);
 
         LOGGER.trace("Sending supported versions list: {}", SessionProtocolEncoder.SUPPORTED_VERSIONS);
         ctx.writeAndFlush(response);
         ctx.fireChannelActive();
     }
 
-    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+    public void handlerRemoved(final ChannelHandlerContext ctx) throws Exception {
 
         this.cleanUp(ctx);
         super.handlerRemoved(ctx);
     }
 
-    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
 
         this.cleanUp(ctx);
         super.channelInactive(ctx);
     }
 
-    private void cleanUp(ChannelHandlerContext ctx) throws Exception {
+    private void cleanUp(final ChannelHandlerContext ctx) throws Exception {
 
-        Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
-        ByteBuf byteBuf = byteBufAttribute.get();
+        final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
+        final ByteBuf byteBuf = byteBufAttribute.get();
         if (byteBuf != null) {
             byteBuf.release();
 
@@ -86,34 +80,38 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
 
     }
 
-    public void channelRead(ChannelHandlerContext ctx, Object message) throws Exception {
+    public void channelRead(final ChannelHandlerContext ctx, final Object message) throws Exception {
 
         if (!(message instanceof ByteBuf)) {
             ctx.fireChannelRead(message);
         } else {
-            ByteBuf byteBuffer = (ByteBuf) message;
+
+
+            final ByteBuf byteBuffer = (ByteBuf) message;
 
             try {
-                Attribute<Integer> firstMessageAttribute = ctx.channel()
-                                                              .attr(ProtocolEncoderDecoder
+                final Attribute<Integer> firstMessageAttribute = ctx.channel()
+                                                                    .attr(ProtocolEncoderDecoder
                                                                         .PROTOCOL_VERSION_ATTRIBUTE_KEY);
-                Object firstMessage = firstMessageAttribute.get();
+
+
+                final Object firstMessage = firstMessageAttribute.get();
                 if (firstMessage == null) {
-                    Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(
+                    final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(
                         PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
-                    ByteBuf serverResponseBuf = (ByteBuf) byteBufAttribute.get();
+                    final ByteBuf serverResponseBuf = byteBufAttribute.get();
                     serverResponseBuf.writeBytes(byteBuffer,
                                                  Math.min(SEVER_RESPONSE_MESSAGE_SIZE
                                                           - serverResponseBuf.readableBytes(),
                                                           byteBuffer.readableBytes()));
                     if (serverResponseBuf.readableBytes() >= SEVER_RESPONSE_MESSAGE_SIZE) {
                         try {
-                            byte[] helloMessageArray = new byte["DDS4TRANSPORT".length()];
+                            final byte[] helloMessageArray = new byte["DDS4TRANSPORT".length()];
                             serverResponseBuf.readBytes(helloMessageArray);
-                            String transportHelloMessage = new String(helloMessageArray, "US-ASCII");
+                            final String transportHelloMessage = new String(helloMessageArray, "US-ASCII");
                             if (transportHelloMessage.equals("DDS4TRANSPORT")) {
-                                int bodyLength = (serverResponseBuf.readByte() & 255) << 8
-                                                 | serverResponseBuf.readByte() & 255;
+                                final int bodyLength = (serverResponseBuf.readByte() & 255) << 8
+                                                       | serverResponseBuf.readByte() & 255;
                                 if (bodyLength != 4) {
                                     LOGGER.error(
                                         "Server sent the incorrect version negotiation response, data.length != 4");
@@ -121,14 +119,14 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
                                 } else {
                                     assert serverResponseBuf.readableBytes() == bodyLength;
 
-                                    byte[] data = new byte[bodyLength];
+                                    final byte[] data = new byte[bodyLength];
                                     serverResponseBuf.readBytes(data);
-                                    int acceptedVersion = (data[0] & 255) << 24
-                                                          | (data[1] & 255) << 16
-                                                          | (data[2] & 255) << 8
-                                                          | data[3] & 255;
+                                    final int acceptedVersion = (data[0] & 255) << 24
+                                                                | (data[1] & 255) << 16
+                                                                | (data[2] & 255) << 8
+                                                                | data[3] & 255;
                                     if (SessionProtocolEncoder.SUPPORTED_VERSIONS.contains(acceptedVersion)) {
-                                        Attribute<Integer> protocolVersionAttribute = ctx.channel().attr(
+                                        final Attribute<Integer> protocolVersionAttribute = ctx.channel().attr(
                                             ProtocolEncoderDecoder.PROTOCOL_VERSION_ATTRIBUTE_KEY);
                                         protocolVersionAttribute.set(acceptedVersion);
                                         if (LOGGER.isTraceEnabled()) {
@@ -172,11 +170,11 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
 
     }
 
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+    public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise) throws Exception {
 
-        Attribute<Integer> firstMessageAttribute = ctx.channel()
-                                                      .attr(ProtocolEncoderDecoder.PROTOCOL_VERSION_ATTRIBUTE_KEY);
-        Object firstMessage = firstMessageAttribute.get();
+        final Attribute<Integer> firstMessageAttribute = ctx.channel()
+                                                            .attr(ProtocolEncoderDecoder.PROTOCOL_VERSION_ATTRIBUTE_KEY);
+        final Object firstMessage = firstMessageAttribute.get();
         if (firstMessage == null) {
             LOGGER.warn("Received write request while version is not negotiated yet");
             throw new Exception("Received write request while version is not negotiated yet");

@@ -33,6 +33,9 @@ import static org.softcake.authentication.AuthorizationServerResponseCode.UNKNOW
 import static org.softcake.authentication.AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
 
 import org.softcake.cherry.core.base.PreCheck;
+import org.softcake.yubari.netty.SessionHandler;
+import org.softcake.yubari.netty.mina.ApiServerAddress;
+import org.softcake.yubari.netty.mina.ServerAddress;
 
 import com.dukascopy.auth.client.AuthServerException;
 import com.dukascopy.auth.client.AuthServerResponse;
@@ -77,14 +80,18 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.StringTokenizer;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -193,7 +200,7 @@ public class AuthorizationClient {
     }
 
 
-    public static String selectFastestAPIServer(String apiServersAndTicket)
+    public static ApiServerAddress selectFastestAPIServer(String apiServersAndTicket)
         throws ApiUrlServerFormatException, InterruptedException, IOException {
 
         LOGGER.info("Selecting the best server...");
@@ -218,16 +225,28 @@ public class AuthorizationClient {
         }
 
         if (tokenizer.countTokens() == 1) {
-            return apiServersAndTicket;
+            String url = tokenizer.nextToken();
+            final ServerAddress serverAddress = getServerAddress(url);
+
+            String ticket = matcher.group(7);
+
+            ApiServerAddress apiServerAddress = new ApiServerAddress(serverAddress, ticket);
+            return apiServerAddress;
         }
 
         LinkedHashMap<String, InetSocketAddress> addresses = new LinkedHashMap<>();
-
+        List<ServerAddress> serverAddresses = new LinkedList<>();
         while (tokenizer.hasMoreTokens()) {
 
             String url = tokenizer.nextToken();
             addresses.put(url, getInetSocketAddress(url));
+
+            serverAddresses.add(getServerAddress(url));
         }
+        ServerAddress bestServer = getBestApiServer(serverAddresses);
+        String ticket = matcher.group(7);
+
+        ApiServerAddress apiServerAddress = new ApiServerAddress(bestServer, ticket);
 
         BestApiServer server = getBestApiServer(addresses);
 
@@ -237,11 +256,11 @@ public class AuthorizationClient {
         LOGGER.debug("Best api url [{}] with time [{}]", bestURL, bestTime);
 
         addIPAndBestPing(bestTime, bestURL);
+        String address = bestURL + "@" + ticket;
 
-        String address = bestURL + "@" + matcher.group(7);
 
         if (validAPIServerAddressFormat(address)) {
-            return address;
+            return apiServerAddress;
         } else {
             throw new ApiUrlServerFormatException("4. Wrong format of api url:" + address);
         }
@@ -259,12 +278,37 @@ public class AuthorizationClient {
         throws IOException, InterruptedException {
 
         LinkedHashMap<Long, String> pingTimeLinkedMap = new LinkedHashMap<>();
-        Ping.ping(addresses).forEach((s, longs) -> pingTimeLinkedMap.put(getBestTime(longs), s));
+        Ping.ping(addresses).forEach(new BiConsumer<String, Long[]>() {
+            @Override
+            public void accept(final String s, final Long[] longs) {pingTimeLinkedMap.put(getBestTime(longs), s);}
+        });
 
         Long bestTime = pingTimeLinkedMap.keySet().stream().min(Long::compareTo).orElse(Long.MAX_VALUE);
 
         String bestURL = pingTimeLinkedMap.get(bestTime);
         return new BestApiServer(bestURL, bestTime);
+
+    }
+
+    /**
+     * @param addresses
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    private static ServerAddress getBestApiServer(List<ServerAddress> addresses)
+        throws IOException, InterruptedException {
+
+
+        final Optional<ServerAddress> min = Ping.ping2(addresses).stream().min(new Comparator<ServerAddress>() {
+            @Override
+            public int compare(final ServerAddress o1, final ServerAddress o2) {
+
+                return o1.getPingTime().compareTo(o2.getPingTime());
+            }
+        });
+        return min.get();
+
 
     }
 
@@ -291,6 +335,31 @@ public class AuthorizationClient {
             port = SSL_PORT;
         }
         return new InetSocketAddress(host, port);
+    }
+
+    /**
+     * @param url
+     * @return
+     */
+    private static ServerAddress getServerAddress(final String url) {
+
+        String host;
+        int port;
+        int semicolonIndex = url.indexOf(':');
+        if (semicolonIndex != -1) {
+            host = url.substring(0, semicolonIndex);
+            if (semicolonIndex + 1 >= url.length()) {
+                LOGGER.warn("Port is not set, using default {}", SSL_PORT);
+                port = SSL_PORT;
+            } else {
+                port = Integer.parseInt(url.substring(semicolonIndex + 1));
+            }
+        } else {
+            LOGGER.warn("Port is not set, using default {}", SSL_PORT);
+            host = url;
+            port = SSL_PORT;
+        }
+        return new ServerAddress(host, port);
     }
 
     /**
@@ -866,7 +935,7 @@ public class AuthorizationClient {
         String AUTH_API_URLS_KEY = "authApiURLs";
         AuthorizationServerResponse authorizationServerResponse = null;
         int retryCount = 0;
-        if (pin != null && pin.isEmpty() || pin == null) {
+        if ((pin != null) && pin.isEmpty() || pin == null) {
             pin = null;
             captchaId = null;
         }
@@ -907,7 +976,7 @@ public class AuthorizationClient {
                 this.firstApiRequest = false;
             } else {
                 try {
-                    sessionId = this.getNewSessionId();
+                    sessionId = SessionHandler.recreateSessionId();
                 } catch (Throwable var41) {
                     LOGGER.error(var41.getMessage(), var41);
                     return new AuthorizationServerResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
@@ -994,19 +1063,21 @@ public class AuthorizationClient {
                     Properties properties = null;
 
                     String fastestAPIAndTicket;
-                    try {
-                        fastestAPIAndTicket = AuthParameterDefinition.SETTINGS.getName(AccountType.TRADER);
-                        String encodedString = jsonObject.getString(fastestAPIAndTicket);
-                        byte[] decodedBytes = Base64.decode(encodedString);
-                        ObjectInputStream inputStream = new ObjectInputStream(new ByteArrayInputStream(decodedBytes));
+                    String encodedString = jsonObject.getString(AuthParameterDefinition.SETTINGS.getName(AccountType.TRADER));
+                    byte[] decodedBytes = Base64.decode(encodedString);
+
+
+
+                    try(ObjectInputStream inputStream = new ObjectInputStream(new ByteArrayInputStream(decodedBytes))) {
+
+
+
                         properties = (Properties) inputStream.readObject();
                         if (instance.isSnapshotVersion()) {
                             LOGGER.debug("Properties received << [{}]", properties);
                         }
 
                         // AvailableInstrumentProvider.INSTANCE.init(properties);
-                    } catch (Throwable var40) {
-                        LOGGER.error(var40.getMessage(), var40);
                     }
 
                     authorizationServerResponse = new AuthorizationServerResponse(sb.toString(),
@@ -1021,9 +1092,15 @@ public class AuthorizationClient {
                                 authorizationServerResponse.setPasswordLength(password.length());
                             }
                         }
-
-                        fastestAPIAndTicket = selectFastestAPIServer(authorizationServerResponse.getResponseMessage());
+                        final ApiServerAddress
+                            apiServerAddress
+                            = selectFastestAPIServer(authorizationServerResponse.getResponseMessage());
+                        fastestAPIAndTicket = apiServerAddress.getAddressStr() + "@" + apiServerAddress.getTicket();
                         authorizationServerResponse.setFastestAPIAndTicket(fastestAPIAndTicket);
+                        authorizationServerResponse.setTicket(apiServerAddress.getTicket());
+                        authorizationServerResponse.setPort(apiServerAddress.getPort());
+                        authorizationServerResponse.setHost(apiServerAddress.getHost());
+
                     } else {
                         authorizationServerResponse = new AuthorizationServerResponse(EMPTY_RESPONSE);
                     }

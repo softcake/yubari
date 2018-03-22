@@ -31,31 +31,34 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
     private String rememberMeToken;
     private int passwordLength;
     private int detailedStatusCode;
+    private String ticket;
+    private int port;
+    private String host;
 
-    public AuthorizationServerResponse(AuthorizationServerResponseCode code) {
+    public AuthorizationServerResponse(final AuthorizationServerResponseCode code) {
 
         this.responseMessage = null;
         this.responseCode = code;
     }
 
-    public AuthorizationServerResponse(AuthorizationServerResponseCode code, int detailedStatusCode) {
+    public AuthorizationServerResponse(final AuthorizationServerResponseCode code, final int detailedStatusCode) {
 
         this.responseMessage = null;
         this.responseCode = code;
         this.detailedStatusCode = detailedStatusCode;
     }
 
-    public AuthorizationServerResponse(String responseMessage, AuthorizationServerResponseCode code) {
+    public AuthorizationServerResponse(final String responseMessage, final AuthorizationServerResponseCode code) {
 
         this.responseMessage = responseMessage;
         this.responseCode = code;
         this.init();
     }
 
-    public AuthorizationServerResponse(String responseMessage,
-                                       AuthorizationServerResponseCode code,
-                                       boolean srp6requestWithProperties,
-                                       Properties platformProperties) {
+    public AuthorizationServerResponse(final String responseMessage,
+                                       final AuthorizationServerResponseCode code,
+                                       final boolean srp6requestWithProperties,
+                                       final Properties platformProperties) {
 
         this.responseMessage = responseMessage;
         this.responseCode = code;
@@ -64,7 +67,7 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
         this.init();
     }
 
-    public AuthorizationServerResponse(String responseMessage, int code) {
+    public AuthorizationServerResponse(final String responseMessage, final int code) {
 
         this.responseMessage = responseMessage;
         this.responseCode = fromValue(code);
@@ -106,10 +109,10 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
         return AUTHENTICATION_AUTHORIZATION_ERROR == this.responseCode;
     }
 
-    protected void validateResponse(String response) {
+    protected void validateResponse(final String response) {
 
         if (response != null && response.length() != 0) {
-            Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(response);
+            final Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(response);
             if (!matcher.matches()) {
                 LOGGER.error("Authorization procedure returned unexpected result [{}]", response);
                 this.responseCode = WRONG_AUTH_RESPONSE;
@@ -142,7 +145,7 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
             fastestAPIAndTicket = "";
         }
 
-        Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(fastestAPIAndTicket);
+        final Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(fastestAPIAndTicket);
         if (matcher.matches()) {
             this.fastestAPIAndTicket = fastestAPIAndTicket;
         } else {
@@ -156,7 +159,7 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
         return this.detailedStatusCode;
     }
 
-    public void setDetailedStatusCode(int detailedStatusCode) {
+    public void setDetailedStatusCode(final int detailedStatusCode) {
 
         this.detailedStatusCode = detailedStatusCode;
     }
@@ -168,7 +171,7 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
 
     public String getMessage() {
 
-        String message;
+        final String message;
         if (this.responseCode == AUTHENTICATION_AUTHORIZATION_ERROR && this.detailedStatusCode == 1) {
             message = "Password has Expired";
         } else {
@@ -183,7 +186,7 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
         return this.rememberMeToken;
     }
 
-    public void setRememberMeToken(String rememberMeToken) {
+    public void setRememberMeToken(final String rememberMeToken) {
 
         this.rememberMeToken = rememberMeToken;
     }
@@ -193,8 +196,38 @@ public class AuthorizationServerResponse extends AbstractAuthorizationServerResp
         return this.passwordLength;
     }
 
-    public void setPasswordLength(int passwordLength) {
+    public void setPasswordLength(final int passwordLength) {
 
         this.passwordLength = passwordLength;
+    }
+
+    public String getTicket() {
+
+        return ticket;
+    }
+
+    public void setTicket(final String ticket) {
+
+        this.ticket = ticket;
+    }
+
+    public int getPort() {
+
+        return port;
+    }
+
+    public void setPort(final int port) {
+
+        this.port = port;
+    }
+
+    public String getHost() {
+
+        return host;
+    }
+
+    public void setHost(final String host) {
+
+        this.host = host;
     }
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.softcake.authentication;
+package org.softcake.yubari.netty;
 
 
 import org.softcake.yubari.netty.mina.IoSessionWrapper;

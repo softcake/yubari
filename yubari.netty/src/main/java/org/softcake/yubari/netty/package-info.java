@@ -14,11 +14,7 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty.mina;
-
-public enum TrustSubject {
-    ANDROID;
-
-    TrustSubject() {
-    }
-}
+/**
+ * @author The softcake authors
+ */
+package org.softcake.yubari.netty;

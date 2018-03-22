@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty.mina;
+package org.softcake.yubari.netty.mina.ssl;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -59,7 +59,7 @@ public class TransportHelper {
 
     }
 
-    public static Object invokeRemoteRequest(InvocationRequest request, Object target) throws Exception {
+    public static Object invokeRemoteRequest(final InvocationRequest request, final Object target) throws Exception {
 
 
         Class[] paramClasses = new Class[0];
@@ -76,13 +76,13 @@ public class TransportHelper {
         }
 
 
-        List<Method> equalsMethods = new ArrayList<>();
+        final List<Method> equalsMethods = new ArrayList<>();
         Method m = null;
-        Method[] methods = target.getClass().getMethods();
+        final Method[] methods = target.getClass().getMethods();
 
 
         for (int i = 0; i < methods.length; ++i) {
-            Method method = methods[i];
+            final Method method = methods[i];
             if (method.getName().equals(request.getMethodName())
                 && method.getParameterTypes().length == paramClasses.length) {
                 equalsMethods.add(method);
@@ -95,7 +95,7 @@ public class TransportHelper {
 
 
             for (final Method method : equalsMethods) {
-                Class<?>[] params = method.getParameterTypes();
+                final Class<?>[] params = method.getParameterTypes();
                 boolean noConflict = true;
 
                 for (int i = 0; i < params.length; ++i) {
@@ -120,17 +120,17 @@ public class TransportHelper {
         }
     }
 
-    public static byte[] addFirstTimeMark(byte[] arr, byte timeMark, long time) {
+    public static byte[] addFirstTimeMark(final byte[] arr, final byte timeMark, final long time) {
 
         return doAddTimeMark(arr, timeMark, time, true);
     }
 
-    public static byte[] addTimeMark(byte[] arr, byte timeMark, long time) {
+    public static byte[] addTimeMark(final byte[] arr, final byte timeMark, final long time) {
 
         return doAddTimeMark(arr, timeMark, time, false);
     }
 
-    private static byte[] doAddTimeMark(byte[] arr, byte timeMark, long time, boolean isFirst) {
+    private static byte[] doAddTimeMark(byte[] arr, final byte timeMark, final long time, final boolean isFirst) {
 
         if (isFirst) {
             arr = null;
@@ -138,7 +138,7 @@ public class TransportHelper {
             return arr;
         }
 
-        byte[] result;
+        final byte[] result;
         if (arr != null) {
             result = new byte[arr.length + TIME_MARK_RECORD_LENGTH];
             System.arraycopy(arr, 0, result, 0, arr.length);
@@ -160,25 +160,25 @@ public class TransportHelper {
         return result;
     }
 
-    public static Map<Byte, Long> readTimeMarks(byte[] arr) {
+    public static Map<Byte, Long> readTimeMarks(final byte[] arr) {
 
-        Map<Byte, Long> timeMarks = new LinkedHashMap<>();
+        final Map<Byte, Long> timeMarks = new LinkedHashMap<>();
         if (arr != null && arr.length > 0 && arr.length % TIME_MARK_RECORD_LENGTH == 0) {
 
             for (int i = 0; i < arr.length / TIME_MARK_RECORD_LENGTH; ++i) {
                 int off = i * TIME_MARK_RECORD_LENGTH;
-                byte timeMark = arr[off];
+                final byte timeMark = arr[off];
                 ++off;
-                long time = (((long) arr[off + 7] & 255L) << 0)
-                            + (((long) arr[off + 6] & 255L) << 8)
-                            + (((long) arr[off
+                final long time = (((long) arr[off + 7] & 255L) << 0)
+                                  + (((long) arr[off + 6] & 255L) << 8)
+                                  + (((long) arr[off
                                            + 5]
                                 & 255L) << 16)
-                            + (((long) arr[off + 4] & 255L) << 24)
-                            + (((long) arr[off + 3] & 255L) << 32)
-                            + (((long) arr[off + 2] & 255L) << 40)
-                            + (((long) arr[off + 1] & 255L) << 48)
-                            + ((long) arr[off + 0] << 56);
+                                  + (((long) arr[off + 4] & 255L) << 24)
+                                  + (((long) arr[off + 3] & 255L) << 32)
+                                  + (((long) arr[off + 2] & 255L) << 40)
+                                  + (((long) arr[off + 1] & 255L) << 48)
+                                  + ((long) arr[off + 0] << 56);
                 timeMarks.put(timeMark, time);
             }
 
@@ -188,15 +188,15 @@ public class TransportHelper {
         }
     }
 
-    public static Map<String, Long> readTimeMarksForHuman(byte[] arr) {
+    public static Map<String, Long> readTimeMarksForHuman(final byte[] arr) {
 
-        Map<Byte, Long> map = readTimeMarks(arr);
+        final Map<Byte, Long> map = readTimeMarks(arr);
 
 
-        Map<String, Long> human = new LinkedHashMap<>();
+        final Map<String, Long> human = new LinkedHashMap<>();
 
         map.forEach((aByte, aLong) -> {
-            String humanKey = toHuman(aByte);
+            final String humanKey = toHuman(aByte);
             human.put(humanKey, aLong);
         });
 
@@ -205,7 +205,7 @@ public class TransportHelper {
 
     }
 
-    private static String toHuman(byte key) {
+    private static String toHuman(final byte key) {
 
         switch (key) {
             case TIME_MARK_CLIENT_TO_API:
@@ -237,12 +237,12 @@ public class TransportHelper {
         }
     }
 
-    public static ListeningExecutorService createExecutor(int poolSize,
-                                                          long autoCleanUpInerval,
-                                                          int criticalQueueSize,
-                                                          String threadNamePrefix,
-                                                          String threadBasicName,
-                                                          boolean prestartAllCoreThreads) {
+    public static ListeningExecutorService createExecutor(final int poolSize,
+                                                          final long autoCleanUpInerval,
+                                                          final int criticalQueueSize,
+                                                          final String threadNamePrefix,
+                                                          final String threadBasicName,
+                                                          final boolean prestartAllCoreThreads) {
 
         return createExecutor(poolSize,
                               autoCleanUpInerval,
@@ -253,13 +253,13 @@ public class TransportHelper {
                               prestartAllCoreThreads);
     }
 
-    public static ListeningExecutorService createExecutor(int poolSize,
-                                                          long autoCleanUpInerval,
-                                                          int criticalQueueSize,
-                                                          String threadNamePrefix,
-                                                          List<Thread> createdThreads,
-                                                          String threadBasicName,
-                                                          boolean prestartAllCoreThreads) {
+    public static ListeningExecutorService createExecutor(final int poolSize,
+                                                          final long autoCleanUpInerval,
+                                                          final int criticalQueueSize,
+                                                          final String threadNamePrefix,
+                                                          final List<Thread> createdThreads,
+                                                          final String threadBasicName,
+                                                          final boolean prestartAllCoreThreads) {
 
         return createExecutor(poolSize,
                               poolSize,
@@ -271,27 +271,27 @@ public class TransportHelper {
                               prestartAllCoreThreads);
     }
 
-    public static ListeningExecutorService createExecutor(int poolSize,
-                                                          int maxPoolSize,
-                                                          long autoCleanUpInerval,
+    public static ListeningExecutorService createExecutor(final int poolSize,
+                                                          final int maxPoolSize,
+                                                          final long autoCleanUpInerval,
                                                           final int criticalQueueSize,
                                                           final String threadNamePrefix,
                                                           final List<Thread> createdThreads,
                                                           final String threadBasicName,
-                                                          boolean prestartAllCoreThreads) {
+                                                          final boolean prestartAllCoreThreads) {
 
         if (poolSize <= 0) {
             return MoreExecutors.newDirectExecutorService();
         } else {
-            ThreadFactory threadFactory = new ThreadFactory() {
+            final ThreadFactory threadFactory = new ThreadFactory() {
                 private AtomicInteger counter = new AtomicInteger(0);
 
-                public Thread newThread(Runnable r) {
+                public Thread newThread(final Runnable r) {
 
-                    Thread thread = new Thread(r, (threadBasicName != null ? "(" + threadBasicName + ") " : "")
-                                               + threadNamePrefix
-                                               + " - "
-                                               + this.counter.getAndIncrement());
+                    final Thread thread = new Thread(r, (threadBasicName != null ? "(" + threadBasicName + ") " : "")
+                                                        + threadNamePrefix
+                                                        + " - "
+                                                        + this.counter.getAndIncrement());
                     if (createdThreads != null) {
                         createdThreads.add(thread);
                     }
@@ -300,11 +300,11 @@ public class TransportHelper {
                 }
             };
 
-            ListeningOrderedThreadPoolExecutor executor = new ListeningOrderedThreadPoolExecutor(poolSize,
-                                                                                                 maxPoolSize,
-                                                                                                 1L,
-                                                                                                 TimeUnit.MINUTES,threadFactory ,
-                                                                                                 autoCleanUpInerval) {
+            final ListeningOrderedThreadPoolExecutor executor = new ListeningOrderedThreadPoolExecutor(poolSize,
+                                                                                                       maxPoolSize,
+                                                                                                       1L,
+                                                                                                       TimeUnit.MINUTES, threadFactory ,
+                                                                                                       autoCleanUpInerval) {
                 protected BlockingQueue<Runnable> newChildExecutorWorkQueue() {
 
                    return new ArrayBlockingQueue<>(criticalQueueSize);
@@ -318,11 +318,11 @@ public class TransportHelper {
         }
     }
 
-    public static ListeningExecutorService createListeningExecutor(int poolSize,
-                                                                   long autoCleanUpInerval,
-                                                                   int criticalQueueSize,
-                                                                   String transportName,
-                                                                   String threadNamePrefix) {
+    public static ListeningExecutorService createListeningExecutor(final int poolSize,
+                                                                   final long autoCleanUpInerval,
+                                                                   final int criticalQueueSize,
+                                                                   final String transportName,
+                                                                   final String threadNamePrefix) {
 
         return createListeningExecutor(poolSize,
                                        poolSize,
@@ -332,12 +332,12 @@ public class TransportHelper {
                                        threadNamePrefix);
     }
 
-    public static ListeningExecutorService createListeningExecutor(int corePoolSize,
-                                                                   int maxPoolSize,
-                                                                   long autoCleanUpInerval,
-                                                                   int criticalQueueSize,
-                                                                   String transportName,
-                                                                   String threadNamePrefix) {
+    public static ListeningExecutorService createListeningExecutor(final int corePoolSize,
+                                                                   final int maxPoolSize,
+                                                                   final long autoCleanUpInerval,
+                                                                   final int criticalQueueSize,
+                                                                   final String transportName,
+                                                                   final String threadNamePrefix) {
 
         return createExecutor(corePoolSize,
                               maxPoolSize,
@@ -349,45 +349,45 @@ public class TransportHelper {
                               true);
     }
 
-    public static void safeShutdown(int timeout, TimeUnit unit, ListeningExecutorService... executors) {
+    public static void safeShutdown(final int timeout, final TimeUnit unit, final ListeningExecutorService... executors) {
 
         if (executors != null) {
             for (int i = 0; i < executors.length; ++i) {
-                ListeningExecutorService executor = executors[i];
+                final ListeningExecutorService executor = executors[i];
                 safeShutdown(executor, timeout, unit);
             }
 
         }
     }
 
-    public static void safeShutdown(ListeningExecutorService executor, int timeout, TimeUnit unit) {
+    public static void safeShutdown(final ListeningExecutorService executor, final int timeout, final TimeUnit unit) {
 
         executor.shutdown();
 
         try {
             executor.awaitTermination((long) timeout, unit);
-        } catch (InterruptedException var4) {
+        } catch (final InterruptedException var4) {
 
         }
 
     }
 
-    public static byte[] encode(ProtocolMessage message, SessionProtocolEncoder sessionProtocolEncoder)
+    public static byte[] encode(final ProtocolMessage message, final SessionProtocolEncoder sessionProtocolEncoder)
         throws Exception {
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        DataOutputStream dos = new DataOutputStream(out);
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        final DataOutputStream dos = new DataOutputStream(out);
         dos.writeByte(4);
         sessionProtocolEncoder.encodeMessage(PROTOCOL_VERSION, dos, message);
         return out.toByteArray();
 
     }
 
-    public static ProtocolMessage decode(byte[] bytes, SessionProtocolDecoder decoder) throws Exception {
+    public static ProtocolMessage decode(final byte[] bytes, final SessionProtocolDecoder decoder) throws Exception {
 
-        ByteArrayInputStream in = new ByteArrayInputStream(bytes);
-        DataInputStream dis = new DataInputStream(in);
-        int messageProtocolVersion = dis.readByte();
+        final ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+        final DataInputStream dis = new DataInputStream(in);
+        final int messageProtocolVersion = dis.readByte();
         return (ProtocolMessage) decoder.decodeMessageUnsafe(messageProtocolVersion, dis);
 
     }

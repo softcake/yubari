@@ -7,7 +7,7 @@ module org.softcake.yubari.netty {
     requires srp6a;
     requires json;
     requires java.desktop;
-    requires com.google.common;
+    //requires com.google.common;
     requires org.softcake.yubari.connect;
     requires cherry.core;
     requires transport.common;
@@ -22,6 +22,8 @@ module org.softcake.yubari.netty {
     requires io.netty.handler;
     requires io.netty.buffer;
     requires java.rmi;
+    requires guava;
+    requires JForex.API;
     exports org.softcake.yubari.netty;
     exports org.softcake.yubari.netty.mina;
     exports org.softcake.yubari.netty.stream;

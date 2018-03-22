@@ -18,15 +18,15 @@ package org.softcake.yubari.netty;
 
 
 import org.softcake.yubari.netty.mina.ClientListener;
-import org.softcake.yubari.netty.mina.ClientSSLContextListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.IoSessionWrapper;
 import org.softcake.yubari.netty.mina.MessageSentListener;
 import org.softcake.yubari.netty.mina.RemoteCallSupport;
 import org.softcake.yubari.netty.mina.RequestListenableFuture;
-import org.softcake.yubari.netty.mina.SSLContextFactory;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
+import org.softcake.yubari.netty.mina.ssl.ClientSSLContextListener;
+import org.softcake.yubari.netty.mina.ssl.SSLContextFactory;
 import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
@@ -53,7 +53,6 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.util.concurrent.GenericFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,7 +66,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -81,6 +79,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import javax.net.ssl.SSLEngine;
 
@@ -169,8 +168,7 @@ class TransportClientSession implements ClientSSLContextListener {
     private IoSessionWrapper sessionWrapper = new NettyIoSessionWrapperAdapter() {
         public Future<Void> write(final Object message) {
 
-            return protocolHandler.writeMessage(this.channel,
-                                                                            (BinaryProtocolMessage) message);
+            return protocolHandler.writeMessage(this.channel, (BinaryProtocolMessage) message);
         }
     };
 
@@ -322,53 +320,47 @@ class TransportClientSession implements ClientSSLContextListener {
 
     void init() {
 
-        this.scheduledExecutorService = Executors.newScheduledThreadPool(1,
-                                                                         (new ThreadFactoryBuilder())
-                                                                             .setDaemon(true)
-                                                                             .setNameFormat("["
-                                                                                            + this.transportName
-                                                                                            + "] "
-                                                                                            + "SyncMessagesTimeouter")
-                                                                             .build());
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat(String.format("[%s] SyncMessagesTimeouter", this.transportName))
+            .build();
+
+        this.scheduledExecutorService = Executors.newScheduledThreadPool(1, threadFactory);
         this.protocolHandler = new ClientProtocolHandler(this);
+
         final EventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup(this.transportPoolSize, new ThreadFactory() {
             private AtomicInteger counter = new AtomicInteger();
 
             public Thread newThread(final Runnable r) {
 
-                return new Thread(r,
-                                  "["
-                                  + transportName
-                                  + "] NettyTransportThread - "
-                                  + this.counter.getAndIncrement());
+                return new Thread(r, String.format("[%s] NettyTransportThread - %d",
+                                                   transportName,
+                                                   this.counter.getAndIncrement()));
             }
         });
         this.channelBootstrap = new Bootstrap();
         this.channelBootstrap.group(nettyEventLoopGroup);
         this.channelBootstrap.channel(NioSocketChannel.class);
+        this.channelOptions.entrySet().forEach(new Consumer<Map.Entry<ChannelOption<?>, Object>>() {
+            @Override
+            public void accept(final Map.Entry<ChannelOption<?>, Object> entry) {
 
+                channelBootstrap.option((ChannelOption) entry.getKey(), entry.getValue());
+            }
+        });
 
-        final Iterator i$ = this.channelOptions.entrySet().iterator();
-
-        while (i$.hasNext()) {
-            final Entry<ChannelOption<?>, Object> entry = (Entry) i$.next();
-            this.channelBootstrap.option((ChannelOption) entry.getKey(), entry.getValue());
-        }
 
         this.channelBootstrap.handler(new ChannelInitializer<SocketChannel>() {
             protected void initChannel(final SocketChannel ch) throws Exception {
 
                 final ChannelPipeline pipeline = ch.pipeline();
                 if (useSSL) {
-                    final Set<String> sslProtocols = enabledSslProtocols == null
-                                                     || enabledSslProtocols.isEmpty()
+                    final Set<String> sslProtocols = enabledSslProtocols == null || enabledSslProtocols.isEmpty()
                                                      ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS
                                                      : enabledSslProtocols;
                     final SSLEngine engine = SSLContextFactory.getInstance(false,
                                                                            TransportClientSession.this,
-                                                                           address
-                                                                               .getHostName())
-                                                              .createSSLEngine();
+                                                                           address.getHostName()).createSSLEngine();
                     engine.setUseClientMode(true);
                     engine.setEnabledProtocols(sslProtocols.toArray(new String[sslProtocols.size()]));
                     final List<String>
@@ -378,15 +370,9 @@ class TransportClientSession implements ClientSSLContextListener {
 
                 }
 
-                pipeline.addLast("protocol_version_negotiator",
-                                 protocolVersionClientNegotiatorHandler);
+                pipeline.addLast("protocol_version_negotiator", protocolVersionClientNegotiatorHandler);
                 pipeline.addLast("frame_handler",
-                                 new LengthFieldBasedFrameDecoder(maxMessageSizeBytes,
-                                                                  0,
-                                                                  4,
-                                                                  0,
-                                                                  4,
-                                                                  true));
+                                 new LengthFieldBasedFrameDecoder(maxMessageSizeBytes, 0, 4, 0, 4, true));
                 pipeline.addLast("frame_encoder", new LengthFieldPrepender(4, false));
                 pipeline.addLast("protocol_encoder_decoder", protocolEncoderDecoder);
                 pipeline.addLast("traffic_blocker", channelTrafficBlocker);
@@ -408,19 +394,17 @@ class TransportClientSession implements ClientSSLContextListener {
 
         final Iterator iterator = enabledCipherSuites.iterator();
 
-
-        while(true) {
+        while (true) {
             String cipher;
             do {
                 if (!iterator.hasNext()) {
-                    engine.setEnabledCipherSuites(enabledCipherSuites.toArray(new String[enabledCipherSuites
-                        .size()]));
+                    engine.setEnabledCipherSuites(enabledCipherSuites.toArray(new String[enabledCipherSuites.size()]));
                     pipeline.addLast("ssl", new SslHandler(engine));
                     return;
                 }
 
                 cipher = (String) iterator.next();
-                LOGGER.info("Cipher= " + cipher);
+
             } while (!cipher.toUpperCase().contains("EXPORT")
                      && !cipher.toUpperCase().contains("NULL")
                      && !cipher.toUpperCase().contains("ANON")
@@ -431,32 +415,32 @@ class TransportClientSession implements ClientSSLContextListener {
         }
     }
 
-    void connect() {
+    public void connect() {
 
         this.clientConnector.connect();
     }
 
-    void disconnect() {
+    public void disconnect() {
 
         this.clientConnector.disconnect();
     }
 
-    void disconnected() {
+    public void disconnected() {
 
         this.transportClient.disconnected();
     }
 
-    void terminate() {
+    public void terminate() {
 
         if (this.transportClientSessionStateHandler != null) {
             try {
                 this.transportClientSessionStateHandler.beforeTerminate();
             } catch (final Throwable var2) {
-                LOGGER.warn("[" + this.transportName + "] terminate handler error", var2);
+                LOGGER.warn("[{}] terminate handler error", this.transportName, var2);
             }
         }
 
-        LOGGER.debug("[" + this.transportName + "] Terminating client session");
+        LOGGER.debug("[{}] Terminating client session", this.transportName);
         if (this.clientConnector != null) {
             this.clientConnector.setTerminating(this.terminationAwaitMaxTimeoutInMillis);
         }
@@ -479,9 +463,9 @@ class TransportClientSession implements ClientSSLContextListener {
         this.syncRequests.clear();
     }
 
-    boolean sendMessageNaive(final ProtocolMessage message) {
+    public boolean sendMessageNaive(final ProtocolMessage message) {
 
-        if (this.clientConnector.isOnline()) {
+        if (this.isOnline()) {
             this.protocolHandler.writeMessage(this.clientConnector.getPrimarySession(), message);
             return true;
         } else {
@@ -490,10 +474,10 @@ class TransportClientSession implements ClientSSLContextListener {
         }
     }
 
-    ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
-        throws InterruptedException, TimeoutException, ConnectException {
+    public ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
+        throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
 
-        if (this.clientConnector.isOnline()) {
+        if (this.isOnline()) {
             final Long syncRequestId = this.transportClient.getNextId();
             message.setSynchRequestId(syncRequestId);
             final RequestMessageTransportListenableFuture
@@ -511,55 +495,47 @@ class TransportClientSession implements ClientSSLContextListener {
                                                                     timeoutUnits.toMillis(timeout),
                                                                     true));
 
-            try {
-                return task.get(timeout, timeoutUnits);
-            } catch (final ExecutionException var9) {
-                if (var9.getCause() instanceof TimeoutException) {
-                    throw (TimeoutException) var9.getCause();
-                } else if (var9.getCause() instanceof RuntimeException) {
-                    throw (RuntimeException) var9.getCause();
-                } else if (var9.getCause() instanceof ConnectException) {
-                    throw (ConnectException) var9.getCause();
-                } else {
-                    throw new RuntimeException("[" + this.transportName + "] " + var9.getCause());
-                }
-            }
+
+            return task.get(timeout, timeoutUnits);
+
+
         } else {
-            throw new ConnectException("[" + this.transportName + "] TransportClient not connected, message: " + message
-                .toString(400));
+            throw new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
+                                                     this.transportName,
+                                                     message.toString(400)));
         }
     }
 
-    <V> ListenableFuture<V> sendMessageAsync(final ProtocolMessage message) {
+    public <V> ListenableFuture<V> sendMessageAsync(final ProtocolMessage message) {
 
-        if (this.clientConnector.isOnline()) {
-            final ChannelFuture
-                channelFuture
-                = this.protocolHandler.writeMessage(this.clientConnector.getPrimarySession(), message);
-            return new MessageListenableFuture(channelFuture);
+        if (this.isOnline()) {
+            return new MessageListenableFuture<>(this.protocolHandler
+                                                     .writeMessage(this.clientConnector.getPrimarySession(),
+                                                                   message));
         } else {
-            return Futures.immediateFailedFuture(new ConnectException("["
-                                                                      + this.transportName
-                                                                      + "] TransportClient not connected, message: "
-                                                                      + message.toString(400)));
+            return Futures.immediateFailedFuture(new ConnectException(String.format(
+                "[%s] TransportClient not connected, message: %s",
+                this.transportName,
+                message.toString(400))));
         }
     }
 
-    RequestListenableFuture sendRequestAsync(final ProtocolMessage message) {
+    public RequestListenableFuture sendRequestAsync(final ProtocolMessage message) {
 
         return this.sendRequestAsync(message,
                                      this.clientConnector.getPrimarySession(),
                                      this.syncMessageTimeout,
-                                     false, null);
+                                     false,
+                                     null);
     }
 
-    RequestListenableFuture sendRequestAsync(final ProtocolMessage message,
-                                             final Channel channel,
-                                             final long timeout,
-                                             final boolean doNotRestartTimerOnInProcessResponse,
-                                             final MessageSentListener messageSentListener) {
+    public RequestListenableFuture sendRequestAsync(final ProtocolMessage message,
+                                                    final Channel channel,
+                                                    final long timeout,
+                                                    final boolean doNotRestartTimerOnInProcessResponse,
+                                                    final MessageSentListener messageSentListener) {
 
-        if (this.clientConnector.isOnline()) {
+        if (this.isOnline()) {
             final Long syncRequestId = this.transportClient.getNextId();
             message.setSynchRequestId(syncRequestId);
             final RequestMessageTransportListenableFuture
@@ -571,25 +547,20 @@ class TransportClientSession implements ClientSSLContextListener {
             this.syncRequests.put(syncRequestId, task);
             final ChannelFuture channelFuture = this.protocolHandler.writeMessage(channel, message);
             if (messageSentListener != null) {
-                channelFuture.addListener(new GenericFutureListener<io.netty.util.concurrent.Future<? super Void>>() {
-                    public void operationComplete(final io.netty.util.concurrent.Future<? super Void> future)
-                        throws Exception {
+                channelFuture.addListener(future -> {
 
-                        if (channelFuture.isSuccess()) {
-                            messageSentListener.messageSent(message);
-                        } else if (channelFuture.isDone() && channelFuture.cause() != null) {
-                            final Throwable cause = channelFuture.cause();
-                            TransportClientSession.LOGGER.error("[{}] Request send failed because of {}: {}",
-                                                                new Object[]{TransportClientSession.this
-                                                                                 .getTransportName(),
-                                                                             cause.getClass().getSimpleName(),
-                                                                             cause.getMessage()});
-                        } else {
-                            TransportClientSession.LOGGER.error("[{}] Request send failed",
-                                                                getTransportName());
-                        }
-
+                    if (channelFuture.isSuccess()) {
+                        messageSentListener.messageSent(message);
+                    } else if (channelFuture.isDone() && channelFuture.cause() != null) {
+                        final Throwable cause = channelFuture.cause();
+                        LOGGER.error("[{}] Request send failed because of {}: {}",
+                                     getTransportName(),
+                                     cause.getClass().getSimpleName(),
+                                     cause.getMessage());
+                    } else {
+                        LOGGER.error("[{}] Request send failed", getTransportName());
                     }
+
                 });
             }
 
@@ -606,98 +577,78 @@ class TransportClientSession implements ClientSSLContextListener {
 
     public boolean controlRequest(final ProtocolMessage message, final MessageSentListener messageSentListener) {
 
-        if (!this.clientConnector.isOnline()) {
+        if (!this.isOnline()) {
             return false;
-        } else {
-            if (messageSentListener != null) {
-                final ListenableFuture future = this.sendMessageAsync(message);
-                future.addListener(new Runnable() {
-                    public void run() {
+        }
+        if (messageSentListener != null) {
+            final ListenableFuture future = this.sendMessageAsync(message);
+            future.addListener(new Runnable() {
+                public void run() {
 
-                        try {
-                            final AbstractEventExecutorTask eventTask = new AbstractEventExecutorTask(
-                                TransportClientSession.this,
-                                protocolHandler) {
-                                public Object getOrderKey() {
+                    try {
+                        final AbstractEventExecutorTask
+                            eventTask
+                            = new AbstractEventExecutorTask(TransportClientSession.this, protocolHandler) {
+                            public Object getOrderKey() {
 
-                                    return null;
-                                }
+                                return null;
+                            }
 
-                                public void run() {
+                            public void run() {
 
-                                    try {
-                                        if (future.isDone() && !future.isCancelled()) {
-                                            try {
-                                                future.get();
-                                            } catch (final Exception var2) {
-                                                TransportClientSession.LOGGER.error("["
-                                                                                    + TransportClientSession.this
-                                                                                        .transportName
-                                                                                    + "] "
-                                                                                    + var2.getMessage(), var2);
+                                try {
+                                    if (future.isDone() && !future.isCancelled()) {
+                                        try {
+                                            future.get();
+                                        } catch (final Exception var2) {
+                                            TransportClientSession.LOGGER.error("["
+                                                                                + TransportClientSession.this
+                                                                                    .transportName
+                                                                                + "] "
+                                                                                + var2.getMessage(), var2);
 
-                                            }
-
-                                            messageSentListener.messageSent(message);
                                         }
-                                    } catch (final Exception var3) {
-                                        TransportClientSession.LOGGER.error("["
-                                                                            + transportName
-                                                                            + "] "
-                                                                            + var3.getMessage(), var3);
 
+                                        messageSentListener.messageSent(message);
                                     }
+                                } catch (final Exception var3) {
+                                    TransportClientSession.LOGGER.error("[" + transportName + "] " + var3.getMessage(),
+                                                                        var3);
 
                                 }
-                            };
-                            eventTask.executeInExecutor(protocolHandler.getEventExecutor());
-                        } catch (final Throwable var2) {
-                            TransportClientSession.LOGGER.error("["
-                                                                + transportName
-                                                                + "] "
-                                                                + var2.getMessage(), var2);
 
-                        }
+                            }
+                        };
+                        eventTask.executeInExecutor(protocolHandler.getEventExecutor());
+                    } catch (final Throwable var2) {
+                        TransportClientSession.LOGGER.error("[" + transportName + "] " + var2.getMessage(), var2);
 
                     }
-                }, MoreExecutors.newDirectExecutorService());
-            } else {
-                this.sendMessageNaive(message);
-            }
 
-            return true;
+                }
+            }, MoreExecutors.newDirectExecutorService());
+        } else {
+            this.sendMessageNaive(message);
         }
+
+        return true;
+
     }
 
     public ProtocolMessage controlBlockingRequest(final ProtocolMessage message, final Long timeoutTime)
-        throws InterruptedException, IOException {
+        throws InterruptedException, IOException, TimeoutException, ExecutionException {
 
-        if (!this.clientConnector.isOnline()) {
-            throw new IOException("[" + this.transportName + "] Primary session is not active");
-        } else {
-            final ChannelFuture
-                channelFuture
-                = this.protocolHandler.writeMessage(this.clientConnector.getPrimarySession(), message);
-            if (timeoutTime != null && timeoutTime > 0L) {
-                try {
-                    channelFuture.get(timeoutTime, TimeUnit.MILLISECONDS);
-                } catch (final ExecutionException var5) {
-                    if (var5.getCause() instanceof TimeoutException) {
-                        throw new InterruptedException(var5.getMessage());
-                    }
-
-                    if (var5.getCause() instanceof RuntimeException) {
-                        throw (RuntimeException) var5.getCause();
-                    }
-
-                    throw new IOException("[" + this.transportName + "] " + var5.getMessage(), var5.getCause());
-                } catch (final TimeoutException var6) {
-                    throw new InterruptedException("[" + this.transportName + "] " + var6.getMessage());
-                }
-            }
-
-            return new OkResponseMessage();
+        if (!this.isOnline()) {
+            throw new IOException(String.format("[%s] Primary session is not active", this.transportName));
         }
+        final ChannelFuture channelFuture = this.protocolHandler.writeMessage(this.clientConnector.getPrimarySession(),
+                                                                              message);
+        if (timeoutTime != null && timeoutTime > 0L) {
+            channelFuture.get(timeoutTime, TimeUnit.MILLISECONDS);
+        }
+
+        return new OkResponseMessage();
+
     }
 
     public boolean controlRequest(final ProtocolMessage message) {
@@ -708,12 +659,13 @@ class TransportClientSession implements ClientSSLContextListener {
     public ProtocolMessage controlSynchRequest(final ProtocolMessage message, final Long timeoutTime)
         throws TimeoutException {
 
-        if (!this.clientConnector.isOnline()) {
-            throw new IllegalStateException("["
-                                            + this.transportName
-                                            + "] TransportClient not connected, message: "
-                                            + message.toString(400));
-        } else if (timeoutTime != null && timeoutTime > 0L) {
+        if (!this.isOnline()) {
+            throw new IllegalStateException(String.format("[%s] TransportClient not connected, message: %s",
+                                                          this.transportName,
+                                                          message.toString(400)));
+        }
+
+        if (timeoutTime != null && timeoutTime > 0L) {
             final Long syncRequestId = this.transportClient.getNextId();
             message.setSynchRequestId(syncRequestId);
             final RequestMessageTransportListenableFuture
@@ -729,34 +681,28 @@ class TransportClientSession implements ClientSSLContextListener {
             task.scheduleTimeoutCheck(new SyncMessageTimeoutChecker(this.scheduledExecutorService, task, timeoutTime));
 
             while (true) {
+
                 try {
                     return task.get(timeoutTime, TimeUnit.MILLISECONDS);
-                } catch (final TimeoutException var7) {
-                    if (task.getInProcessResponseLastTime() + timeoutTime >= System.currentTimeMillis()) {
-                        throw var7;
-                    }
-                } catch (final InterruptedException var8) {
-                    throw new TimeoutException("[" + this.transportName + "] Interrupted while waiting for response");
-                } catch (final ExecutionException var9) {
-                    if (var9.getCause() instanceof TimeoutException) {
-                        throw (TimeoutException) var9.getCause();
-                    }
+                } catch (InterruptedException e) {
 
-                    if (var9.getCause() instanceof RuntimeException) {
-                        throw (RuntimeException) var9.getCause();
-                    }
 
-                    throw new RuntimeException(var9.getMessage(), var9.getCause());
+                    LOGGER.error("[{}] Interrupted while waiting for response",
+                                 this.transportName, e);
+                } catch (ExecutionException e) {
+                    LOGGER.error("Error occurred...", e);
                 }
+
             }
         } else {
             this.sendMessageNaive(message);
             if (timeoutTime == null) {
-                throw new NullPointerException("["
-                                               + this.transportName
-                                               + "] TimeoutTime parameter is null, but message was still sent");
+                throw new NullPointerException(String.format(
+                    "[%s] TimeoutTime parameter is null, but message was still sent",
+                    this.transportName));
             } else {
-                throw new TimeoutException("[" + this.transportName + "] Timeout is not specified or is zero");
+                throw new TimeoutException(String.format("[%s] Timeout is not specified or is zero",
+                                                         this.transportName));
             }
         }
     }
@@ -768,23 +714,23 @@ class TransportClientSession implements ClientSSLContextListener {
         this.clientConnector.securityException(chain, authType, certificateException);
     }
 
-    IoSessionWrapper getIoSessionWrapper() {
+    public IoSessionWrapper getIoSessionWrapper() {
 
         ((NettyIoSessionWrapperAdapter) this.sessionWrapper).setChannel(this.clientConnector.getPrimarySession());
         return this.sessionWrapper;
     }
 
-    RemoteCallSupport getRemoteCallSupport() {
+    public RemoteCallSupport getRemoteCallSupport() {
 
         return this.transportClient.getRemoteCallSupport();
     }
 
-    RequestMessageTransportListenableFuture getSyncRequestFuture(final Long syncId) {
+    public RequestMessageTransportListenableFuture getSyncRequestFuture(final Long syncId) {
 
         return this.syncRequests.get(syncId);
     }
 
-    boolean isOnline() {
+    public boolean isOnline() {
 
         return this.clientConnector.isOnline();
     }

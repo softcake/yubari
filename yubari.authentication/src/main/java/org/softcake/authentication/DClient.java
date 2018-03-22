@@ -20,7 +20,10 @@ package org.softcake.authentication;
 //import static com.dukascopy.api.impl.connect.ActivityLogger.getInstance;
 
 import org.softcake.yubari.connect.authorization.AuthorizationPropertiesFactory;
+import org.softcake.yubari.netty.GreedClientAuthorizationProvider;
 import org.softcake.yubari.netty.ITransportClient;
+import org.softcake.yubari.netty.InstrumentManager;
+import org.softcake.yubari.netty.SessionHandler;
 import org.softcake.yubari.netty.TransportClient;
 import org.softcake.yubari.netty.TransportClientBuilder;
 import org.softcake.yubari.netty.mina.ClientListener;
@@ -90,7 +93,6 @@ import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.xml.parsers.DocumentBuilder;
@@ -155,10 +157,10 @@ import javax.xml.parsers.DocumentBuilderFactory;
 //import com.dukascopy.util.OperatingSystemType;
 //public class DClient implements IClient, ClientListener, InstrumentListener {
 public class DClient implements ClientListener {
+    public static final String DEFAULT_VERSION = "99.99.99";
     private static final Logger LOGGER = LoggerFactory.getLogger(DClient.class);
     private static final long TRANSPORT_PING_TIMEOUT;
     private static final String SNAPSHOT = "SNAPSHOT";
-    public static final String DEFAULT_VERSION = "99.99.99";
     private static final String FEED_COMMISSION_HISTORY = "feed.commission.history";
     private static final String SUPPORTED_INSTRUMENTS = "instruments";
     private static final String HISTORY_SERVER_URL = "history.server.url";
@@ -176,6 +178,13 @@ public class DClient implements ClientListener {
     private static final String INFO = "INFO";
     private static final String WARNING = "WARNING";
     private static final String ERROR = "ERROR";
+
+    //
+    static {
+        TRANSPORT_PING_TIMEOUT = TimeUnit.SECONDS.toMillis(10L);
+    }
+
+    private final Map<UUID, Long> pluginIdMap = new HashMap();
     private DClient.ClientGUIListener clientGUIListener;
     //private volatile ISystemListenerExtended systemListener;
     private TransportClient transportClient;
@@ -195,9 +204,22 @@ public class DClient implements ClientListener {
     private Map<Long, IJFRunnable<?>> runningJfRunnables = new HashMap();
     // private final Map<Long, JForexTaskManager<?, ?, ?>> taskManagers = new ConcurrentHashMap();
     private Map<INewsFilter.NewsSource, INewsFilter> newsFilters = new HashMap();
-    private final Map<UUID, Long> pluginIdMap = new HashMap();
     private AccountInfoMessage lastAccountInfoMessage;
     private AccountInfoMessageInit lastAccountInfoMessageInit;
+    //    private ISession session = new ISession() {
+    //        public void setSessionId(String sessionId) {
+    //            DClient.this.sessionID = sessionId;
+    //        }
+    //
+    //        public void recreateSessionId() {
+    //            DClient.this.sessionID = UUID.randomUUID().toString();
+    //        }
+    //
+    //        public String getSessionId() {
+    //            return DClient.this.sessionID;
+    //        }
+    //    };
+    //    private final Set<IJFRunnablesListener> runnablesListeners = new HashSet();
     //    private ILotAmountProvider lotAmountProvider;
     //    private DDSChartsController ddsChartsController;
     //    private ClientChartsController clientChartsController;
@@ -215,24 +237,10 @@ public class DClient implements ClientListener {
             return DClient.this.err;
         }
     };
-    //    private ISession session = new ISession() {
-    //        public void setSessionId(String sessionId) {
-    //            DClient.this.sessionID = sessionId;
-    //        }
-    //
-    //        public void recreateSessionId() {
-    //            DClient.this.sessionID = UUID.randomUUID().toString();
-    //        }
-    //
-    //        public String getSessionId() {
-    //            return DClient.this.sessionID;
-    //        }
-    //    };
-    //    private final Set<IJFRunnablesListener> runnablesListeners = new HashSet();
 
     public DClient() {
         // System.setProperty(PreferencesFactory.class.getName(), JForexPreferencesFactory.class.getName());
-        this.sessionID = UUID.randomUUID().toString();
+        this.sessionID = SessionHandler.getSessionId();
         //  PlatformServiceProvider.getInstance().setSession(this.session);
         ThreadFactory var10000 = new ThreadFactory() {
             final AtomicInteger threadNumber = new AtomicInteger(1);
@@ -270,6 +278,16 @@ public class DClient implements ClientListener {
         //
         //            }
         //        };
+    }
+
+    //
+    private static List<String> splitUserTypes(String input) {
+
+        Pattern p = Pattern.compile("[,\\s]+");
+        String[] result = p.split(input);
+        List<String> accountTypes = new ArrayList();
+        Collections.addAll(accountTypes, result);
+        return accountTypes;
     }
 
     public synchronized void connect(String jnlpUrl, String username, String password) throws Exception {
@@ -317,7 +335,9 @@ public class DClient implements ClientListener {
             //                }
             //            }, Boolean.parseBoolean(downloadDataInBackgroundString));
             //            FeedDataProvider.setPlatformTicket(ticket);
+            this.initialized = true;
             this.transportClient.connect();
+
             this.connectToHistoryServer(username, true);
             //            FeedDataProvider.getDefaultInstance().setInstrumentsSubscribed(FeedDataProvider
             // .createInstrumentMapMappedWithSaveInCacheOption(this.instruments, true));
@@ -514,6 +534,7 @@ public class DClient implements ClientListener {
                 String authResponse = authorizationServerResponse.getFastestAPIAndTicket();
                 LOGGER.debug(authResponse);
                 String host;
+                this.sessionID = SessionHandler.getSessionId();
                 if (!authorizationServerResponse.isOK()) {
                     AuthorizationServerResponseCode
                         authorizationServerResponseCode
@@ -541,90 +562,73 @@ public class DClient implements ClientListener {
                     //                        throw new JFAuthenticationException("Incorrect username or password");
                     //                    }
                 } else {
-                    Matcher matcher = AuthorizationClient.RESULT_PATTERN.matcher(authResponse);
-                    if (!matcher.matches()) {
-                        throw new IOException("Authentication procedure returned unexpected result ["
-                                              + authResponse
-                                              + "]");
-                    } else {
-                        String url = matcher.group(1);
-                        int semicolonIndex = url.indexOf(58);
-                        int port;
-                        if (semicolonIndex != -1) {
-                            host = url.substring(0, semicolonIndex);
-                            if (semicolonIndex + 1 >= url.length()) {
-                                LOGGER.warn("port not set, using default 443");
-                                port = 443;
-                            } else {
-                                port = Integer.parseInt(url.substring(semicolonIndex + 1));
-                            }
-                        } else {
-                            host = url;
-                            port = 443;
-                        }
-
-                        String ticket = matcher.group(7);
-                        Properties properties;
-
-                        properties = authorizationServerResponse.getPlatformProperties();
 
 
-                        this.initServerProperties(properties);
-                        //  this.lotAmountProvider = new DClient.LotAmountProvider();
+                    String ticket = authorizationServerResponse.getTicket();
+                    Properties properties = authorizationServerResponse.getPlatformProperties();
 
-                        try {
-                            InetAddress localhost = InetAddress.getLocalHost();
-                            this.internalIP = localhost != null ? localhost.getHostAddress() : null;
-                        } catch (UnknownHostException var18) {
-                            LOGGER.error("Can't detect local IP : " + var18.getMessage());
-                            this.internalIP = "";
-                        }
 
-                        String userAgent = CommonContext.getUserAgent("DDS3_JFOREXSDK");
-                        LOGGER.debug("UserAgent: " + userAgent);
-                        if (this.authProvider == null) {
-                            this.authProvider = new GreedClientAuthorizationProvider(username, ticket, this.sessionID);
-                        } else {
-                            this.authProvider.setSessionId(this.sessionID);
-                            this.authProvider.setTicket(ticket);
-                            this.authProvider.setLogin(username);
-                        }
+                    this.initServerProperties(properties);
+                    //  this.lotAmountProvider = new DClient.LotAmountProvider();
 
-                        this.authProvider.setUserAgent(userAgent);
-                        if (this.transportClient == null) {
-                            TransportClientBuilder builder = TransportClient.builder();
-                            builder.withStaticSessionDictionary(new StaticSessionDictionary())
-                                   .withTransportName("DDS2 Standalone Transport Client")
-                                   .withAddress(new ServerAddress(host, port))
-                                   .withAuthorizationProvider(this.authProvider)
-                                   .withUserAgent(userAgent)
-                                   .withClientListener(this)
-                                   .withEventPoolSize(2)
-                                   .withUseSSL(true)
-                                   .withSecurityExceptionHandler(new SecurityExceptionHandler() {
-                                       public boolean isIgnoreSecurityException(X509Certificate[] chain,
-                                                                                String authType,
-                                                                                CertificateException ex) {
-
-                                           DClient.LOGGER.warn("Security exception : " + ex);
-                                           return true;
-                                       }
-                                   });
-                            //                            if (!OperatingSystemType.LINUX && !OperatingSystemType
-                            // .MACOSX) {
-                            builder.withSecondaryConnectionPingTimeout(TRANSPORT_PING_TIMEOUT);
-                            //                            } else {
-                            //                                builder.withSecondaryConnectionPingInterval(5000L)
-                            // .withPrimaryConnectionPingTimeout(2000L).withSecondaryConnectionPingTimeout(2000L);
-                            //                            }
-
-                            this.transportClient = builder.build();
-                        } else {
-                            this.transportClient.setAddress(new ServerAddress(host, port));
-                        }
-
-                        return ticket;
+                    try {
+                        InetAddress localhost = InetAddress.getLocalHost();
+                        this.internalIP = localhost != null ? localhost.getHostAddress() : null;
+                    } catch (UnknownHostException var18) {
+                        LOGGER.error("Can't detect local IP : " + var18.getMessage());
+                        this.internalIP = "";
                     }
+
+                    String userAgent = CommonContext.getUserAgent("DDS3_JFOREXSDK");
+                    LOGGER.debug("UserAgent: " + userAgent);
+                    if (this.authProvider == null) {
+                        this.authProvider = new GreedClientAuthorizationProvider(username, ticket, this.sessionID);
+                    } else {
+                        this.authProvider.setSessionId(this.sessionID);
+                        this.authProvider.setTicket(ticket);
+                        this.authProvider.setLogin(username);
+                    }
+
+                    this.authProvider.setUserAgent(userAgent);
+                    if (this.transportClient == null) {
+                        TransportClientBuilder builder = TransportClient.builder();
+                        builder.withStaticSessionDictionary(new StaticSessionDictionary())
+                               .withTransportName("DDS2 Standalone Transport Client")
+                               .withAddress(new ServerAddress(authorizationServerResponse.getHost(),
+                                                              authorizationServerResponse.getPort()))
+                               .withAuthorizationProvider(this.authProvider)
+                               .withUserAgent(userAgent)
+                               .withClientListener(this)
+                               .withEventPoolSize(5)
+                               .withUseSSL(true)
+                               .withDuplicateSyncMessagesToClientListeners(true)
+                               .withAuthEventPoolTerminationTimeUnit(TimeUnit.SECONDS)
+                               .withAuthEventPoolTerminationTimeUnitCount(25L)
+                               .withSecurityExceptionHandler(new SecurityExceptionHandler() {
+                                   public boolean isIgnoreSecurityException(X509Certificate[] chain,
+                                                                            String authType,
+                                                                            CertificateException ex) {
+
+                                       DClient.LOGGER.warn("Security exception : " + ex);
+                                       return true;
+                                   }
+                               });
+                        //                            if (!OperatingSystemType.LINUX && !OperatingSystemType
+                        // .MACOSX) {
+                        builder.withSecondaryConnectionPingTimeout(TRANSPORT_PING_TIMEOUT);
+                        //                            } else {
+                        //                                builder.withSecondaryConnectionPingInterval(5000L)
+                        // .withPrimaryConnectionPingTimeout(2000L).withSecondaryConnectionPingTimeout(2000L);
+                        //                            }
+
+                        this.transportClient = builder.build();
+                    } else {
+                        this.transportClient.setAddress(new ServerAddress(authorizationServerResponse.getHost(),
+                                                                          authorizationServerResponse.getPort()));
+                    }
+
+                    return ticket;
+
                 }
             } else {
                 throw new IOException("Authentication failed, no server response.");
@@ -671,6 +675,23 @@ public class DClient implements ClientListener {
 
         // this.nullifySession(localCacheManager);
     }
+    //
+    //    private void nullifySession(LocalCacheManager localCAcheManager) {
+    //        if (localCAcheManager != null) {
+    //            localCAcheManager.shutdown();
+    //        }
+    //
+    //        this.newsFilters.clear();
+    //        this.instruments.clear();
+    //        this.captchaId = null;
+    //        this.lastAccountInfoMessage = null;
+    //        this.accountName = null;
+    //        this.internalIP = null;
+    //        this.sessionID = null;
+    //        this.live = false;
+    //        this.serverProperties = new Properties();
+    //        this.initialized = false;
+    //    }
 
     private void sendSynchronizedQuitMessage() {
 
@@ -691,64 +712,6 @@ public class DClient implements ClientListener {
             this.transportClient = null;
             this.authProvider = null;
         }
-
-    }
-    //
-    //    private void nullifySession(LocalCacheManager localCAcheManager) {
-    //        if (localCAcheManager != null) {
-    //            localCAcheManager.shutdown();
-    //        }
-    //
-    //        this.newsFilters.clear();
-    //        this.instruments.clear();
-    //        this.captchaId = null;
-    //        this.lastAccountInfoMessage = null;
-    //        this.accountName = null;
-    //        this.internalIP = null;
-    //        this.sessionID = null;
-    //        this.live = false;
-    //        this.serverProperties = new Properties();
-    //        this.initialized = false;
-    //    }
-
-    public boolean isConnected() {
-
-        return this.transportClient != null && this.transportClient.isOnline() && this.initialized;
-    }
-
-    private void connectedInit() {
-                InitRequestMessage initRequestMessage = new InitRequestMessage();
-                initRequestMessage.setSendGroups(true);
-                initRequestMessage.setSendPacked(true);
-                this.transportClient.sendMessageNaive(initRequestMessage);
-                this.setSubscribedInstruments(this.instruments);
-                Iterator var2 = this.newsFilters.values().iterator();
-
-                while(var2.hasNext()) {
-                    INewsFilter newsFilter = (INewsFilter)var2.next();
-                    NewsSubscribeRequest newsSubscribeRequest = new NewsSubscribeRequest();
-                    Set<com.dukascopy.dds3.transport.msg.news.NewsSource> sources = TransportHelper.toTransportSources(newsFilter.getNewsSources());
-                    newsSubscribeRequest.setSources(sources);
-                    newsSubscribeRequest.setHot(newsFilter.isOnlyHot());
-                    newsSubscribeRequest.setGeoRegions(EnumConverter.convert(newsFilter.getCountries(), GeoRegion
-         .class));
-                    newsSubscribeRequest.setMarketSectors(EnumConverter.convert(newsFilter.getMarketSectors(),
-         MarketSector.class));
-                    newsSubscribeRequest.setIndicies(EnumConverter.convert(newsFilter.getStockIndicies(),
-         StockIndex.class));
-                    newsSubscribeRequest.setCurrencies(EnumConverter.convertByName(newsFilter.getCurrencies()));
-                    newsSubscribeRequest.setEventCategories(EnumConverter.convert(newsFilter.getEventCategories(),
-         EventCategory.class));
-                    newsSubscribeRequest.setKeywords(newsFilter.getKeywords());
-                    newsSubscribeRequest.setFrom(newsFilter.getFrom() == null ? -9223372036854775808L : newsFilter
-         .getFrom().getTime());
-                    newsSubscribeRequest.setTo(newsFilter.getTo() == null ? -9223372036854775808L : newsFilter
-         .getTo().getTime());
-                    newsSubscribeRequest.setCalendarType((CalendarType)EnumConverter.convert(newsFilter.getType(),
-                                                                                             CalendarType.class));
-                    LOGGER.debug("Subscribing : " + newsSubscribeRequest);
-                    this.transportClient.sendMessageNaive(newsSubscribeRequest);
-                }
 
     }
     //
@@ -821,8 +784,94 @@ public class DClient implements ClientListener {
     //
     //    }
 
-    public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
+    public boolean isConnected() {
 
+        return this.transportClient != null && this.transportClient.isOnline() && this.initialized;
+    }
+
+    //   private void processPackedAccountInfoMessage(PackedAccountInfoMessage packedAccountInfoMessage,
+    // JForexTaskManager<?, ?, ?> taskManager) {
+    //        AccountInfoMessageInit accountInfoMessageInit = packedAccountInfoMessage.getAccount();
+    //        taskManager.updateAccountInfo(accountInfoMessageInit);
+    //        OrdersProvider.getInstance().orderSynch(packedAccountInfoMessage);
+    //        taskManager.orderSynch(packedAccountInfoMessage);
+    //        taskManager.onConnect(true);
+    //        Iterator var4 = packedAccountInfoMessage.getGroups().iterator();
+    //
+    //        while(var4.hasNext()) {
+    //            OrderGroupMessage orderGroupMessage = (OrderGroupMessage)var4.next();
+    //            taskManager.onOrderGroupReceived(orderGroupMessage);
+    //        }
+    //
+    //        var4 = packedAccountInfoMessage.getOrders().iterator();
+    //
+    //        while(var4.hasNext()) {
+    //            OrderMessage orderMessage = (OrderMessage)var4.next();
+    //            this.processOrderMessage(orderMessage, taskManager);
+    //        }
+
+    //   }
+
+    //   private void processOrderMessage(OrderMessage message, JForexTaskManager<?, ?, ?> taskManager) {
+    //        OrderMessageExt orderMessage = null;
+    //        if (message instanceof OrderMessageExt) {
+    //            orderMessage = (OrderMessageExt)message;
+    //        } else {
+    //            orderMessage = ProtocolUtils.getInstance(message);
+    //        }
+    //
+    //        taskManager.onOrderReceived(orderMessage);
+    //    }
+
+    private void connectedInit() {
+
+        InitRequestMessage initRequestMessage = new InitRequestMessage();
+        initRequestMessage.setSendGroups(true);
+        initRequestMessage.setSendPacked(true);
+        this.transportClient.sendMessageNaive(initRequestMessage);
+        this.setSubscribedInstruments(this.instruments);
+        Iterator var2 = this.newsFilters.values().iterator();
+
+        while (var2.hasNext()) {
+            INewsFilter newsFilter = (INewsFilter) var2.next();
+            NewsSubscribeRequest newsSubscribeRequest = new NewsSubscribeRequest();
+            Set<com.dukascopy.dds3.transport.msg.news.NewsSource> sources = TransportHelper.toTransportSources(
+                newsFilter.getNewsSources());
+            newsSubscribeRequest.setSources(sources);
+            newsSubscribeRequest.setHot(newsFilter.isOnlyHot());
+            newsSubscribeRequest.setGeoRegions(EnumConverter.convert(newsFilter.getCountries(), GeoRegion.class));
+            newsSubscribeRequest.setMarketSectors(EnumConverter.convert(newsFilter.getMarketSectors(),
+                                                                        MarketSector.class));
+            newsSubscribeRequest.setIndicies(EnumConverter.convert(newsFilter.getStockIndicies(), StockIndex.class));
+            newsSubscribeRequest.setCurrencies(EnumConverter.convertByName(newsFilter.getCurrencies()));
+            newsSubscribeRequest.setEventCategories(EnumConverter.convert(newsFilter.getEventCategories(),
+                                                                          EventCategory.class));
+            newsSubscribeRequest.setKeywords(newsFilter.getKeywords());
+            newsSubscribeRequest.setFrom(newsFilter.getFrom() == null
+                                         ? -9223372036854775808L
+                                         : newsFilter.getFrom().getTime());
+            newsSubscribeRequest.setTo(newsFilter.getTo() == null
+                                       ? -9223372036854775808L
+                                       : newsFilter.getTo().getTime());
+            newsSubscribeRequest.setCalendarType((CalendarType) EnumConverter.convert(newsFilter.getType(),
+                                                                                      CalendarType.class));
+            LOGGER.debug("Subscribing : " + newsSubscribeRequest);
+            this.transportClient.sendMessageNaive(newsSubscribeRequest);
+        }
+
+    }
+public int anInt;
+    public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
+anInt++;
+        LOGGER.info(message.toString());
+if(anInt<5){
+    return;
+}
+        try {
+            Thread.sleep(600000L);
+        } catch (InterruptedException e) {
+            LOGGER.error("Error occurred...", e);
+        }
         TransportClient providedClient = TransportClient.class.cast(client);
         LOGGER.info(message.toString());
         //        if (providedClient == null || providedClient.isOnline() && !providedClient.isTerminated() &&
@@ -1000,40 +1049,6 @@ public class DClient implements ClientListener {
         //        }
     }
 
-    //   private void processPackedAccountInfoMessage(PackedAccountInfoMessage packedAccountInfoMessage,
-    // JForexTaskManager<?, ?, ?> taskManager) {
-    //        AccountInfoMessageInit accountInfoMessageInit = packedAccountInfoMessage.getAccount();
-    //        taskManager.updateAccountInfo(accountInfoMessageInit);
-    //        OrdersProvider.getInstance().orderSynch(packedAccountInfoMessage);
-    //        taskManager.orderSynch(packedAccountInfoMessage);
-    //        taskManager.onConnect(true);
-    //        Iterator var4 = packedAccountInfoMessage.getGroups().iterator();
-    //
-    //        while(var4.hasNext()) {
-    //            OrderGroupMessage orderGroupMessage = (OrderGroupMessage)var4.next();
-    //            taskManager.onOrderGroupReceived(orderGroupMessage);
-    //        }
-    //
-    //        var4 = packedAccountInfoMessage.getOrders().iterator();
-    //
-    //        while(var4.hasNext()) {
-    //            OrderMessage orderMessage = (OrderMessage)var4.next();
-    //            this.processOrderMessage(orderMessage, taskManager);
-    //        }
-
-    //   }
-
-    //   private void processOrderMessage(OrderMessage message, JForexTaskManager<?, ?, ?> taskManager) {
-    //        OrderMessageExt orderMessage = null;
-    //        if (message instanceof OrderMessageExt) {
-    //            orderMessage = (OrderMessageExt)message;
-    //        } else {
-    //            orderMessage = ProtocolUtils.getInstance(message);
-    //        }
-    //
-    //        taskManager.onOrderReceived(orderMessage);
-    //    }
-
     private void onAccountInfoMessage(AccountInfoMessage message) {
         //        FeedDataProvider feedDataProvider = FeedDataProvider.getDefaultInstance();
         //        if (feedDataProvider != null && !feedDataProvider.isStopped()) {
@@ -1153,44 +1168,15 @@ public class DClient implements ClientListener {
         this.connectedInit();
         if (this.initialized) {
             this.fireConnected();
+            InstrumentManager instrumentManager = new InstrumentManager(client);
+            Set<Instrument> instruments = new HashSet<>();
+            instruments.add(Instrument.AUDCAD);
+            instruments.add(Instrument.EURUSD);
+            instruments.add(Instrument.USDJPY);
+            instrumentManager.addToFullDepthSubscribed(instruments);
         }
 
-        // this.currencyMarketManager.start();
-    }
 
-    private void fireConnected() {
-        //        ISystemListener systemListener = this.getSystemListener();
-        //        systemListener.onConnect();
-        //        FeedDataProvider.getDefaultInstance().connected();
-        //        this.remoteManager = RemoteStrategyManager.getResetInstance();
-        //        this.ddsChartsController = DDSChartsControllerFactory.instance().getDefaultInstance();
-        //        this.clientChartsController = new ClientChartsController(this.ddsChartsController, this.getClass()
-        // .getName());
-        //        this.ddsChartsController.changeChartTrading(false);
-        //        FeedDataProvider.getDefaultInstance().getJssManager().addJssListener(this.jssBroadcastListener);
-    }
-
-    public synchronized void disconnected(ITransportClient client, DisconnectedEvent event) {
-        //        if (FeedDataProvider.getDefaultInstance() != null) {
-        //            FeedDataProvider.getDefaultInstance().disconnected();
-        //            FeedDataProvider.getDefaultInstance().getJssManager().removeJssListener(this
-        // .jssBroadcastListener);
-        //        }
-        //
-        //        ISystemListener systemListener = this.getSystemListener();
-        //        systemListener.onDisconnect();
-        //        Iterator var4 = this.taskManagers.values().iterator();
-        //
-        //        while(var4.hasNext()) {
-        //            JForexTaskManager<?, ?, ?> taskManager = (JForexTaskManager)var4.next();
-        //            taskManager.onConnect(false);
-        //        }
-        //
-        //        if (this.ddsChartsController != null) {
-        //            this.ddsChartsController.dispose();
-        //        }
-        //
-        //        this.currencyMarketManager.stop();
     }
 
     //    public long startStrategy(IStrategy strategy) throws IllegalStateException, NullPointerException {
@@ -1306,6 +1292,49 @@ public class DClient implements ClientListener {
     //        }
     //    }
 
+    private void fireConnected() {
+        //        ISystemListener systemListener = this.getSystemListener();
+        //        systemListener.onConnect();
+        //        FeedDataProvider.getDefaultInstance().connected();
+        //        this.remoteManager = RemoteStrategyManager.getResetInstance();
+        //        this.ddsChartsController = DDSChartsControllerFactory.instance().getDefaultInstance();
+        //        this.clientChartsController = new ClientChartsController(this.ddsChartsController, this.getClass()
+        // .getName());
+        //        this.ddsChartsController.changeChartTrading(false);
+        //        FeedDataProvider.getDefaultInstance().getJssManager().addJssListener(this.jssBroadcastListener);
+    }
+
+    //    public synchronized ISystemListener getSystemListener() {
+    //        if (this.systemListener == null) {
+    //            this.setSystemListener(new DClient.DefaultSystemListener(null));
+    //        }
+    //
+    //        return this.systemListener;
+    //    }
+
+    public synchronized void disconnected(ITransportClient client, DisconnectedEvent event) {
+        //        if (FeedDataProvider.getDefaultInstance() != null) {
+        //            FeedDataProvider.getDefaultInstance().disconnected();
+        //            FeedDataProvider.getDefaultInstance().getJssManager().removeJssListener(this
+        // .jssBroadcastListener);
+        //        }
+        //
+        //        ISystemListener systemListener = this.getSystemListener();
+        //        systemListener.onDisconnect();
+        //        Iterator var4 = this.taskManagers.values().iterator();
+        //
+        //        while(var4.hasNext()) {
+        //            JForexTaskManager<?, ?, ?> taskManager = (JForexTaskManager)var4.next();
+        //            taskManager.onConnect(false);
+        //        }
+        //
+        //        if (this.ddsChartsController != null) {
+        //            this.ddsChartsController.dispose();
+        //        }
+        //
+        //        this.currencyMarketManager.stop();
+    }
+
     public synchronized void stopStrategy(long processId) {
         //        if (this.runningJfRunnables.containsKey(processId)) {
         //            JForexTaskManager<?, ?, ?> taskManager = (JForexTaskManager)this.taskManagers.remove(processId);
@@ -1327,14 +1356,6 @@ public class DClient implements ClientListener {
         //        }
     }
 
-    //    public synchronized ISystemListener getSystemListener() {
-    //        if (this.systemListener == null) {
-    //            this.setSystemListener(new DClient.DefaultSystemListener(null));
-    //        }
-    //
-    //        return this.systemListener;
-    //    }
-
     public synchronized Map<Long, IStrategy> getStartedStrategies() {
 
         Map<Long, IStrategy> map = new HashMap();
@@ -1348,6 +1369,80 @@ public class DClient implements ClientListener {
         }
 
         return map;
+    }
+
+    //
+    public synchronized void unsubscribeInstruments(Set<Instrument> instruments) {
+        //        try {
+        //            AccessController.doPrivileged(() -> {
+        //                Set<Instrument> unsubcribeInstruments = new HashSet(instruments);
+        //                Set<Instrument> instrumentsUsedByOrdersAndPositions = new HashSet();
+        //                Map var4 = this.taskManagers;
+        //                synchronized(this.taskManagers) {
+        //                    Iterator var5 = this.taskManagers.values().iterator();
+        //
+        //                    while(true) {
+        //                        if (!var5.hasNext()) {
+        //                            break;
+        //                        }
+        //
+        //                        JForexTaskManager<?, ?, ?> engine = (JForexTaskManager)var5.next();
+        //                        instrumentsUsedByOrdersAndPositions.addAll(engine.getRequiredInstruments());
+        //                    }
+        //                }
+        //
+        //                if (this.transportClient != null) {
+        //                    instrumentsUsedByOrdersAndPositions.addAll(OrdersProvider.getInstance()
+        // .getOrderInstruments());
+        //                    if (!unsubcribeInstruments.isEmpty()) {
+        //                        IInstrumentManager instrumentManager = FeedDataProvider.getDefaultInstance()
+        // .getInstrumentManager();
+        //                        Set<Instrument> requiredInstruments = instrumentManager.requiredInstruments
+        // (instrumentsUsedByOrdersAndPositions, this.ddsChartsController);
+        //                        unsubcribeInstruments.removeAll(requiredInstruments);
+        //                        Set<Instrument> remainingInstruments = instrumentManager.getSubscribedInstruments();
+        //                        remainingInstruments.removeAll(unsubcribeInstruments);
+        //                        instrumentManager.unsubscribe(unsubcribeInstruments);
+        //                        if (FeedDataProvider.getDefaultInstance() != null) {
+        //                            FeedDataProvider.getDefaultInstance().setInstrumentsSubscribed(FeedDataProvider
+        // .createInstrumentMapMappedWithSaveInCacheOption(remainingInstruments, true));
+        //                        }
+        //
+        //                        this.instruments = new HashSet(remainingInstruments);
+        //                    }
+        //                }
+        //
+        //                return null;
+        //            });
+        //        } catch (PrivilegedActionException var3) {
+        //            throw new RuntimeException("Error while unsubscribing from instruments", var3.getException());
+        //        }
+    }
+
+    //
+    //    public synchronized INewsFilter getNewsFilter(INewsFilter.NewsSource newsSource) {
+    //        return (INewsFilter)this.newsFilters.get(newsSource);
+    //    }
+    //
+    public synchronized INewsFilter removeNewsFilter(INewsFilter.NewsSource newsSource) {
+
+        if (this.transportClient != null && this.transportClient.isOnline()) {
+            //            NewsSubscribeRequest newsUnsubscribeRequest = new NewsSubscribeRequest();
+            //            newsUnsubscribeRequest.setRequestType(SubscribeRequestType.UNSUBSCRIBE);
+            //            newsUnsubscribeRequest.setSources(Collections.singleton(com.dukascopy.dds3.transport.msg
+            // .news.NewsSource.valueOf(newsSource.name())));
+            //            LOGGER.debug("Unsubscribing : " + newsUnsubscribeRequest);
+            //            this.transportClient.sendMessageNaive(newsUnsubscribeRequest);
+            return (INewsFilter) this.newsFilters.remove(newsSource);
+        } else {
+            return null;
+        }
+    }
+
+    //
+    public synchronized Set<Instrument> getSubscribedInstruments() {
+
+        return new HashSet(this.instruments);
     }
 
     //    public synchronized Map<UUID, Plugin> getRunningPlugins() {
@@ -1431,51 +1526,10 @@ public class DClient implements ClientListener {
     }
 
     //
-    public synchronized void unsubscribeInstruments(Set<Instrument> instruments) {
-        //        try {
-        //            AccessController.doPrivileged(() -> {
-        //                Set<Instrument> unsubcribeInstruments = new HashSet(instruments);
-        //                Set<Instrument> instrumentsUsedByOrdersAndPositions = new HashSet();
-        //                Map var4 = this.taskManagers;
-        //                synchronized(this.taskManagers) {
-        //                    Iterator var5 = this.taskManagers.values().iterator();
-        //
-        //                    while(true) {
-        //                        if (!var5.hasNext()) {
-        //                            break;
-        //                        }
-        //
-        //                        JForexTaskManager<?, ?, ?> engine = (JForexTaskManager)var5.next();
-        //                        instrumentsUsedByOrdersAndPositions.addAll(engine.getRequiredInstruments());
-        //                    }
-        //                }
-        //
-        //                if (this.transportClient != null) {
-        //                    instrumentsUsedByOrdersAndPositions.addAll(OrdersProvider.getInstance()
-        // .getOrderInstruments());
-        //                    if (!unsubcribeInstruments.isEmpty()) {
-        //                        IInstrumentManager instrumentManager = FeedDataProvider.getDefaultInstance()
-        // .getInstrumentManager();
-        //                        Set<Instrument> requiredInstruments = instrumentManager.requiredInstruments
-        // (instrumentsUsedByOrdersAndPositions, this.ddsChartsController);
-        //                        unsubcribeInstruments.removeAll(requiredInstruments);
-        //                        Set<Instrument> remainingInstruments = instrumentManager.getSubscribedInstruments();
-        //                        remainingInstruments.removeAll(unsubcribeInstruments);
-        //                        instrumentManager.unsubscribe(unsubcribeInstruments);
-        //                        if (FeedDataProvider.getDefaultInstance() != null) {
-        //                            FeedDataProvider.getDefaultInstance().setInstrumentsSubscribed(FeedDataProvider
-        // .createInstrumentMapMappedWithSaveInCacheOption(remainingInstruments, true));
-        //                        }
-        //
-        //                        this.instruments = new HashSet(remainingInstruments);
-        //                    }
-        //                }
-        //
-        //                return null;
-        //            });
-        //        } catch (PrivilegedActionException var3) {
-        //            throw new RuntimeException("Error while unsubscribing from instruments", var3.getException());
-        //        }
+    public synchronized Set<IFinancialInstrument> getSubscribedFinancialInstruments() {
+
+        return null; //AvailableInstrumentProvider.INSTANCE.convertToFinancialInstrumentSet(this
+        // .getSubscribedInstruments());
     }
 
     //
@@ -1483,39 +1537,6 @@ public class DClient implements ClientListener {
         //        Set<Instrument> instruments = AvailableInstrumentProvider.INSTANCE.convertToInstrumentSet
         // (financialInstruments);
         //        this.setSubscribedInstruments(instruments);
-    }
-
-    //
-    //    public synchronized INewsFilter getNewsFilter(INewsFilter.NewsSource newsSource) {
-    //        return (INewsFilter)this.newsFilters.get(newsSource);
-    //    }
-    //
-    public synchronized INewsFilter removeNewsFilter(INewsFilter.NewsSource newsSource) {
-
-        if (this.transportClient != null && this.transportClient.isOnline()) {
-            //            NewsSubscribeRequest newsUnsubscribeRequest = new NewsSubscribeRequest();
-            //            newsUnsubscribeRequest.setRequestType(SubscribeRequestType.UNSUBSCRIBE);
-            //            newsUnsubscribeRequest.setSources(Collections.singleton(com.dukascopy.dds3.transport.msg
-            // .news.NewsSource.valueOf(newsSource.name())));
-            //            LOGGER.debug("Unsubscribing : " + newsUnsubscribeRequest);
-            //            this.transportClient.sendMessageNaive(newsUnsubscribeRequest);
-            return (INewsFilter) this.newsFilters.remove(newsSource);
-        } else {
-            return null;
-        }
-    }
-
-    //
-    public synchronized Set<Instrument> getSubscribedInstruments() {
-
-        return new HashSet(this.instruments);
-    }
-
-    //
-    public synchronized Set<IFinancialInstrument> getSubscribedFinancialInstruments() {
-
-        return null; //AvailableInstrumentProvider.INSTANCE.convertToFinancialInstrumentSet(this
-        // .getSubscribedInstruments());
     }
 
     //
@@ -1706,7 +1727,8 @@ public class DClient implements ClientListener {
     }
 
     //
-    //    public void subscriptionChanged(Map<Instrument, InstrumentSubscriptionResult> resultMap, IInstrumentManager instrumentManager, boolean lock) {
+    //    public void subscriptionChanged(Map<Instrument, InstrumentSubscriptionResult> resultMap, IInstrumentManager
+    // instrumentManager, boolean lock) {
     //       this.updateSubscribedInstruments(instrumentManager.getSubscribedInstruments());
     //   }
     //
@@ -1719,40 +1741,31 @@ public class DClient implements ClientListener {
 
     //
     private void initServerProperties(Properties properties) {
-                if (properties != null) {
-                    this.serverProperties.putAll(properties);
-                    //PlatformSessionClientBean.getInstance().setStorageServerUrl(properties.getProperty("sss.server.url"));
-                    String typesList = this.serverProperties.getProperty("userTypes");
-                    if (typesList == null) {
-                        LOGGER.warn("Types list was not found");
-                        return;
-                    }
 
-                    List<String> accountTypeList = splitUserTypes(typesList);
-                    boolean isContest = accountTypeList.contains("ANALITIC_CONTEST");
-                    this.serverProperties.put("ANALITIC_CONTEST", isContest);
-                    Set<Integer> typesSet = (Set)this.serverProperties.get("additionalUserTypes");
-                    if (typesSet == null) {
-                        LOGGER.warn("Layout Types list was not found");
-                        return;
-                    }
+        if (properties != null) {
+            this.serverProperties.putAll(properties);
+            //PlatformSessionClientBean.getInstance().setStorageServerUrl(properties.getProperty("sss.server.url"));
+            String typesList = this.serverProperties.getProperty("userTypes");
+            if (typesList == null) {
+                LOGGER.warn("Types list was not found");
+                return;
+            }
 
-                    boolean isPlaceBidOfferHidden = typesSet.contains(DClient.LayoutType.PLACE_BID_OFFER_HIDDEN.getId());
-                    this.serverProperties.put(DClient.LayoutType.PLACE_BID_OFFER_HIDDEN.toString(), isPlaceBidOfferHidden);
-                    boolean isDelivirableXau = typesSet.contains(DClient.LayoutType.DELIVERABLE_XAU.getId());
-                    this.serverProperties.put(DClient.LayoutType.DELIVERABLE_XAU.toString(), isDelivirableXau);
-                }
+            List<String> accountTypeList = splitUserTypes(typesList);
+            boolean isContest = accountTypeList.contains("ANALITIC_CONTEST");
+            this.serverProperties.put("ANALITIC_CONTEST", isContest);
+            Set<Integer> typesSet = (Set) this.serverProperties.get("additionalUserTypes");
+            if (typesSet == null) {
+                LOGGER.warn("Layout Types list was not found");
+                return;
+            }
 
-    }
+            boolean isPlaceBidOfferHidden = typesSet.contains(DClient.LayoutType.PLACE_BID_OFFER_HIDDEN.getId());
+            this.serverProperties.put(DClient.LayoutType.PLACE_BID_OFFER_HIDDEN.toString(), isPlaceBidOfferHidden);
+            boolean isDelivirableXau = typesSet.contains(DClient.LayoutType.DELIVERABLE_XAU.getId());
+            this.serverProperties.put(DClient.LayoutType.DELIVERABLE_XAU.toString(), isDelivirableXau);
+        }
 
-    //
-    private static List<String> splitUserTypes(String input) {
-
-        Pattern p = Pattern.compile("[,\\s]+");
-        String[] result = p.split(input);
-        List<String> accountTypes = new ArrayList();
-        Collections.addAll(accountTypes, result);
-        return accountTypes;
     }
 
     //
@@ -1788,7 +1801,9 @@ public class DClient implements ClientListener {
     //    }
     //
     private void connectToHistoryServer(String username, boolean downloadInBackground) {
-        //        FeedDataProvider.getDefaultInstance().connectToHistoryServer(this.transportClient, username, this.serverProperties.getProperty("history.server.url", (String)null), this.serverProperties.getProperty("encryptionKey", (String)null), downloadInBackground, true);
+        //        FeedDataProvider.getDefaultInstance().connectToHistoryServer(this.transportClient, username, this
+        // .serverProperties.getProperty("history.server.url", (String)null), this.serverProperties.getProperty
+        // ("encryptionKey", (String)null), downloadInBackground, true);
         //        IInstrumentManager instrumentManager = FeedDataProvider.getDefaultInstance().getInstrumentManager();
         //        if (!instrumentManager.getInstrumentListeners().contains(this)) {
         //            instrumentManager.addInstrumentListener(this);
@@ -1797,8 +1812,70 @@ public class DClient implements ClientListener {
     }
 
     //
-    static {
-        TRANSPORT_PING_TIMEOUT = TimeUnit.SECONDS.toMillis(10L);
+    //    private class LotAmountProvider extends DefaultLotAmountProvider implements ILotAmountProvider {
+    //        private final BigDecimal MIN_CONTEST_TRADABLE_AMOUNT = BigDecimal.valueOf(0.1D);
+    //        private final BigDecimal MAX_CONTEST_TRADABLE_AMOUNT = BigDecimal.valueOf(5L);
+    //        private boolean contest = false;
+    //
+    //        public LotAmountProvider() {
+    //            this.contest = DClient.this.getBooleanProperty("ANALITIC_CONTEST");
+    //        }
+    //
+    //        public BigDecimal getMinTradableAmount(Instrument instrument) {
+    //            BigDecimal result = super.getMinTradableAmount(instrument);
+    //            if (instrument != null && (InstrumentUtils.isForex(instrument) || InstrumentUtils.isCrypto
+    // (instrument)) && this.contest) {
+    //                result = this.MIN_CONTEST_TRADABLE_AMOUNT;
+    //            }
+    //
+    //            return result;
+    //        }
+    //
+    //        public BigDecimal getMaxTradableAmount(Instrument instrument) {
+    //            BigDecimal result = super.getMaxTradableAmount(instrument);
+    //            if (instrument != null && (InstrumentUtils.isForex(instrument) || InstrumentUtils.isCrypto
+    // (instrument)) && this.contest) {
+    //                result = this.MAX_CONTEST_TRADABLE_AMOUNT;
+    //            }
+    //
+    //            return result;
+    //        }
+    //    }
+    //
+    //    private static class DefaultStrategyExceptionHandler implements IStrategyExceptionHandler {
+    //        private static final Logger LOGGER = LoggerFactory.getLogger(DClient.DefaultStrategyExceptionHandler
+    // .class);
+    //        private JForexTaskManager<?, ?, ?> taskManager;
+    //
+    //        private DefaultStrategyExceptionHandler() {
+    //        }
+    //
+    //        public void setTaskManager(JForexTaskManager<?, ?, ?> taskManager) {
+    //            this.taskManager = taskManager;
+    //        }
+    //
+    //        public void onException(long strategyId, Source source, Throwable t) {
+    //            LOGGER.error("Exception thrown while running " + source + " method: " + t.getMessage(), t);
+    //            this.taskManager.stopStrategy();
+    //        }
+    //    }
+    //
+    private static enum LayoutType {
+        GLOBAL_EXTENDED(13),
+        PLACE_BID_OFFER_HIDDEN(16),
+        DELIVERABLE_XAU(22);
+
+        private int layoutId;
+
+        private LayoutType(int layoutId) {
+
+            this.layoutId = layoutId;
+        }
+
+        public int getId() {
+
+            return this.layoutId;
+        }
     }
 
     //
@@ -1867,70 +1944,6 @@ public class DClient implements ClientListener {
         public void removeListener(IClientGUIListener listener) {
 
             this.listeners.remove(listener);
-        }
-    }
-
-    //
-    //    private class LotAmountProvider extends DefaultLotAmountProvider implements ILotAmountProvider {
-    //        private final BigDecimal MIN_CONTEST_TRADABLE_AMOUNT = BigDecimal.valueOf(0.1D);
-    //        private final BigDecimal MAX_CONTEST_TRADABLE_AMOUNT = BigDecimal.valueOf(5L);
-    //        private boolean contest = false;
-    //
-    //        public LotAmountProvider() {
-    //            this.contest = DClient.this.getBooleanProperty("ANALITIC_CONTEST");
-    //        }
-    //
-    //        public BigDecimal getMinTradableAmount(Instrument instrument) {
-    //            BigDecimal result = super.getMinTradableAmount(instrument);
-    //            if (instrument != null && (InstrumentUtils.isForex(instrument) || InstrumentUtils.isCrypto(instrument)) && this.contest) {
-    //                result = this.MIN_CONTEST_TRADABLE_AMOUNT;
-    //            }
-    //
-    //            return result;
-    //        }
-    //
-    //        public BigDecimal getMaxTradableAmount(Instrument instrument) {
-    //            BigDecimal result = super.getMaxTradableAmount(instrument);
-    //            if (instrument != null && (InstrumentUtils.isForex(instrument) || InstrumentUtils.isCrypto(instrument)) && this.contest) {
-    //                result = this.MAX_CONTEST_TRADABLE_AMOUNT;
-    //            }
-    //
-    //            return result;
-    //        }
-    //    }
-    //
-    //    private static class DefaultStrategyExceptionHandler implements IStrategyExceptionHandler {
-    //        private static final Logger LOGGER = LoggerFactory.getLogger(DClient.DefaultStrategyExceptionHandler.class);
-    //        private JForexTaskManager<?, ?, ?> taskManager;
-    //
-    //        private DefaultStrategyExceptionHandler() {
-    //        }
-    //
-    //        public void setTaskManager(JForexTaskManager<?, ?, ?> taskManager) {
-    //            this.taskManager = taskManager;
-    //        }
-    //
-    //        public void onException(long strategyId, Source source, Throwable t) {
-    //            LOGGER.error("Exception thrown while running " + source + " method: " + t.getMessage(), t);
-    //            this.taskManager.stopStrategy();
-    //        }
-    //    }
-    //
-    private static enum LayoutType {
-        GLOBAL_EXTENDED(13),
-        PLACE_BID_OFFER_HIDDEN(16),
-        DELIVERABLE_XAU(22);
-
-        private int layoutId;
-
-        private LayoutType(int layoutId) {
-
-            this.layoutId = layoutId;
-        }
-
-        public int getId() {
-
-            return this.layoutId;
         }
     }
 }

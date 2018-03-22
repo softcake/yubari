@@ -26,11 +26,18 @@ public class SyncMessageTimeoutChecker implements Runnable {
     private final long timeoutTime;
     private final boolean doNotRestartTimerOnInProcessResponse;
 
-    public SyncMessageTimeoutChecker(ScheduledExecutorService syncMessagesTimer, RequestMessageTransportListenableFuture transportFuture, long timeoutTime) {
+    public SyncMessageTimeoutChecker(final ScheduledExecutorService syncMessagesTimer,
+                                     final RequestMessageTransportListenableFuture transportFuture,
+                                     final long timeoutTime) {
+
         this(syncMessagesTimer, transportFuture, timeoutTime, false);
     }
 
-    public SyncMessageTimeoutChecker(ScheduledExecutorService syncMessagesTimer, RequestMessageTransportListenableFuture transportFuture, long timeoutTime, boolean doNotRestartTimerOnInProcessResponse) {
+    public SyncMessageTimeoutChecker(final ScheduledExecutorService syncMessagesTimer,
+                                     final RequestMessageTransportListenableFuture transportFuture,
+                                     final long timeoutTime,
+                                     final boolean doNotRestartTimerOnInProcessResponse) {
+
         this.syncMessagesTimer = syncMessagesTimer;
         this.transportFuture = transportFuture;
         this.timeoutTime = timeoutTime;
@@ -38,12 +45,15 @@ public class SyncMessageTimeoutChecker implements Runnable {
     }
 
     public void run() {
+
         if (this.doNotRestartTimerOnInProcessResponse) {
             this.transportFuture.timeout();
-        } else if (this.transportFuture.getInProcessResponseLastTime() + this.timeoutTime < System.currentTimeMillis()) {
+        } else if (this.transportFuture.getInProcessResponseLastTime() + this.timeoutTime
+                   < System.currentTimeMillis()) {
             this.transportFuture.timeout();
         } else {
-            long scheduleTime = System.currentTimeMillis() - this.transportFuture.getInProcessResponseLastTime() + this.timeoutTime;
+            final long scheduleTime = System.currentTimeMillis() - this.transportFuture.getInProcessResponseLastTime()
+                                      + this.timeoutTime;
             if (scheduleTime > 0L) {
                 this.transportFuture.scheduleTimeoutCheck(this, scheduleTime, TimeUnit.MILLISECONDS);
             } else {
@@ -54,10 +64,12 @@ public class SyncMessageTimeoutChecker implements Runnable {
     }
 
     public ScheduledFuture<?> scheduleCheck() {
+
         return this.syncMessagesTimer.schedule(this, this.timeoutTime, TimeUnit.MILLISECONDS);
     }
 
-    ScheduledFuture<?> scheduleCheck(long timeout, TimeUnit timeUnit) {
+    public ScheduledFuture<?> scheduleCheck(final long timeout, final TimeUnit timeUnit) {
+
         assert !this.doNotRestartTimerOnInProcessResponse;
 
         return this.syncMessagesTimer.schedule(this, timeout, timeUnit);

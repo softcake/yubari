@@ -28,6 +28,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -43,7 +44,8 @@ public interface ITransportClient  {
      * @deprecated
      */
     @Deprecated
-    ProtocolMessage controlBlockingRequest(ProtocolMessage var1, Long var2) throws InterruptedException, IOException;
+    ProtocolMessage controlBlockingRequest(ProtocolMessage var1, Long var2)
+        throws InterruptedException, IOException, TimeoutException, ExecutionException;
 
     /**
      * @deprecated
@@ -66,7 +68,7 @@ public interface ITransportClient  {
     <V> void sendMessageAsync(ProtocolMessage var1, FutureCallback<V> var2, Executor var3);
 
     ProtocolMessage sendRequest(ProtocolMessage var1, long var2, TimeUnit var4)
-        throws InterruptedException, TimeoutException, ConnectException;
+        throws InterruptedException, TimeoutException, ConnectException, ExecutionException;
 
     RequestListenableFuture sendRequestAsync(ProtocolMessage var1);
 

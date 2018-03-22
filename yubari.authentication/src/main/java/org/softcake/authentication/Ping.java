@@ -18,6 +18,7 @@ package org.softcake.authentication;
 
 
 import org.softcake.authentication.concurrent.ThreadUtils;
+import org.softcake.yubari.netty.mina.ServerAddress;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 @SuppressWarnings("squid:S2236")
 public class Ping {
@@ -165,6 +167,111 @@ public class Ping {
         return addressPingTime;
     }
 
+
+    public static List<ServerAddress> ping2(List<ServerAddress> addresses) throws IOException, InterruptedException {
+
+        pingsResults = Collections.synchronizedList(new ArrayList<>());
+        connector = new Connector();
+        connector.start();
+        LinkedHashMap<ServerAddress, Target[]> targets = new LinkedHashMap<>();
+
+        addresses.forEach(new Consumer<ServerAddress>() {
+
+            @Override
+            public void accept(final ServerAddress serverAddress) {
+
+                Target[] targetsArr = new Target[ATTEMPS];
+
+                for (int i = 0; i < ATTEMPS; i++) {
+                    targetsArr[i] = new Target(serverAddress.toInetSocketAddress());
+                }
+
+                targets.put(serverAddress, targetsArr);
+            }
+
+
+        });
+
+        targets.forEach((s, targets1) -> addToConnector(targets1));
+
+        synchronized (connector) {
+            boolean isReady = false;
+            long startTime = System.currentTimeMillis();
+            Set<ServerAddress> entries = targets.keySet();
+            for (ServerAddress entry : entries) {
+                if (isReady) {
+                    break;
+                }
+                isReady = true;
+                Target[] targetArr = targets.get(entry);
+
+                for (int i = 0; i < targetArr.length; ++i) {
+                    Target target = targetArr[i];
+                    if (target.failure == null && target.connectFinish == Long.MIN_VALUE) {
+                        isReady = false;
+                    }
+                }
+
+                if (!isReady) {
+                    long timeOut = startTime + 2000L - System.currentTimeMillis();
+                    if (timeOut > 0L) {
+                        connector.wait(timeOut);
+                    }
+                }
+            }
+        }
+
+        connector.shutdown();
+        connector.join();
+        List<ServerAddress> addressPingTime = new LinkedList<>();
+
+        targets.forEach(new BiConsumer<ServerAddress, Target[]>() {
+
+            @Override
+            public void accept(ServerAddress serverAddress, Target[] targetArr) {
+
+                Long[] pingTime = new Long[targetArr.length];
+                for (int i = 0; i < targetArr.length; i++) {
+                    Target target = targetArr[i];
+                    if (target.failure != null) {
+                        pingTime[i] = Long.MIN_VALUE;
+                    } else if (target.connectFinish != Long.MIN_VALUE) {
+                        pingTime[i] = target.connectFinish - target.connectStart;
+                    } else {
+                        String var25 = "Ping to [" + target.address + "] timed out.";
+                        if (isSnapshotVersion()) {
+                            LOGGER.debug(var25);
+                        }
+
+                        PingResult var26 = new PingResult(false, target.address.toString(), var25);
+
+                        pingTime[i] = Long.MIN_VALUE;
+                    }
+                }
+                serverAddress.setPingTime(getBestTime(pingTime));
+                addressPingTime.add(serverAddress);
+            }
+        });
+
+        return addressPingTime;
+    }
+
+    /**
+     * @param pingTimes
+     * @return
+     */
+    private static Long getBestTime(Long[] pingTimes) {
+
+        Long bestTime = 0L;
+        for (Long time : pingTimes) {
+            if (time < 0 || time == Long.MAX_VALUE) {
+                return Long.MAX_VALUE;
+            } else {
+                bestTime += time;
+            }
+        }
+        return bestTime / pingTimes.length;
+    }
 
     private static void addPingResult(PingResult pingResult) {
 

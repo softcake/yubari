@@ -40,17 +40,17 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
         = AttributeKey.valueOf(ChannelTrafficBlocker.class.getName() + ".MESSAGES_BUFFER");
     private final String transportName;
 
-    public ChannelTrafficBlocker(String transportName) {
+    public ChannelTrafficBlocker(final String transportName) {
 
         this.transportName = transportName;
     }
 
-    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    public void channelRead(final ChannelHandlerContext ctx, final Object msg) {
 
         if (isSuspended(ctx)
             && !(msg instanceof HeartbeatRequestMessage)
             && !(msg instanceof HeartbeatOkResponseMessage)) {
-            Attribute<ArrayDeque<Object>> attr = ctx.channel().attr(MESSAGES_BUFFER);
+            final Attribute<ArrayDeque<Object>> attr = ctx.channel().attr(MESSAGES_BUFFER);
             ArrayDeque<Object> buffer = attr.get();
             if (buffer == null) {
                 buffer = new ArrayDeque<>();
@@ -64,11 +64,11 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
 
     }
 
-    public void read(ChannelHandlerContext ctx) {
+    public void read(final ChannelHandlerContext ctx) {
 
         if (!isSuspended(ctx)) {
-            Attribute<ArrayDeque<Object>> attr = ctx.channel().attr(MESSAGES_BUFFER);
-            ArrayDeque<Object> buffer = attr.get();
+            final Attribute<ArrayDeque<Object>> attr = ctx.channel().attr(MESSAGES_BUFFER);
+            final ArrayDeque<Object> buffer = attr.get();
 
             if (buffer != null && !buffer.isEmpty()) {
                 Object msg;
@@ -99,35 +99,35 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
 
     }
 
-    public static boolean isSuspended(Channel channel) {
+    public static boolean isSuspended(final Channel channel) {
 
-        Boolean suspended = channel.attr(READ_SUSPENDED).get();
+        final Boolean suspended = channel.attr(READ_SUSPENDED).get();
         return suspended != null && !Boolean.FALSE.equals(suspended);
     }
 
-    public static boolean isSuspended(ChannelHandlerContext ctx) {
+    public static boolean isSuspended(final ChannelHandlerContext ctx) {
 
         return isSuspended(ctx.channel());
     }
 
-    public void suspend(ChannelHandlerContext ctx) {
+    public void suspend(final ChannelHandlerContext ctx) {
 
         this.suspend(ctx.channel());
     }
 
-    public void suspend(Channel channel) {
+    public void suspend(final Channel channel) {
 
         channel.attr(READ_SUSPENDED).set(true);
         channel.config().setAutoRead(false);
         LOGGER.trace("[{}] Reading suspended", this.transportName);
     }
 
-    public void resume(ChannelHandlerContext ctx) {
+    public void resume(final ChannelHandlerContext ctx) {
 
         this.resume(ctx.channel());
     }
 
-    public void resume(Channel channel) {
+    public void resume(final Channel channel) {
 
         channel.attr(READ_SUSPENDED).set(false);
         LOGGER.trace("[{}] Reading resumed", this.transportName);

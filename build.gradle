@@ -130,7 +130,7 @@ allprojects {
             dependency "org.slf4j:slf4j-api:${slf4jVersion}"
             dependency "ch.qos.logback:logback-classic:${logbackVersion}"
             dependency "ch.qos.logback:logback-core:${logbackVersion}"
-            dependency "com.google.guava:guava:24.0-jre"
+            dependency "com.google.guava:guava:23.0"
             dependency "commons-validator:commons-validator:1.6"
             dependency "org.softcake.lemon:lemon-core:1.1.0"
 

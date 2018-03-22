@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty.mina;
+package org.softcake.yubari.netty.mina.ssl;
 
 
 import java.security.cert.CertificateException;

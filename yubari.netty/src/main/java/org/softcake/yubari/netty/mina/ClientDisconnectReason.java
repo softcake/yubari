@@ -20,23 +20,41 @@ import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.msg.system.DisconnectHint;
 import com.google.common.base.Objects;
 
-public class ExtendedClientDisconnectReason {
+public class ClientDisconnectReason {
     private final DisconnectReason disconnectReason;
     private final DisconnectHint disconnectHint;
     private final String disconnectComments;
     private final Throwable error;
 
-    public ExtendedClientDisconnectReason(DisconnectReason disconnectReason,
-                                          DisconnectHint disconnectHint,
-                                          String disconnectComments,
-                                          Throwable error) {
+    public ClientDisconnectReason(final DisconnectReason disconnectReason,
+                                  final DisconnectHint disconnectHint,
+                                  final String disconnectComments,
+                                  final Throwable error) {
 
         this.disconnectReason = disconnectReason;
         this.disconnectHint = disconnectHint;
         this.disconnectComments = disconnectComments;
         this.error = error;
     }
+    public ClientDisconnectReason(final DisconnectReason disconnectReason,
+                                  final DisconnectHint disconnectHint,
+                                  final String disconnectComments) {
 
+        this(disconnectReason, disconnectHint, disconnectComments, new Throwable(""));
+    }
+    public ClientDisconnectReason(final DisconnectReason disconnectReason,
+                                  final String disconnectComments,
+                                  final Throwable error) {
+
+        this(disconnectReason, null, disconnectComments, error);
+
+    }
+    public ClientDisconnectReason(final DisconnectReason disconnectReason,
+                                  final String disconnectComments) {
+
+        this(disconnectReason, null, disconnectComments, new Throwable(""));
+
+    }
     public DisconnectReason getDisconnectReason() {
 
         return this.disconnectReason;
@@ -62,7 +80,7 @@ public class ExtendedClientDisconnectReason {
 
         if (this == o) { return true; }
         if (o == null || getClass() != o.getClass()) { return false; }
-        final ExtendedClientDisconnectReason that = (ExtendedClientDisconnectReason) o;
+        final ClientDisconnectReason that = (ClientDisconnectReason) o;
         return disconnectReason == that.disconnectReason && disconnectHint == that.disconnectHint && Objects.equal(
             disconnectComments,
             that.disconnectComments) && Objects.equal(error, that.error);
@@ -76,8 +94,8 @@ public class ExtendedClientDisconnectReason {
 
     public String toString() {
 
-        StringBuilder builder = new StringBuilder();
-        builder.append("ExtendedClientDisconnectReason [");
+        final StringBuilder builder = new StringBuilder();
+        builder.append("ClientDisconnectReason [");
         if (this.disconnectReason != null) {
             builder.append("disconnectReason=");
             builder.append(this.disconnectReason);

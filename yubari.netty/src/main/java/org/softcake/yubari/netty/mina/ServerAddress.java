@@ -16,6 +16,7 @@
 
 package org.softcake.yubari.netty.mina;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 
 import java.net.InetSocketAddress;
@@ -24,14 +25,13 @@ public class ServerAddress {
     private final String host;
     private final int port;
     private final String addressStr;
-    private final String addressStrNoColon;
+    private Long pingTime = Long.MAX_VALUE;
 
     public ServerAddress(String host, int port) {
 
         this.host = host;
         this.port = port;
         this.addressStr = host + ":" + port;
-        this.addressStrNoColon = host + port;
     }
 
     public String getHost() {
@@ -60,25 +60,32 @@ public class ServerAddress {
         if (this == o) { return true; }
         if (o == null || getClass() != o.getClass()) { return false; }
         final ServerAddress that = (ServerAddress) o;
-        return port == that.port
-               && Objects.equal(host, that.host)
-               && Objects.equal(addressStr, that.addressStr)
-               && Objects.equal(addressStrNoColon, that.addressStrNoColon);
+        return port == that.port && Objects.equal(host, that.host) && Objects.equal(pingTime, that.pingTime);
     }
 
     @Override
     public int hashCode() {
 
-        return Objects.hashCode(host, port, addressStr, addressStrNoColon);
+        return Objects.hashCode(host, port, pingTime);
     }
 
+    @Override
     public String toString() {
 
-        return this.addressStr;
+        return MoreObjects.toStringHelper(this)
+                          .add("host", host)
+                          .add("port", port)
+                          .add("pingTime", pingTime)
+                          .toString();
     }
 
-    public String toStringNoColon() {
+    public Long getPingTime() {
 
-        return this.addressStrNoColon;
+        return pingTime;
+    }
+
+    public void setPingTime(final Long pingTime) {
+
+        this.pingTime = pingTime < 0L ? Long.MAX_VALUE:pingTime;
     }
 }
