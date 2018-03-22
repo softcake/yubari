@@ -283,21 +283,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                         this.processConnecting();
                         continue;
                     case SSL_HANDSHAKE_WAITING:
-                        if (this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout()
-                            < System.currentTimeMillis()) {
-                            LOGGER.info("[{}] SSL handshake timeout", this.clientSession.getTransportName());
-
-
-                            final ClientDisconnectReason
-                                reason
-                                = new ClientDisconnectReason(DisconnectReason.SSL_HANDSHAKE_TIMEOUT,
-                                                             "SSL handshake timeout");
-
-                            this.tryToSetState(ClientState.SSL_HANDSHAKE_WAITING,
-                                               ClientState.DISCONNECTING,
-                                               reason,
-                                               Boolean.TRUE);
-
+                        if (isProcessSslHandshakeTimeout()) {
                             continue;
                         }
 
@@ -314,22 +300,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                         }
                         continue;
                     case PROTOCOL_VERSION_NEGOTIATION_WAITING:
-                        if (this.protocolVersionNegotiationStartTime
-                            + this.clientSession.getProtocolVersionNegotiationTimeout() < System.currentTimeMillis()) {
-                            LOGGER.info("[{}] Protocol version negotiation timeout",
-                                        this.clientSession.getTransportName());
-
-
-                            final ClientDisconnectReason reason = new ClientDisconnectReason(DisconnectReason
-                                                                                                 .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
-                                                                                             "Protocol version "
-                                                                                             + "negotiation timeout");
-
-                            this.tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
-                                               ClientState.DISCONNECTING,
-                                               reason,
-                                               Boolean.TRUE);
-
+                        if (isProcessVersionNegotitationTimeout()) {
                             continue;
                         }
 
@@ -348,21 +319,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                         }
                         continue;
                     case AUTHORIZING:
-                        if (this.authorizationStartTime + this.clientSession.getAuthorizationTimeout()
-                            < System.currentTimeMillis()) {
-                            LOGGER.info("[{}] Authorization timeout", this.clientSession.getTransportName());
-
-
-                            final ClientDisconnectReason
-                                reason
-                                = new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_TIMEOUT,
-                                                             "Authorization timeout");
-
-                            this.tryToSetState(ClientState.AUTHORIZING,
-                                               ClientState.DISCONNECTING,
-                                               reason,
-                                               Boolean.TRUE);
-
+                        if (isProcessAuthorizationTimeout()) {
                             continue;
                         }
 
@@ -421,6 +378,75 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
 
         }
+    }
+
+    private boolean isProcessAuthorizationTimeout() {
+
+        if (this.authorizationStartTime + this.clientSession.getAuthorizationTimeout()
+            < System.currentTimeMillis()) {
+            LOGGER.info("[{}] Authorization timeout", this.clientSession.getTransportName());
+
+
+            final ClientDisconnectReason
+                reason
+                = new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_TIMEOUT,
+                                             "Authorization timeout");
+
+            this.tryToSetState(ClientState.AUTHORIZING,
+                               ClientState.DISCONNECTING,
+                               reason,
+                               Boolean.TRUE);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean isProcessVersionNegotitationTimeout() {
+
+        if (this.protocolVersionNegotiationStartTime
+            + this.clientSession.getProtocolVersionNegotiationTimeout() < System.currentTimeMillis()) {
+            LOGGER.info("[{}] Protocol version negotiation timeout",
+                        this.clientSession.getTransportName());
+
+
+            final ClientDisconnectReason reason = new ClientDisconnectReason(DisconnectReason
+                                                                                 .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
+                                                                             "Protocol version "
+                                                                             + "negotiation timeout");
+
+            this.tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
+                               ClientState.DISCONNECTING,
+                               reason,
+                               Boolean.TRUE);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean isProcessSslHandshakeTimeout() {
+
+        if (this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout()
+            < System.currentTimeMillis()) {
+            LOGGER.info("[{}] SSL handshake timeout", this.clientSession.getTransportName());
+
+
+            final ClientDisconnectReason
+                reason
+                = new ClientDisconnectReason(DisconnectReason.SSL_HANDSHAKE_TIMEOUT,
+                                             "SSL handshake timeout");
+
+            this.tryToSetState(ClientState.SSL_HANDSHAKE_WAITING,
+                               ClientState.DISCONNECTING,
+                               reason,
+                               Boolean.TRUE);
+
+            return true;
+        }
+        return false;
     }
 
     @SuppressWarnings("squid:S2274")
