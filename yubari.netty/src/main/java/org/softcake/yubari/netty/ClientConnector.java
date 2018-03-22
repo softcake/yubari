@@ -329,8 +329,8 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                         waitAndNotifyThreads(timeToWait, ClientState.AUTHORIZING);
                         continue;
                     case ONLINE:
-                        final boolean sleep = this.processOnline();
-                        if (!sleep) {
+
+                        if (!this.processOnline()) {
                             continue;
                         }
 
