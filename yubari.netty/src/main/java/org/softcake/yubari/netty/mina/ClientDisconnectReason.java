@@ -52,7 +52,7 @@ public class ClientDisconnectReason {
     public ClientDisconnectReason(final DisconnectReason disconnectReason,
                                   final String disconnectComments) {
 
-        this(disconnectReason, null, disconnectComments, new Throwable(""));
+        this(disconnectReason, null, disconnectComments,null);
 
     }
     public DisconnectReason getDisconnectReason() {

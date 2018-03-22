@@ -16,6 +16,8 @@
 
 package org.softcake.yubari.netty.mina.ssl;
 
+import org.softcake.cherry.core.base.PreCheck;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,11 +29,11 @@ import javax.net.ssl.X509TrustManager;
 
 class DDSTrustManager implements X509TrustManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DDSTrustManager.class);
+    private final TrustSubject trustSubject;
     private X509TrustManager sunX509TrustManager;
     private ClientSSLContextListener listener;
     private HostNameVerifier verifier;
     private String hostName;
-    private final TrustSubject trustSubject;
 
     public DDSTrustManager(ClientSSLContextListener listener, X509TrustManager manager) {
 
@@ -58,6 +60,8 @@ class DDSTrustManager implements X509TrustManager {
 
     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
 
+        PreCheck.parameterNotNullOrEmpty(chain, "chain");
+
         if (TrustSubject.ANDROID.equals(this.trustSubject)) {
             boolean[] peerCertKeyUsage = chain[0].getKeyUsage();
             if (peerCertKeyUsage != null) {
@@ -71,7 +75,7 @@ class DDSTrustManager implements X509TrustManager {
             LOGGER.debug("Checking server is trusted for certificates chain:");
 
 
-            if (chain != null && chain.length > 0) {
+            if (!PreCheck.isParamNullOrEmpty(chain)) {
 
 
                 for (int i = 0; i < chain.length; ++i) {
@@ -92,6 +96,7 @@ class DDSTrustManager implements X509TrustManager {
 
             try {
 
+
                 LOGGER.debug("Checking host name validity for host [{}] and certificate subject [{}]",
                              this.hostName,
                              chain[0].getSubjectDN().getName());
@@ -100,13 +105,11 @@ class DDSTrustManager implements X509TrustManager {
                 this.verifier.check(new String[]{this.hostName}, chain[0]);
             } catch (SSLException e) {
                 LOGGER.error("SSLException while checking host name validity for host [{}] and certificate subject "
-                             + "[{}]",
-                             this.hostName,
-                             chain[0].getSubjectDN().getName());
+                             + "[{}]", this.hostName, chain[0].getSubjectDN().getName());
                 throw new CertificateException(e.getMessage());
             }
         } catch (CertificateException e) {
-            LOGGER.error("Certificate exception for certificates chain:");
+            LOGGER.error("Certificate exception for certificates chain:",e);
             if (chain != null && chain.length > 0) {
 
                 for (int i = 0; i < chain.length; ++i) {

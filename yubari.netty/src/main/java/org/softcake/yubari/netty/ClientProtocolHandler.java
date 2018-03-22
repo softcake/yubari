@@ -51,10 +51,10 @@ import com.dukascopy.dds4.transport.msg.system.RequestInProcessMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamHeaderMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamingStatus;
 import com.dukascopy.dds4.transport.msg.types.StreamState;
-import com.dukascopy.dds4.transport.netty.AsyncSettableFuture;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -224,6 +224,10 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
                                                                                .attr(ChannelAttachment
                                                                                          .CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
             final ChannelAttachment attachment = channelAttachmentAttribute.get();
+
+
+
+
 
             LOGGER.trace("[{}] Message received {}, primary channel: {}",
                          this.clientSession.getTransportName(),
@@ -1154,11 +1158,11 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         private ListenableFuture<?> executeInExecutor(final ListeningExecutorService executor,
                                                       final boolean withFuture) {
 
-            final AsyncSettableFuture future;
-            //final SettableFuture future;
+           // final AsyncSettableFuture future;
+           final SettableFuture future;
             if (withFuture) {
-                //  future = null; //SettableFuture.create();
-                future = AsyncSettableFuture.create();
+                 future = SettableFuture.create();
+                //future = AsyncSettableFuture.create();
             } else {
                 future = null;
             }
@@ -1199,12 +1203,12 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
                     } catch (final RejectedExecutionException var4) {
                         final long currentTime = System.currentTimeMillis();
                         if (currentTime - procStartTime > clientSession.getEventExecutionErrorDelay()) {
-                            LOGGER.error(
-                                "[{}] Event executor queue overloaded, CRITICAL EXECUTION WAIT TIME: {}ms, possible "
-                                + "application problem or deadLock, message [{}]",
-                                clientSession.getTransportName(),
-                                (currentTime - procStartTime),
-                                StrUtils.toSafeString(message, 100));
+//                            LOGGER.error(
+//                                "[{}] Event executor queue overloaded, CRITICAL EXECUTION WAIT TIME: {}ms, possible "
+//                                + "application problem or deadLock, message [{}]",
+//                                clientSession.getTransportName(),
+//                                (currentTime - procStartTime),
+//                                StrUtils.toSafeString(message, 100));
                             checkAndLogEventPoolThreadDumps();
                             procStartTime = currentTime;
                             sleepTime = 50L;

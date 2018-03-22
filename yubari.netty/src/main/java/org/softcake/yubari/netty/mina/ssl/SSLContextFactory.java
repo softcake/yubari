@@ -35,14 +35,14 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
-public class SSLContextFactory {
+public final class SSLContextFactory {
     private static final String KEYSTORE_PASSFILE = "keystore.passfile";
     private static final String SSL_KEY_MANAGER_FACTORY_ALGORITHM = "ssl.KeyManagerFactory.algorithm";
     private static final Logger LOGGER = LoggerFactory.getLogger(SSLContextFactory.class);
     private static final String PROTOCOL = "SSL";
     private static final String KEY_MANAGER_FACTORY_ALGORITHM;
     private static final String KEYSTORE = "dukascopy.cert";
-    private static char[] PW;
+    private static char[] pass;
     private static SSLContext serverInstance;
     private static SSLContext clientInstance;
     private static String clientTargetHost;
@@ -57,15 +57,15 @@ public class SSLContextFactory {
 
 
         KEY_MANAGER_FACTORY_ALGORITHM = algorithm;
-        PW = new char[]{'d', 'u', 'k', 'a', 's', 'p', 'w'};
+        pass = new char[]{'d', 'u', 'k', 'a', 's', 'p', 'w'};
         serverInstance = null;
         clientInstance = null;
     }
 
-    public SSLContextFactory() {
+    private SSLContextFactory() {
 
+        throw new IllegalAccessError("Utility class");
     }
-
 
     public static SSLContext getInstance(boolean server, ClientSSLContextListener listener, String targetHost)
         throws GeneralSecurityException, IOException {
@@ -90,36 +90,53 @@ public class SSLContextFactory {
         SSLContext retInstance;
 
         if (server) {
-            retInstance = serverInstance;
-            if (retInstance == null) {
-                synchronized (mutex) {
-                    retInstance = serverInstance;
-                    if (retInstance == null) {
-
-                        serverInstance = retInstance = createServerSSLContext(pathToCertificate);
-                    }
-                }
-
-            }
+            retInstance = getSeverInstance(pathToCertificate);
 
         } else {
-            retInstance = clientInstance;
-            if (retInstance == null) {
-                synchronized (mutex) {
-                    retInstance = clientInstance;
-                    if ((retInstance == null)
-                        || ((clientTargetHost != null) && !clientTargetHost.equals(targetHost))
-                        || ((clientListener != null) && !clientListener.equals(listener))) {
+            retInstance = getClientInstance(listener, targetHost, trustSubject);
 
-                        clientInstance = retInstance = createClientSSLContext(listener, targetHost, trustSubject);
-                        clientTargetHost = targetHost;
-                        clientListener = listener;
-                    }
+        }
+
+        return retInstance;
+    }
+
+    private static SSLContext getClientInstance(final ClientSSLContextListener listener,
+                                                final String targetHost,
+                                                final TrustSubject trustSubject) throws GeneralSecurityException {
+
+        SSLContext retInstance = clientInstance;
+        if (retInstance == null) {
+            synchronized (mutex) {
+                retInstance = clientInstance;
+                if ((retInstance == null)
+                    || ((clientTargetHost != null) && !clientTargetHost.equals(targetHost))
+                    || ((clientListener != null) && !clientListener.equals(listener))) {
+
+                    retInstance = createClientSSLContext(listener, targetHost, trustSubject);
+                    clientInstance = retInstance;
+                    clientTargetHost = targetHost;
+                    clientListener = listener;
+                }
+            }
+        }
+        return retInstance;
+    }
+
+    private static SSLContext getSeverInstance(final String pathToCertificate)
+        throws GeneralSecurityException, IOException {
+
+        SSLContext retInstance = serverInstance;
+        if (retInstance == null) {
+            synchronized (mutex) {
+                retInstance = serverInstance;
+                if (retInstance == null) {
+
+                    retInstance = createServerSSLContext(pathToCertificate);
+                    serverInstance = retInstance;
                 }
             }
 
         }
-
         return retInstance;
     }
 
@@ -128,7 +145,6 @@ public class SSLContextFactory {
 
         KeyStore ks = KeyStore.getInstance("JKS");
         readStorePass();
-        LOGGER.info("Reading SSL certificate");
 
         try (InputStream in = pathToCertificate == null ? SSLContextFactory.class.getClassLoader().getResourceAsStream(
             KEYSTORE) : new FileInputStream(new File(pathToCertificate))) {
@@ -136,11 +152,11 @@ public class SSLContextFactory {
             if (in == null) {
                 throw new IOException("SSL CERTIFICATE NOT FOUND");
             }
-            ks.load(in, PW);
+            ks.load(in, pass);
         }
 
         KeyManagerFactory kmf = KeyManagerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
-        kmf.init(ks, PW);
+        kmf.init(ks, pass);
         SSLContext sslContext = SSLContext.getInstance(PROTOCOL);
         sslContext.init(kmf.getKeyManagers(), null, null);
         return sslContext;
@@ -170,8 +186,7 @@ public class SSLContextFactory {
                             line = br.readLine();
                         } else {
                             if (line.length() >= 1) {
-                                PW = line.toCharArray();
-                                LOGGER.info("Key store pass read!!!");
+                                pass = line.toCharArray();
                                 break;
                             }
 

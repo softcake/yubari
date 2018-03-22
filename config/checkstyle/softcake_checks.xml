@@ -183,7 +183,7 @@
         <module name="ParameterAssignment"/>
         <module name="RequireThis"/>
         <module name="ReturnCount">
-            <property name="maxForVoid" value="0"/>
+            <property name="maxForVoid" value="1"/>
         </module>
         <module name="SimplifyBooleanExpression"/>
         <module name="SimplifyBooleanReturn"/>
@@ -326,6 +326,8 @@
         <module name="AbbreviationAsWordInName">
             <property name="ignoreFinal" value="false"/>
             <property name="allowedAbbreviationLength" value="1"/>
+            <property name="allowedAbbreviations" value="SSL,URL,XML"/>
+
         </module>
         <module name="AbstractClassName"/>
         <module name="CatchParameterName">
@@ -392,7 +394,7 @@
                      value="Parameter name ''{0}'' must match pattern ''{1}''."/>
         </module>
         <module name="StaticVariableName">
-            <property name="format" value="^[A-Z](_?[A-Z0-9]+)*$"/>
+            <property name="format" value="^[a-z][a-z0-9][a-zA-Z0-9_]*$"/>
         </module>
         <module name="TypeName">
             <message key="name.invalidPattern"

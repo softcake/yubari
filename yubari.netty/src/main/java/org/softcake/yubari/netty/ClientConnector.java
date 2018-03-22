@@ -154,7 +154,6 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
     public void authorized(final String sessionId, final IoSessionWrapper session, final String userName) {
 
-
         LOGGER.debug(
             "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",
             this.clientSession.getTransportName(),
@@ -171,7 +170,6 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
     }
 
     void connect() {
-
 
         this.tryToSetState(ClientState.DISCONNECTED, ClientState.CONNECTING, Boolean.TRUE);
 
@@ -622,13 +620,16 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         if (this.childSession != null && this.childSession.isActive()) {
             if (this.clientSession.getSecondaryConnectionPingInterval() > 0L
                 && this.clientSession.getSecondaryConnectionPingTimeout() > 0L) {
-
+                final Attribute<ChannelAttachment>
+                    attribute
+                    = this.childSession.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+                final ChannelAttachment secAttachment = attribute.get();
                 final boolean needToPing = needToPing(System.currentTimeMillis(),
-                                                      this.secondarySessionChannelAttachment,
+                                                      secAttachment,
                                                       this.clientSession.getSecondaryConnectionPingInterval());
                 if (needToPing && this.isOnline()) {
                     this.sendPingRequest(this.childSession,
-                                         this.secondarySessionChannelAttachment,
+                                         secAttachment,
                                          this.clientSession.getSecondaryConnectionPingTimeout(),
                                          Boolean.FALSE);
                 }
@@ -764,13 +765,8 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
             try {
                 channelFuture.get();
             } catch (ExecutionException | InterruptedException e) {
-                boolean reportException = true;
 
-                if (e.getCause() instanceof ClosedChannelException && !this.isOnline()) {
-                    reportException = false;
-                }
-
-                if (reportException) {
+                if (!(e.getCause() instanceof ClosedChannelException) && this.isOnline()) {
                     LOGGER.error("[{}] ", this.clientSession.getTransportName(), e);
                     this.disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
                                                                String.format("Primary session error "
@@ -799,11 +795,13 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
         MessageSentListener messageSentListener = message -> {
 
-            LOGGER.trace("[{}] Ping sent in {} channel.",
+            LOGGER.debug("[{}] Ping sent in {} channel.",
                          this.clientSession.getTransportName(),
                          isPrimary ? PRIMARY : SECONDARY);
             pingSocketWriteInterval.set(System.currentTimeMillis() - startTime);
         };
+
+
 
         final RequestListenableFuture future = this.clientSession.sendRequestAsync(pingRequestMessage,
                                                                                    channel,
@@ -811,7 +809,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                                                                                    Boolean.TRUE,
                                                                                    messageSentListener);
 
-        LOGGER.trace("[{}] Sending {} connection ping request: {}",
+        LOGGER.debug("[{}] Sending {} connection ping request: {}",
                      this.clientSession.getTransportName(),
                      isPrimary ? PRIMARY : SECONDARY,
                      pingRequestMessage);
@@ -822,6 +820,11 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
             final long now = System.currentTimeMillis();
 
             try {
+                if (future != null) {
+                    LOGGER.info("NOT null: {} primary: {}", future, isPrimary);
+                }
+
+
                 final ProtocolMessage protocolMessage = future.get();
 
                 if (protocolMessage instanceof HeartbeatOkResponseMessage) {
@@ -859,7 +862,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                     }
 
 
-                    LOGGER.trace("{} Sync ping response received: {}, time: {}",
+                    LOGGER.debug("{} Sync ping response received: {}, time: {}",
                                  isPrimary ? PRIMARY : SECONDARY,
                                  protocolMessage,
                                  turnOverTime);
@@ -892,6 +895,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         };
 
         future.addListener(runnable, MoreExecutors.newDirectExecutorService());
+      
     }
 
     private void checkPingFailed(final boolean isPrimary,
@@ -1096,22 +1100,22 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         return this.clientState.get() == ClientState.AUTHORIZING;
     }
 
-    Channel getPrimarySession() {
+    public Channel getPrimarySession() {
 
         return this.primarySession;
     }
 
-    Channel getChildSession() {
+    public Channel getChildSession() {
 
         return this.childSession;
     }
 
-    void setDisconnectReason(final ClientDisconnectReason disconnectReason) {
+    public void setDisconnectReason(final ClientDisconnectReason disconnectReason) {
 
         this.disconnectReason = disconnectReason;
     }
 
-    void setChildSocketAuthAcceptorMessage(final ChildSocketAuthAcceptorMessage childSocketAuthAcceptorMessage) {
+    public void setChildSocketAuthAcceptorMessage(final ChildSocketAuthAcceptorMessage childSocketAuthAcceptorMessage) {
 
         this.childSocketAuthAcceptorMessage = childSocketAuthAcceptorMessage;
 
@@ -1120,7 +1124,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         }
     }
 
-    void setPrimarySocketAuthAcceptorMessage(final PrimarySocketAuthAcceptorMessage primarySocketAuthAcceptorMessage) {
+    public void setPrimarySocketAuthAcceptorMessage(final PrimarySocketAuthAcceptorMessage primarySocketAuthAcceptorMessage) {
 
         this.primarySocketAuthAcceptorMessage = primarySocketAuthAcceptorMessage;
 

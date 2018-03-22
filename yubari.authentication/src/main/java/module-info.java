@@ -7,7 +7,7 @@ module org.softcake.yubari.authentication {
     requires srp6a;
     requires json;
     requires java.desktop;
-   // requires com.google.common;
+   requires com.google.common;
     requires org.softcake.yubari.connect;
     requires cherry.core;
     requires transport.common;
@@ -17,7 +17,7 @@ module org.softcake.yubari.authentication {
     requires java.management;
     requires JForex.API;
     requires java.sql;
-    requires guava;
+
 
 
     //requires transport.common;

@@ -16,7 +16,6 @@
 
 package org.softcake.yubari.netty.mina.ssl;
 
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +50,69 @@ public class HostNameVerifier implements HostnameVerifier {
                                                                   "or",
                                                                   "org"};
     private static final String[] LOCALHOSTS = new String[]{"::1", "127.0.0.1", "localhost", "localhost.localdomain"};
+
+    static {
+        Arrays.sort(BAD_COUNTRY_2LDS);
+        Arrays.sort(LOCALHOSTS);
+    }
+
+    public static boolean acceptableCountryWildcard(final String cn) {
+
+        int cnLen = cn.length();
+        if (cnLen >= 7 && cnLen <= 9 && cn.charAt(cnLen - 3) == '.') {
+            String s = cn.substring(2, cnLen - 3);
+            int x = Arrays.binarySearch(BAD_COUNTRY_2LDS, s);
+            return x < 0;
+        } else {
+            return true;
+        }
+    }
+
+    public static boolean isIP4Address(String cn) {
+
+        boolean isIP4 = true;
+        String tld = cn;
+        int x = cn.lastIndexOf('.');
+        if (x >= 0 && x + 1 < cn.length()) {
+            tld = cn.substring(x + 1);
+        }
+
+        for (int i = 0; i < tld.length(); ++i) {
+            if (!Character.isDigit(tld.charAt(0))) {
+                isIP4 = false;
+                break;
+            }
+        }
+
+        return isIP4;
+    }
+
+    public static String[] getDNSSubjectAlts(X509Certificate cert) {
+
+        LinkedList<String> subjectAltList = new LinkedList<>();
+        Collection<List<?>> subjectAlternativeNames = null;
+
+        try {
+            subjectAlternativeNames = cert.getSubjectAlternativeNames();
+        } catch (CertificateParsingException var7) {
+            LOGGER.error(var7.getMessage(), var7);
+
+        }
+
+        if (subjectAlternativeNames != null) {
+
+            for (final List<?> name : subjectAlternativeNames) {
+                int type = (Integer) name.get(0);
+                if (type == 2) {
+                    String s = (String) name.get(1);
+                    subjectAltList.add(s);
+                }
+            }
+        }
+
+        return subjectAltList.toArray(new String[subjectAltList.size()]);
+
+    }
 
     public boolean verify(String host, SSLSession session) {
 
@@ -158,64 +220,6 @@ public class HostNameVerifier implements HostnameVerifier {
         return buf.toString();
     }
 
-    public static boolean acceptableCountryWildcard(String cn) {
-
-        int cnLen = cn.length();
-        if (cnLen >= 7 && cnLen <= 9 && cn.charAt(cnLen - 3) == '.') {
-            String s = cn.substring(2, cnLen - 3);
-            int x = Arrays.binarySearch(BAD_COUNTRY_2LDS, s);
-            return x < 0;
-        } else {
-            return true;
-        }
-    }
-
-    public static boolean isIP4Address(String cn) {
-
-        boolean isIP4 = true;
-        String tld = cn;
-        int x = cn.lastIndexOf(46);
-        if (x >= 0 && x + 1 < cn.length()) {
-            tld = cn.substring(x + 1);
-        }
-
-        for (int i = 0; i < tld.length(); ++i) {
-            if (!Character.isDigit(tld.charAt(0))) {
-                isIP4 = false;
-                break;
-            }
-        }
-
-        return isIP4;
-    }
-
-    public static String[] getDNSSubjectAlts(X509Certificate cert) {
-
-        LinkedList<String> subjectAltList = new LinkedList<>();
-        Collection<List<?>> subjectAlternativeNames = null;
-
-        try {
-            subjectAlternativeNames = cert.getSubjectAlternativeNames();
-        } catch (CertificateParsingException var7) {
-            LOGGER.error(var7.getMessage(), var7);
-
-        }
-
-        if (subjectAlternativeNames != null) {
-
-            for (final List<?> name : subjectAlternativeNames) {
-                int type = (Integer) name.get(0);
-                if (type == 2) {
-                    String s = (String) name.get(1);
-                    subjectAltList.add(s);
-                }
-            }
-        }
-
-        return subjectAltList.toArray(new String[subjectAltList.size()]);
-
-    }
-
     public String[] getCNs(X509Certificate cert) {
 
         LinkedList<String> cnList = new LinkedList<>();
@@ -231,10 +235,5 @@ public class HostNameVerifier implements HostnameVerifier {
         }
 
         return cnList.toArray(new String[cnList.size()]);
-    }
-
-    static {
-        Arrays.sort(BAD_COUNTRY_2LDS);
-        Arrays.sort(LOCALHOSTS);
     }
 }

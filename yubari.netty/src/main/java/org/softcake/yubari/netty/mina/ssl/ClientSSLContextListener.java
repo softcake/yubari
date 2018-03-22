@@ -16,11 +16,12 @@
 
 package org.softcake.yubari.netty.mina.ssl;
 
-
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
-
+/**
+ * @author The Softcake Authors.
+ */
 public interface ClientSSLContextListener {
     void securityException(X509Certificate[] chain, String authType, CertificateException exception);
 }
