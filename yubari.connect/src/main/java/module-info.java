@@ -5,6 +5,6 @@ module org.softcake.yubari.connect {
     requires ch.qos.logback.core;
    // requires com.google.common;
     requires commons.validator;
-    requires com.google.common;
+
     exports org.softcake.yubari.connect.authorization;
 }

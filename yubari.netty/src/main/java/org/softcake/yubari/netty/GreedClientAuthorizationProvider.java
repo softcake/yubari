@@ -52,7 +52,7 @@ public class GreedClientAuthorizationProvider extends AbstractClientAuthorizatio
 
     public void messageReceived(IoSessionWrapper ioSession, ProtocolMessage protocolMessage) {
         if (protocolMessage instanceof OkResponseMessage) {
-            LOGGER.info("!!!:" + this.getListener());
+
             this.getListener().authorized(this.sessionId, ioSession, this.login);
         } else if (protocolMessage instanceof ErrorResponseMessage) {
             this.getListener().authorizationError(ioSession, ((ErrorResponseMessage)protocolMessage).getReason());

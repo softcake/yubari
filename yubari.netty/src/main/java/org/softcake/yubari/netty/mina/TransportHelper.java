@@ -28,6 +28,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -41,25 +42,26 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class TransportHelper {
     private static final int PROTOCOL_VERSION = 4;
-    protected static final int TIME_MARK_RECORD_LENGTH = 9;
-    public static final byte TIME_MARK_CLIENT_TO_API = 0;
-    public static final byte TIME_MARK_API_FROM_CLIENT = 1;
-    public static final byte TIME_MARK_API_TO_CUST = 2;
-    public static final byte TIME_MARK_CUST_FROM_API = 3;
-    public static final byte TIME_MARK_CUST_TO_ROUTER = 4;
-    public static final byte TIME_MARK_ROUTER_FROM_CUST = 5;
-    public static final byte TIME_MARK_ROUTER_TO_CUST = 6;
-    public static final byte TIME_MARK_CUST_FROM_ROUTER = 7;
-    public static final byte TIME_MARK_CUST_TO_API = 8;
-    public static final byte TIME_MARK_API_FROM_CUST = 9;
-    public static final byte TIME_MARK_API_TO_CLIENT = 10;
-    public static final byte TIME_MARK_CLIENT_FROM_API = 11;
+    private static final int TIME_MARK_RECORD_LENGTH = 9;
+    private static final byte TIME_MARK_CLIENT_TO_API = 0;
+    private static final byte TIME_MARK_API_FROM_CLIENT = 1;
+    private static final byte TIME_MARK_API_TO_CUST = 2;
+    private static final byte TIME_MARK_CUST_FROM_API = 3;
+    private static final byte TIME_MARK_CUST_TO_ROUTER = 4;
+    private static final byte TIME_MARK_ROUTER_FROM_CUST = 5;
+    private static final byte TIME_MARK_ROUTER_TO_CUST = 6;
+    private static final byte TIME_MARK_CUST_FROM_ROUTER = 7;
+    private static final byte TIME_MARK_CUST_TO_API = 8;
+    private static final byte TIME_MARK_API_FROM_CUST = 9;
+    private static final byte TIME_MARK_API_TO_CLIENT = 10;
+    private static final byte TIME_MARK_CLIENT_FROM_API = 11;
 
     public TransportHelper() {
 
     }
 
-    public static Object invokeRemoteRequest(final InvocationRequest request, final Object target) throws Exception {
+    public static Object invokeRemoteRequest(final InvocationRequest request, final Object target)
+        throws InvocationTargetException, IllegalAccessException, NoSuchMethodException {
 
 
         Class[] paramClasses = new Class[0];
@@ -160,7 +162,7 @@ public class TransportHelper {
         return result;
     }
 
-    public static Map<Byte, Long> readTimeMarks(final byte[] arr) {
+    private static Map<Byte, Long> readTimeMarks(final byte[] arr) {
 
         final Map<Byte, Long> timeMarks = new LinkedHashMap<>();
         if (arr != null && arr.length > 0 && arr.length % TIME_MARK_RECORD_LENGTH == 0) {
@@ -271,14 +273,14 @@ public class TransportHelper {
                               prestartAllCoreThreads);
     }
 
-    public static ListeningExecutorService createExecutor(final int poolSize,
-                                                          final int maxPoolSize,
-                                                          final long autoCleanUpInerval,
-                                                          final int criticalQueueSize,
-                                                          final String threadNamePrefix,
-                                                          final List<Thread> createdThreads,
-                                                          final String threadBasicName,
-                                                          final boolean prestartAllCoreThreads) {
+    private static ListeningExecutorService createExecutor(final int poolSize,
+                                                           final int maxPoolSize,
+                                                           final long autoCleanUpInerval,
+                                                           final int criticalQueueSize,
+                                                           final String threadNamePrefix,
+                                                           final List<Thread> createdThreads,
+                                                           final String threadBasicName,
+                                                           final boolean prestartAllCoreThreads) {
 
         if (poolSize <= 0) {
             return MoreExecutors.newDirectExecutorService();
@@ -332,12 +334,12 @@ public class TransportHelper {
                                        threadNamePrefix);
     }
 
-    public static ListeningExecutorService createListeningExecutor(final int corePoolSize,
-                                                                   final int maxPoolSize,
-                                                                   final long autoCleanUpInerval,
-                                                                   final int criticalQueueSize,
-                                                                   final String transportName,
-                                                                   final String threadNamePrefix) {
+    private static ListeningExecutorService createListeningExecutor(final int corePoolSize,
+                                                                    final int maxPoolSize,
+                                                                    final long autoCleanUpInerval,
+                                                                    final int criticalQueueSize,
+                                                                    final String transportName,
+                                                                    final String threadNamePrefix) {
 
         return createExecutor(corePoolSize,
                               maxPoolSize,
@@ -360,7 +362,7 @@ public class TransportHelper {
         }
     }
 
-    public static void safeShutdown(final ListeningExecutorService executor, final int timeout, final TimeUnit unit) {
+    private static void safeShutdown(final ListeningExecutorService executor, final int timeout, final TimeUnit unit) {
 
         executor.shutdown();
 

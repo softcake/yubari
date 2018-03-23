@@ -16,6 +16,9 @@
 
 package org.softcake.yubari.netty.stream;
 
+/**
+ * @author The softcake Authors.
+ */
 public interface StreamListener {
     void handleStream(BlockingBinaryStream var1);
 }
