@@ -21,6 +21,7 @@ import io.netty.channel.ChannelFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -68,5 +69,12 @@ final class SendingErrorCheck extends AbstractSendingCheck {
                     clientSession.getSendCompletionErrorDelay());
             }
         };
+    }
+
+    @Override
+    void schedule() {
+        this.clientSession.getScheduledExecutorService().schedule(this,
+                                                                  this.clientSession.getSendCompletionErrorDelay(),
+                                                                  TimeUnit.MILLISECONDS);
     }
 }

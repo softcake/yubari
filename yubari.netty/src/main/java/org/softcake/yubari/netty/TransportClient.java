@@ -32,8 +32,7 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DROPPABLE
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DROPPABLE_MESSAGE_SERVER_TTL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_DUPLICATE_SYNC_MESSAGES_TO_CLIENT_LISTENERS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_ERROR_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_WARNING_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL;
@@ -53,8 +52,7 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_RECONNECT
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SECONDARY_CONNECTION_RECONNECTS_RESET_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SECONDARY_CONNECTION_RECONNECT_ATTEMPTS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_ERROR_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_COMPLETION_WARNING_DELAY;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SEND_CPU_INFO_TO_SERVER;
@@ -66,16 +64,12 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_CH
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_SIZE;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_MESSAGE_TIMEOUT;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_SIZE;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.TransportClientBuilder
-    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
+import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_QUEUE_SIZE;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_TERMINATION_MAX_AWAIT_TIMEOUT_IN_MILLIS;
 import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_TRANSPORT_POOL_SIZE;
@@ -85,7 +79,6 @@ import static org.softcake.yubari.netty.TransportClientBuilder.DEFAULT_USE_SSL;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
-import org.softcake.yubari.netty.mina.MessageSentListener;
 import org.softcake.yubari.netty.mina.ProxyInterfaceFactory;
 import org.softcake.yubari.netty.mina.RemoteCallSupport;
 import org.softcake.yubari.netty.mina.RequestListenableFuture;
@@ -107,7 +100,6 @@ import io.netty.channel.ChannelOption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.net.ConnectException;
 import java.net.Inet6Address;
@@ -1189,73 +1181,13 @@ public class TransportClient implements org.softcake.yubari.netty.ITransportClie
                : this.createFailedFuture(message);
     }
 
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    public void controlRequest(final ProtocolMessage message, final MessageSentListener messageSentListener)
-        throws IOException {
-
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-        if (transportClientSessionLocal != null) {
-            transportClientSessionLocal.controlRequest(message, messageSentListener);
-        } else {
-            throw new IOException(String.format("[%s] TransportClient not connected",this.transportName));
-        }
-    }
-
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    public ProtocolMessage controlBlockingRequest(final ProtocolMessage message, final Long timeoutTime)
-        throws InterruptedException, IOException, TimeoutException, ExecutionException {
-
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-        if (transportClientSessionLocal != null) {
-            return transportClientSessionLocal.controlBlockingRequest(message, timeoutTime);
-        } else {
-            throw new IOException(String.format("[%s] TransportClient not connected",this.transportName));
-        }
-    }
-
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    public ProtocolMessage controlRequest(final ProtocolMessage message) {
-
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-        if (transportClientSessionLocal != null) {
-            transportClientSessionLocal.controlRequest(message);
-            return null;
-        } else {
-            throw new RuntimeException(String.format("[%s] TransportClient not connected",this.transportName));
-        }
-    }
-
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    public ProtocolMessage controlSynchRequest(final ProtocolMessage message, final Long timeoutTime)
-        throws TimeoutException {
-
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-        if (transportClientSessionLocal != null) {
-            return transportClientSessionLocal.controlSynchRequest(message, timeoutTime);
-        } else {
-            throw new RuntimeException(String.format("[%s] TransportClient not connected",this.transportName));
-        }
-    }
-
     RequestListenableFuture createFailedFuture(final ProtocolMessage message) {
         final String exMessage = String.format("[%s] TransportClient not connected, message: %s",
                                                this.transportName,
                                                message.toString(PROTOCOL_MESSAGE_EXCEPTION_LENGTH));
-        final RequestMessageTransportListenableFuture
+        final RequestMessageListenableFuture
             task
-            = new RequestMessageTransportListenableFuture(this.transportName, this.getNextId(), null, message);
+            = new RequestMessageListenableFuture(this.transportName, this.getNextId(), null, message);
         task.setException(new ConnectException(exMessage));
         return task;
     }

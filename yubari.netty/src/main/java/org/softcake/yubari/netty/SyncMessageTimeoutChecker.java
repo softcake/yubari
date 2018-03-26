@@ -21,20 +21,20 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class SyncMessageTimeoutChecker implements Runnable {
-    private final RequestMessageTransportListenableFuture transportFuture;
+    private final RequestMessageListenableFuture transportFuture;
     private final ScheduledExecutorService syncMessagesTimer;
     private final long timeoutTime;
     private final boolean doNotRestartTimerOnInProcessResponse;
 
     public SyncMessageTimeoutChecker(final ScheduledExecutorService syncMessagesTimer,
-                                     final RequestMessageTransportListenableFuture transportFuture,
+                                     final RequestMessageListenableFuture transportFuture,
                                      final long timeoutTime) {
 
         this(syncMessagesTimer, transportFuture, timeoutTime, false);
     }
 
     public SyncMessageTimeoutChecker(final ScheduledExecutorService syncMessagesTimer,
-                                     final RequestMessageTransportListenableFuture transportFuture,
+                                     final RequestMessageListenableFuture transportFuture,
                                      final long timeoutTime,
                                      final boolean doNotRestartTimerOnInProcessResponse) {
 

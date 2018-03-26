@@ -31,30 +31,41 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class RequestMessageTransportListenableFuture extends AbstractFuture<ProtocolMessage>
+public class RequestMessageListenableFuture extends AbstractFuture<ProtocolMessage>
     implements RequestListenableFuture {
-    private static final Logger LOGGER = LoggerFactory.getLogger(RequestMessageTransportListenableFuture.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RequestMessageListenableFuture.class);
     private final Object channelFutureLock = new Object();
     private final ProtocolMessage requestMessage;
     private final String transportName;
+    private final TransportClient transportClientSession;
     private Long syncRequestId;
-    private Map<Long, RequestMessageTransportListenableFuture> syncRequests;
+    private Map<Long, RequestMessageListenableFuture> syncRequests;
     private long inProcessResponseLastTime = Long.MIN_VALUE;
     private ChannelFuture channelFuture;
     private ScheduledFuture<?> timeoutScheduledFuture;
 
-    public RequestMessageTransportListenableFuture(final String transportName,
-                                                   final Long syncRequestId,
-                                                   final Map<Long, RequestMessageTransportListenableFuture>
+    public RequestMessageListenableFuture(final String transportName,
+                                          final Long syncRequestId,
+                                          final Map<Long, RequestMessageListenableFuture>
                                                        syncRequests,
-                                                   final ProtocolMessage requestMessage) {
-
+                                          final ProtocolMessage requestMessage) {
+        transportClientSession = null;
         this.transportName = transportName;
         this.syncRequestId = syncRequestId;
         this.syncRequests = syncRequests;
         this.requestMessage = requestMessage;
     }
-
+    public RequestMessageListenableFuture(final TransportClient transportClientSession,
+                                          final Map<Long, RequestMessageListenableFuture>
+                                                       syncRequests,
+                                          final ProtocolMessage requestMessage) {
+        this.transportName = transportClientSession.getTransportName();
+        this.transportClientSession = transportClientSession;
+        this.syncRequestId = transportClientSession.getNextId();
+        this.syncRequests = syncRequests;
+        this.syncRequests.put(syncRequestId, this);
+        this.requestMessage = requestMessage;
+    }
     public boolean set(final ProtocolMessage value) {
 
         final boolean result = super.set(value);
@@ -78,7 +89,7 @@ public class RequestMessageTransportListenableFuture extends AbstractFuture<Prot
 
     private void cleanup(final boolean mayInterruptIfRunning) {
 
-        final Map<Long, RequestMessageTransportListenableFuture> localSyncRequests = this.syncRequests;
+        final Map<Long, RequestMessageListenableFuture> localSyncRequests = this.syncRequests;
         final Long syncRequestIdLocal = this.syncRequestId;
         if (localSyncRequests != null && syncRequestIdLocal != null) {
             localSyncRequests.remove(syncRequestIdLocal);
@@ -128,7 +139,7 @@ public class RequestMessageTransportListenableFuture extends AbstractFuture<Prot
 
         if (cf == null) {
             throw new NullPointerException("Passed channel future is null");
-        } else {
+        }
 
             synchronized (this.channelFutureLock) {
                 this.channelFuture = cf;
@@ -154,7 +165,7 @@ public class RequestMessageTransportListenableFuture extends AbstractFuture<Prot
 
                 });
             }
-        }
+
     }
 
     public long getInProcessResponseLastTime() {

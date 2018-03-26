@@ -18,14 +18,12 @@ package org.softcake.yubari.netty;
 
 
 import org.softcake.yubari.netty.mina.ClientListener;
-import org.softcake.yubari.netty.mina.MessageSentListener;
 import org.softcake.yubari.netty.mina.RequestListenableFuture;
 
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.ListenableFuture;
 
-import java.io.IOException;
 import java.net.ConnectException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -34,30 +32,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public interface ITransportClient  {
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    void controlRequest(ProtocolMessage var1, MessageSentListener var2) throws IOException;
 
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    ProtocolMessage controlBlockingRequest(ProtocolMessage var1, Long var2)
-        throws InterruptedException, IOException, TimeoutException, ExecutionException;
-
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    ProtocolMessage controlRequest(ProtocolMessage var1);
-
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    ProtocolMessage controlSynchRequest(ProtocolMessage var1, Long var2) throws TimeoutException;
 
     boolean sendMessageNaive(ProtocolMessage var1);
 

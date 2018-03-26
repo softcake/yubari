@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * @author The softcake Authors.
@@ -76,9 +77,9 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
     private final InetSocketAddress address;
     private volatile ClientDisconnectReason disconnectReason;
     private volatile boolean terminating;
-    private volatile Channel primarySession;
+    private volatile Channel primaryChannel;
     private ChannelAttachment primarySessionChannelAttachment;
-    private volatile Channel childSession;
+    private volatile Channel childChannel;
     private ChannelAttachment secondarySessionChannelAttachment;
     private ClientAuthorizationProvider authorizationProvider;
     private Long sslHandshakeStartTime;
@@ -315,7 +316,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                         if (this.tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL,
                                                ClientState.AUTHORIZING)) {
                             this.authorizationStartTime = System.currentTimeMillis();
-                            this.protocolHandler.handleAuthorization(this.authorizationProvider, this.primarySession);
+                            this.protocolHandler.handleAuthorization(this.authorizationProvider, this.primaryChannel);
                         }
                         continue;
                     case AUTHORIZING:
@@ -466,9 +467,9 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         if (connectFuture.isSuccess()) {
 
             LOGGER.debug("[{}] Successfully connected to [{}]", this.clientSession.getTransportName(), this.address);
-            this.primarySession = setChannelAttributeForSuccessfullyConnection(connectFuture,
+            this.primaryChannel = setChannelAttributeForSuccessfullyConnection(connectFuture,
                                                                                this.primarySessionChannelAttachment);
-            LOGGER.debug("[{}] primarySession = {}", this.clientSession.getTransportName(), this.primarySession);
+            LOGGER.debug("[{}] primaryChannel = {}", this.clientSession.getTransportName(), this.primaryChannel);
             this.processConnectOverSSLIfNecessary();
 
         } else if (connectFuture.isDone() && connectFuture.cause() != null) {
@@ -572,7 +573,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
             this.authorizationProvider = null;
         }
 
-        if (this.primarySession == null || !this.primarySession.isActive()) {
+        if (this.primaryChannel == null || !this.primaryChannel.isActive()) {
             LOGGER.warn("[{}] Primary session disconnected. Disconnecting transport client",
                         this.clientSession.getTransportName());
             if (this.disconnectReason == null) {
@@ -593,13 +594,13 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
             && this.clientSession.getPrimaryConnectionPingTimeout() > 0L) {
 
             final ChannelAttachment primAttachment
-                = this.primarySession.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
+                = this.primaryChannel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
 
             final boolean needToPing = needToPing(System.currentTimeMillis(),
                                                   primAttachment,
                                                   this.clientSession.getPrimaryConnectionPingInterval());
             if (needToPing && this.isOnline()) {
-                this.sendPingRequest(this.primarySession,
+                this.sendPingRequest(this.primaryChannel,
                                      primAttachment,
                                      this.clientSession.getPrimaryConnectionPingTimeout(),
                                      Boolean.TRUE);
@@ -608,19 +609,19 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
         if (!this.clientSession.isUseFeederSocket() || this.childSocketAuthAcceptorMessage == null) {return true;}
 
-        if (this.childSession != null && this.childSession.isActive()) {
+        if (this.childChannel != null && this.childChannel.isActive()) {
 
             if (this.clientSession.getSecondaryConnectionPingInterval() > 0L
                 && this.clientSession.getSecondaryConnectionPingTimeout() > 0L) {
                 final Attribute<ChannelAttachment>
                     attribute
-                    = this.childSession.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+                    = this.childChannel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
                 final ChannelAttachment secAttachment = attribute.get();
                 final boolean needToPing = needToPing(System.currentTimeMillis(),
                                                       secAttachment,
                                                       this.clientSession.getSecondaryConnectionPingInterval());
                 if (needToPing && this.isOnline()) {
-                    this.sendPingRequest(this.childSession,
+                    this.sendPingRequest(this.childChannel,
                                          secAttachment,
                                          this.clientSession.getSecondaryConnectionPingTimeout(),
                                          Boolean.FALSE);
@@ -661,10 +662,10 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
     private boolean connectChildSession() throws InterruptedException {
 
-        if (this.childSession != null) {
-            this.childSession.disconnect();
-            this.childSession.close();
-            this.childSession = null;
+        if (this.childChannel != null) {
+            this.childChannel.disconnect();
+            this.childChannel.close();
+            this.childChannel = null;
         }
 
 
@@ -682,9 +683,10 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         final ChannelFuture connectFuture = this.processConnectingAndGetFuture();
 
         if (connectFuture.isSuccess()) {
-            this.childSession = setChannelAttributeForSuccessfullyConnection(connectFuture,
+            this.childChannel = setChannelAttributeForSuccessfullyConnection(connectFuture,
                                                                              this.secondarySessionChannelAttachment);
-            final ChannelFuture channelFuture = this.protocolHandler.writeMessage(this.childSession,
+
+            final ChannelFuture channelFuture = this.protocolHandler.writeMessage(this.childChannel,
                                                                                   this.childSocketAuthAcceptorMessage);
             channelFuture.addListener((GenericFutureListener<Future<Void>>) future -> {
 
@@ -751,7 +753,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         if (this.primarySocketAuthAcceptorMessageSent || this.primarySocketAuthAcceptorMessage == null) {return;}
 
 
-        final ChannelFuture channelFuture = this.protocolHandler.writeMessage(this.primarySession,
+        final ChannelFuture channelFuture = this.protocolHandler.writeMessage(this.primaryChannel,
                                                                               this.primarySocketAuthAcceptorMessage);
         channelFuture.addListener((GenericFutureListener<Future<Void>>) future -> {
 
@@ -892,7 +894,7 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
             return;
         }
 
-        final Channel channel = isPrimary ? this.primarySession : this.childSession;
+        final Channel channel = isPrimary ? this.primaryChannel : this.childChannel;
         if (channel != null) {
             channel.disconnect();
             channel.close();
@@ -967,19 +969,19 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
 
     private void closeChildSession() throws InterruptedException {
 
-        if (this.childSession != null) {
-            this.childSession.disconnect();
-            this.childSession.close().await(SESSION_CLOSE_WAIT_TIME, TimeUnit.SECONDS);
-            this.childSession = null;
+        if (this.childChannel != null) {
+            this.childChannel.disconnect();
+            this.childChannel.close().await(SESSION_CLOSE_WAIT_TIME, TimeUnit.SECONDS);
+            this.childChannel = null;
         }
     }
 
     private void closePrimarySession() throws InterruptedException {
 
-        if (this.primarySession != null) {
-            this.primarySession.disconnect();
-            this.primarySession.close().await(SESSION_CLOSE_WAIT_TIME, TimeUnit.SECONDS);
-            this.primarySession = null;
+        if (this.primaryChannel != null) {
+            this.primaryChannel.disconnect();
+            this.primaryChannel.close().await(SESSION_CLOSE_WAIT_TIME, TimeUnit.SECONDS);
+            this.primaryChannel = null;
         }
     }
 
@@ -1078,14 +1080,14 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
         return this.clientState.get() == ClientState.AUTHORIZING;
     }
 
-    public Channel getPrimarySession() {
+    public Channel getPrimaryChannel() {
 
-        return this.primarySession;
+        return this.primaryChannel;
     }
 
-    public Channel getChildSession() {
+    public Channel getChildChannel() {
 
-        return this.childSession;
+        return this.childChannel;
     }
 
     public void setDisconnectReason(final ClientDisconnectReason disconnectReason) {
@@ -1128,10 +1130,16 @@ class ClientConnector extends Thread implements AuthorizationProviderListener {
                                                                     disconnectReason.getDisconnectHint(),
                                                                     disconnectReason.getError(),
                                                                     disconnectReason.getDisconnectComments());
-        listeners.forEach(clientListener -> this.protocolHandler.fireDisconnectedEvent(clientListener,
-                                                                                       this.clientSession
-                                                                                           .getTransportClient(),
-                                                                                       disconnectedEvent));
+        listeners.forEach(new Consumer<ClientListener>() {
+            @Override
+            public void accept(final ClientListener clientListener) {
+
+                ClientConnector.this.protocolHandler.fireDisconnectedEvent(clientListener,
+                                                                           ClientConnector.this.clientSession
+                                                                               .getTransportClient(),
+                                                                           disconnectedEvent);
+            }
+        });
 
 
         this.logDisconnectInQueue(disconnectReason);

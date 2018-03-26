@@ -17,31 +17,21 @@
 package org.softcake.yubari.netty;
 
 import org.softcake.cherry.core.base.PreCheck;
-import org.softcake.yubari.netty.data.DroppableMessageScheduling;
-import org.softcake.yubari.netty.map.MapHelper;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
 import org.softcake.yubari.netty.mina.ISessionStats;
-import org.softcake.yubari.netty.mina.InvocationResult;
 import org.softcake.yubari.netty.mina.TransportHelper;
-import org.softcake.yubari.netty.stream.BlockingBinaryStream;
-import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.common.orderedExecutor.OrderedThreadPoolExecutor.OrderedRunnable;
-import com.dukascopy.dds4.ping.PingManager;
-import com.dukascopy.dds4.ping.PingStats;
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.BinaryPartMessage;
 import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.DisconnectRequestMessage;
-import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
-import com.dukascopy.dds4.transport.msg.system.InstrumentableLowMessage;
-import com.dukascopy.dds4.transport.msg.system.InvocationRequest;
 import com.dukascopy.dds4.transport.msg.system.JSonSerializableWrapper;
 import com.dukascopy.dds4.transport.msg.system.MessageGroup;
 import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
@@ -49,7 +39,6 @@ import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.RequestInProcessMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamHeaderMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamingStatus;
-import com.dukascopy.dds4.transport.msg.types.StreamState;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -61,16 +50,10 @@ import io.netty.util.Attribute;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.Serializable;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -81,38 +64,36 @@ import java.util.concurrent.atomic.AtomicBoolean;
 class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMessage> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientProtocolHandler.class);
     private final TransportClientSession clientSession;
-    private final long droppableMessagesClientTTL;
     private final ListeningExecutorService eventExecutor;
     private final ListeningExecutorService authEventExecutor;
     private final ListeningExecutorService streamProcessingExecutor;
     private final ListeningExecutorService syncRequestProcessingExecutor;
     private final List<Thread> eventExecutorThreadsForLogging = Collections.synchronizedList(new ArrayList<>());
-    private final Map<Class<?>, Map<String, DroppableMessageScheduling>>
-        lastScheduledDropableMessages
-        = new ConcurrentHashMap<>();
     private final boolean logSkippedDroppableMessages;
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
-    private final boolean sendCpuInfoToServer;
     private final ThreadLocal<int[]> sentMessagesCounterThreadLocal = ThreadLocal.withInitial(() -> new int[1]);
-    private final Map<String, BlockingBinaryStream> streams = new HashMap<>();
+    private final StreamProcessor streamProcessor;
+    private final HeartbeatProcessor heartbeatProcessor;
+    private final SerializableProcessor serializableProcessor;
+    private final DroppableMessageHandler droppableMessageHandler;
     private ClientConnector clientConnector;
+
     ClientProtocolHandler(final TransportClientSession session) {
 
         this.clientSession = PreCheck.notNull(session, "session");
-        this.droppableMessagesClientTTL = session.getDroppableMessagesClientTTL();
+        this.droppableMessageHandler = new DroppableMessageHandler(this.clientSession);
         this.logSkippedDroppableMessages = session.isLogSkippedDroppableMessages();
         this.logEventPoolThreadDumpsOnLongExecution = session.getLogEventPoolThreadDumpsOnLongExecution();
         this.eventExecutor = this.initEventExecutor();
         this.authEventExecutor = this.initAuthEventExecutor();
         this.streamProcessingExecutor = this.initStreamProcessingExecutor();
         this.syncRequestProcessingExecutor = this.initSyncRequestProcessingExecutor();
-        this.sendCpuInfoToServer = session.isSendCpuInfoToServer();
+        this.streamProcessor = new StreamProcessor(clientSession, this.streamProcessingExecutor);
+        this.heartbeatProcessor = new HeartbeatProcessor(clientSession);
+        this.serializableProcessor = new SerializableProcessor(clientSession, this.eventExecutor);
+
     }
 
-    public TransportClientSession getClientSession() {
-
-        return clientSession;
-    }
 
     public void setClientConnector(final ClientConnector clientConnector) {
 
@@ -174,6 +155,7 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
 
     void terminate() {
 
+        this.streamProcessor.terminateStreams();
         this.shutdown(this.eventExecutor,
                       this.clientSession.getEventPoolTerminationTimeUnitCount(),
                       this.clientSession.getEventPoolTerminationTimeUnit());
@@ -207,24 +189,21 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     //TODO RXJava
     protected void channelRead0(final ChannelHandlerContext ctx, final BinaryProtocolMessage msg) throws Exception {
 
-        try {
-            final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel()
-                                                                               .attr(ChannelAttachment
-                                                                                         .CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
-            final ChannelAttachment attachment = channelAttachmentAttribute.get();
 
-            LOGGER.trace("[{}] Message received {}, primary channel: {}",
-                         this.clientSession.getTransportName(),
-                         msg,
-                         attachment.isPrimaryConnection());
+        final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel()
+                                                                           .attr(ChannelAttachment
+                                                                                     .CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+        final ChannelAttachment attachment = channelAttachmentAttribute.get();
+
+        LOGGER.trace("[{}] Message received {}, primary channel: {}",
+                     this.clientSession.getTransportName(),
+                     msg,
+                     attachment.isPrimaryConnection());
 
 
-            attachment.setLastReadIoTime(System.currentTimeMillis());
-            this.processControlRequest(ctx, msg, attachment);
-        } catch (final Exception e) {
-            LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-            throw e;
-        }
+        attachment.setLastReadIoTime(System.currentTimeMillis());
+        this.processControlRequest(ctx, msg, attachment);
+
     }
 
     @Override
@@ -328,7 +307,7 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
             public void run() {
 
                 try {
-                    terminateStreams();
+
                     clientListener.disconnected(transportClient, disconnectedEvent);
                 } catch (final Exception e) {
                     LOGGER.error("[{}] ", clientSession.getTransportName(), e);
@@ -392,17 +371,15 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     }
 
     private void addWarningTimeoutSendingCheck(final ChannelFuture channelFuture) {
+
         SendingWarningCheck warningCheck = new SendingWarningCheck(channelFuture, this.clientSession);
-        this.clientSession.getScheduledExecutorService().schedule(warningCheck,
-                                                                  this.clientSession.getSendCompletionWarningDelay(),
-                                                                  TimeUnit.MILLISECONDS);
+        warningCheck.schedule();
     }
 
     private void addErrorTimeoutSendingCheck(final ChannelFuture channelFuture) {
+
         SendingErrorCheck errorCheck = new SendingErrorCheck(channelFuture, this.clientSession);
-        this.clientSession.getScheduledExecutorService().schedule(errorCheck,
-                                                                  this.clientSession.getSendCompletionErrorDelay(),
-                                                                  TimeUnit.MILLISECONDS);
+        errorCheck.schedule();
     }
 
     //TODO RxJava
@@ -420,7 +397,7 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         }
 
         if (requestMessage instanceof HeartbeatRequestMessage) {
-            this.proccessHeartbeatRequestMessage(ctx, attachment, (HeartbeatRequestMessage) requestMessage);
+            this.heartbeatProcessor.process(ctx, attachment, (HeartbeatRequestMessage) requestMessage);
         } else if (requestMessage instanceof DisconnectRequestMessage) {
             this.proccessDisconnectRequestMessage((DisconnectRequestMessage) requestMessage);
         } else if (requestMessage instanceof PrimarySocketAuthAcceptorMessage) {
@@ -428,15 +405,13 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         } else if (requestMessage instanceof ChildSocketAuthAcceptorMessage) {
             this.clientConnector.setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) requestMessage);
         } else if (requestMessage instanceof HeartbeatOkResponseMessage) {
-            this.processSyncResponse(requestMessage);
+            //  this.processSyncResponse(requestMessage);
         } else if (requestMessage instanceof JSonSerializableWrapper) {
-            this.processSerializableRequest(ctx, (JSonSerializableWrapper) requestMessage);
-        } else if (msg instanceof BinaryPartMessage) {
-            this.streamPartReceived(ctx, attachment, (BinaryPartMessage) msg);
-        } else if (msg instanceof StreamHeaderMessage) {
-            this.createStream(ctx, attachment, (StreamHeaderMessage) msg);
-        } else if (msg instanceof StreamingStatus) {
-            this.streamStatusReceived((StreamingStatus) msg);
+            this.serializableProcessor.process(ctx, (JSonSerializableWrapper) requestMessage);
+        } else if (msg instanceof BinaryPartMessage
+                   || msg instanceof StreamHeaderMessage
+                   || msg instanceof StreamingStatus) {
+            this.streamProcessor.process(ctx, msg);
         } else if (this.clientConnector.isAuthorizing()) {
             this.processAuthorizationMessage(ctx, msg);
         } else {
@@ -458,153 +433,11 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
                                                                             "Disconnect request received"));
     }
 
-    private void proccessHeartbeatRequestMessage(final ChannelHandlerContext ctx,
-                                                 final ChannelAttachment attachment,
-                                                 final HeartbeatRequestMessage requestMessage) {
-
-        try {
-            final HeartbeatOkResponseMessage okResponseMessage = new HeartbeatOkResponseMessage();
-            okResponseMessage.setRequestTime(requestMessage.getRequestTime());
-            okResponseMessage.setReceiveTime(System.currentTimeMillis());
-            okResponseMessage.setSynchRequestId(requestMessage.getSynchRequestId());
-            final PingManager pm = this.clientSession.getPingManager(attachment.isPrimaryConnection());
-            final Double systemCpuLoad = this.sendCpuInfoToServer ? pm.getSystemCpuLoad() : null;
-            final Double processCpuLoad = this.sendCpuInfoToServer ? pm.getProcessCpuLoad() : null;
-            okResponseMessage.setProcessCpuLoad(processCpuLoad);
-            okResponseMessage.setSystemCpuLoad(systemCpuLoad);
-            okResponseMessage.setAvailableProcessors(pm.getAvailableProcessors());
-            PingStats generalStats = pm.getGeneralStats();
-            if (generalStats != null) {
-                okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval()
-                                                                     .getRoundedLast());
-            } else {
-                generalStats = this.clientSession.getPingManager(attachment.isPrimaryConnection())
-                                                 .getGeneralStats();
-                if (generalStats != null) {
-                    okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval()
-                                                                         .getRoundedLast());
-                }
-            }
-
-            if (!this.clientSession.isTerminating()) {
-                this.writeMessage(ctx.channel(), okResponseMessage);
-            }
-        } catch (final Exception e) {
-            LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-            final ErrorResponseMessage errorMessage = new ErrorResponseMessage(String.format(
-                "Error occurred while processing the message [%s]. Error message: [%s:%s]",
-                requestMessage,
-                e.getClass().getName(),
-                e.getMessage()));
-            errorMessage.setSynchRequestId(requestMessage.getSynchRequestId());
-            if (!this.clientSession.isTerminating()) {
-                this.writeMessage(ctx.channel(), errorMessage);
-            }
-        }
-    }
-
-    private void streamPartReceived(final ChannelHandlerContext ctx,
-                                    final ChannelAttachment attachment,
-                                    final BinaryPartMessage binaryPart) {
-
-        this.streamProcessingExecutor.submit(() -> {
-
-            final BlockingBinaryStream stream = getStream(binaryPart.getStreamId());
-            if (stream == null) {
-                final StreamingStatus ss = new StreamingStatus();
-                ss.setStreamId(binaryPart.getStreamId());
-                ss.setState(StreamState.STATE_ERROR);
-                writeMessage(ctx.channel(), ss);
-            } else {
-                boolean terminated = false;
-
-                try {
-                    stream.binaryPartReceived(binaryPart);
-                } catch (final IOException var6) {
-                    LOGGER.error(var6.getMessage(), var6);
-
-                    terminated = true;
-                    stream.ioTerminate(var6.getMessage());
-                }
-
-                if (binaryPart.isEof() || terminated) {
-                    synchronized (streams) {
-                        streams.remove(binaryPart.getStreamId());
-                    }
-                }
-            }
-
-        });
-    }
-
-    private void createStream(final ChannelHandlerContext ctx,
-                              final ChannelAttachment attachment,
-                              final StreamHeaderMessage stream) {
-
-        this.streamProcessingExecutor.submit(() -> {
-
-            final StreamListener streamListener = clientSession.getStreamListener();
-            if (streamListener != null) {
-                final BlockingBinaryStream bbs = new BlockingBinaryStream(stream.getStreamId(),
-                                                                          ctx,
-                                                                          clientSession.getStreamBufferSize(),
-                                                                          clientSession
-                                                                              .getStreamChunkProcessingTimeout());
-                synchronized (streams) {
-                    streams.put(stream.getStreamId(), bbs);
-                }
-
-                streamListener.handleStream(bbs);
-            }
-        });
-    }
-
-    private void streamStatusReceived(final StreamingStatus status) {
-
-        this.streamProcessingExecutor.submit(() -> {
-
-            final BlockingBinaryStream bbs = getStream(status.getStreamId());
-            if (bbs != null) {
-                safeTerminate(bbs, "Server error " + status.getState());
-                synchronized (streams) {
-                    streams.remove(bbs.getStreamId());
-                }
-            }
-
-        });
-    }
-
-    private synchronized void terminateStreams() {
-
-        final List<String> st = new ArrayList<>(this.streams.keySet());
-        st.forEach(s -> {
-            final BlockingBinaryStream bbs = streams.remove(s);
-            safeTerminate(bbs, "Connection error");
-        });
-    }
-
-    private void safeTerminate(final BlockingBinaryStream bbs, final String reason) {
-
-        if (bbs != null) {
-            try {
-                bbs.ioTerminate(reason);
-            } finally {
-                try {
-                    bbs.close();
-                } catch (final IOException e) {
-                    LOGGER.error("Failed to close stream " + bbs.getStreamId(), e);
-
-                }
-
-            }
-
-        }
-    }
-
     private boolean processSyncResponse(final ProtocolMessage message) {
 
-        final RequestMessageTransportListenableFuture synchRequestFuture = this.clientSession.getSyncRequestFuture(
-            message.getSynchRequestId());
+        final RequestMessageListenableFuture
+            synchRequestFuture
+            = this.clientSession.getSyncRequestFuture(message.getSynchRequestId());
         final boolean result;
         if (synchRequestFuture != null) {
 
@@ -638,123 +471,11 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         return result;
     }
 
-    private void processSerializableRequest(final ChannelHandlerContext ctx,
-                                            final JSonSerializableWrapper jSonSerializableWrapper) {
-
-        final Serializable data = jSonSerializableWrapper.getData();
-        if (data == null) {return;}
-
-        if (data instanceof InvocationResult) {
-            final InvocationResult invocationResult = (InvocationResult) data;
-            this.clientSession.getRemoteCallSupport().invocationResultReceived(invocationResult);
-        }
-
-        if (data instanceof InvocationRequest) {
-            final InvocationRequest invocationRequest = (InvocationRequest) data;
-
-            final AbstractEventExecutorChannelTask task = new AbstractEventExecutorChannelTask(ctx,
-                                                                                               this.clientSession,
-                                                                                               invocationRequest,
-                                                                                               0L) {
-                @Override
-                public void run() {
-
-                    try {
-                        final JSonSerializableWrapper responseMessage = new JSonSerializableWrapper();
-
-                        InvocationResult result = getInvocationResult(invocationRequest);
-                        responseMessage.setData(result);
-                        writeMessage(ctx.channel(), responseMessage);
-                    } catch (final Exception e) {
-
-                        LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                        clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
-                                                                              String.format(
-                                                                                  "Exception caught during "
-                                                                                  + "processing serialized "
-                                                                                  + "request %s",
-                                                                                  e.getMessage()),
-                                                                              e));
-                    }
-
-                }
-
-                @Override
-                public Object getOrderKey() {
-
-                    return clientSession.getConcurrencyPolicy().getConcurrentKey(jSonSerializableWrapper);
-                }
-            };
-            task.executeInExecutor(this.eventExecutor, null);
-        }
-
-    }
-
-    private InvocationResult getInvocationResult(final InvocationRequest invocationRequest) {
-
-        final Object impl = clientSession.getRemoteCallSupport().getInterfaceImplementation(
-            invocationRequest.getInterfaceClass());
-        InvocationResult result;
-        if (impl != null) {
-
-
-            final Serializable
-                invocationResult;
-            try {
-                invocationResult = (Serializable) TransportHelper.invokeRemoteRequest
-                    (invocationRequest, impl);
-                result = new InvocationResult(invocationResult, invocationRequest.getRequestId());
-                result.setState(InvocationResult.STATE_OK);
-            } catch (InvocationTargetException e) {
-                LOGGER.error("Error occurred...", e);
-                result = new InvocationResult(null, invocationRequest.getRequestId());
-                result.setState(InvocationResult.STATE_ERROR);
-                result.setThrowable(e.getCause());
-            } catch (IllegalAccessException | NoSuchMethodException e) {
-                LOGGER.error("Error occurred...", e);
-                result = new InvocationResult(null, invocationRequest.getRequestId());
-                result.setState(InvocationResult.STATE_ERROR);
-                result.setThrowable(e);
-            }
-
-
-        } else {
-            result = new InvocationResult(null, invocationRequest.getRequestId());
-            result.setState(InvocationResult.STATE_ERROR);
-            result.setThrowable(new Exception("Client does not provide interface: "
-                                              + invocationRequest.getInterfaceClass()));
-
-        }
-        return result;
-    }
-
-    private DroppableMessageScheduling getDroppableScheduling(final ProtocolMessage message, final String instrument) {
-
-        final Class<?> clazz = message.getClass();
-        Map<String, DroppableMessageScheduling>
-            lastScheduledMessagesMap
-            = this.lastScheduledDropableMessages.get(clazz);
-        if (lastScheduledMessagesMap == null) {
-            lastScheduledMessagesMap = MapHelper.getAndPutIfAbsent(this.lastScheduledDropableMessages,
-                                                                   clazz,
-                                                                   ConcurrentHashMap::new);
-        }
-
-        DroppableMessageScheduling lastScheduledMessageInfo = lastScheduledMessagesMap.get(instrument);
-        if (lastScheduledMessageInfo == null) {
-            lastScheduledMessageInfo = MapHelper.getAndPutIfAbsent(lastScheduledMessagesMap,
-                                                                   instrument,
-                                                                   DroppableMessageScheduling::new);
-        }
-
-        return lastScheduledMessageInfo;
-    }
 
     private void fireFeedbackMessageReceived(final ChannelHandlerContext ctx, final ProtocolMessage message) {
 
-        final long currentDropableMessageTime = this.clientSession.isSkipDroppableMessages()
-                                                ? this.checkAndRecordScheduleForDroppableMessage(message)
-                                                : 0L;
+
+        final long currentDropableMessageTime = this.droppableMessageHandler.getCurrentDropableMessageTime(message);
         if (message instanceof CurrencyMarket) {
             this.clientSession.tickReceived();
         }
@@ -776,9 +497,9 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
             public void run() {
 
 
-                final boolean canProcessCurrentDroppable = canProcessDroppableMessage(this.message,
-                                                                                      this.currentDropableMessageTime);
-
+                final boolean
+                    canProcessCurrentDroppable
+                    = droppableMessageHandler.canProcessDroppableMessage(this.message, this.currentDropableMessageTime);
                 if (!canProcessCurrentDroppable) {
                     clientSession.getDroppedMessageCounter().incrementAndGet();
                     if (logSkippedDroppableMessages) {
@@ -812,9 +533,7 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
 
                 if (stats != null) {
                     final long afterExecutionx = System.currentTimeMillis();
-                    stats.messageExecutionFinished(afterExecutionx,
-                                                   afterExecutionx - beforeExecution,
-                                                   this.message);
+                    stats.messageExecutionFinished(afterExecutionx, afterExecutionx - beforeExecution, this.message);
                 }
 
 
@@ -834,67 +553,12 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
         for (final ClientListener listener : listeners) {
             try {
-                listener.feedbackMessageReceived(clientSession.getTransportClient(),
-                                                 protocolMessage);
+                listener.feedbackMessageReceived(clientSession.getTransportClient(), protocolMessage);
             } catch (final Exception e) {
                 LOGGER.error("[{}] ", clientSession.getTransportName(), e);
 
             }
         }
-    }
-
-    private boolean canProcessDroppableMessage(final ProtocolMessage message, final long currentDropableMessageTime) {
-
-        if (currentDropableMessageTime <= 0L || !(message instanceof InstrumentableLowMessage)) {return true;}
-
-
-        final InstrumentableLowMessage instrumentable = (InstrumentableLowMessage) message;
-        final String instrument = instrumentable.getInstrument();
-
-        if (instrument != null) {
-            final DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
-            final long lastArrivedMessageTime = scheduling.getLastScheduledTime();
-            final int scheduledCount = scheduling.getScheduledCount();
-            scheduling.executed();
-            if (lastArrivedMessageTime - currentDropableMessageTime > this.droppableMessagesClientTTL
-                && scheduledCount > 1) {
-                return false;
-            }
-        }
-
-        return true;
-
-    }
-
-    private long checkAndRecordScheduleForDroppableMessage(final ProtocolMessage message) {
-
-        if (!(message instanceof InstrumentableLowMessage)) {
-            return 0L;
-        }
-
-        final InstrumentableLowMessage instrumentable = (InstrumentableLowMessage) message;
-        final String instrument = instrumentable.getInstrument();
-
-        if (instrument == null || !instrumentable.isDropOnTimeout()) {
-            return 0L;
-        }
-
-        final long currentInstrumentableMessageTime;
-        if (message instanceof CurrencyMarket) {
-            final CurrencyMarket cm = (CurrencyMarket) message;
-            currentInstrumentableMessageTime = cm.getCreationTimestamp();
-        } else {
-            final Long t = message.getTimestamp();
-            currentInstrumentableMessageTime = t == null ? 0L : t;
-        }
-
-        if (currentInstrumentableMessageTime > 0L) {
-            final DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
-            scheduling.scheduled(currentInstrumentableMessageTime);
-        }
-
-
-        return currentInstrumentableMessageTime;
     }
 
     protected void checkAndLogEventPoolThreadDumps() {
@@ -918,11 +582,4 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
         }
     }
 
-    private BlockingBinaryStream getStream(final String streamId) {
-
-        synchronized (this.streams) {
-            return this.streams.get(streamId);
-
-        }
-    }
 }

@@ -60,4 +60,5 @@ public abstract class AbstractSendingCheck implements Runnable {
     abstract void logMessage(final long executionTime);
 
     abstract ChannelFutureListener getMessageListener(final long executionTime);
+    abstract void schedule();
 }

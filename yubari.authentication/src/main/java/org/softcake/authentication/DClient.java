@@ -55,6 +55,7 @@ import com.dukascopy.dds3.transport.msg.ddsApi.InitRequestMessage;
 import com.dukascopy.dds3.transport.msg.ddsApi.QuitRequestMessage;
 import com.dukascopy.dds3.transport.msg.news.CalendarType;
 import com.dukascopy.dds3.transport.msg.news.NewsSubscribeRequest;
+import com.dukascopy.dds3.transport.msg.news.SubscribeRequestType;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.types.EventCategory;
 import com.dukascopy.dds4.transport.msg.types.GeoRegion;
@@ -862,18 +863,18 @@ public class DClient implements ClientListener {
     }
 public int anInt;
     public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
-anInt++;
-        LOGGER.info(message.toString());
-if(anInt<5){
-    return;
-}
-        try {
-            Thread.sleep(600000L);
-        } catch (InterruptedException e) {
-            LOGGER.error("Error occurred...", e);
-        }
-        TransportClient providedClient = TransportClient.class.cast(client);
-        LOGGER.info(message.toString());
+//anInt++;
+//        LOGGER.info(message.toString());
+//if(anInt<5){
+//    return;
+//}
+//        try {
+//            Thread.sleep(600000L);
+//        } catch (InterruptedException e) {
+//            LOGGER.error("Error occurred...", e);
+//        }
+//        TransportClient providedClient = TransportClient.class.cast(client);
+//        LOGGER.info(message.toString());
         //        if (providedClient == null || providedClient.isOnline() && !providedClient.isTerminated() &&
         // !ObjectUtils.isNullOrEmpty(this.transportClient) && ObjectUtils.isEqual(providedClient
         // .getTransportSessionId(), this.transportClient.getTransportSessionId())) {
@@ -1170,10 +1171,15 @@ if(anInt<5){
             this.fireConnected();
             InstrumentManager instrumentManager = new InstrumentManager(client);
             Set<Instrument> instruments = new HashSet<>();
-            instruments.add(Instrument.AUDCAD);
             instruments.add(Instrument.EURUSD);
-            instruments.add(Instrument.USDJPY);
             instrumentManager.addToFullDepthSubscribed(instruments);
+
+            NewsSubscribeRequest newsUnsubscribeRequest = new NewsSubscribeRequest();
+                        newsUnsubscribeRequest.setRequestType(SubscribeRequestType.SUBSCRIBE);
+                        newsUnsubscribeRequest.setSources(Collections.singleton(com.dukascopy.dds3.transport.msg
+             .news.NewsSource.valueOf(INewsFilter.NewsSource.FXSPIDER_NEWS.name())));
+                        LOGGER.debug("Unsubscribing : " + newsUnsubscribeRequest);
+                        this.transportClient.sendMessageNaive(newsUnsubscribeRequest);
         }
 
 
