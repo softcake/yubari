@@ -23,6 +23,7 @@ import org.softcake.yubari.netty.map.MapHelper;
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.InstrumentableLowMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,7 +38,7 @@ public class DroppableMessageHandler {
     private final TransportClientSession clientSession;
     private final long droppableMessagesClientTTL;
 
-    public DroppableMessageHandler(final TransportClientSession clientSession) {
+    public DroppableMessageHandler(@NotNull final TransportClientSession clientSession) {
 
         this.clientSession = PreCheck.notNull(clientSession, "clientSession");
         this.droppableMessagesClientTTL = clientSession.getDroppableMessagesClientTTL();

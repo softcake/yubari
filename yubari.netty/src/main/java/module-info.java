@@ -23,6 +23,7 @@ module org.softcake.yubari.netty {
     requires java.rmi;
     requires JForex.API;
     requires com.google.common;
+    requires annotations.java8;
     exports org.softcake.yubari.netty;
     exports org.softcake.yubari.netty.mina;
     exports org.softcake.yubari.netty.stream;

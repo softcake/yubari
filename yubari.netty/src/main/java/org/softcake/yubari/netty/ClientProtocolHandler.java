@@ -78,6 +78,11 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     private final DroppableMessageHandler droppableMessageHandler;
     private ClientConnector clientConnector;
 
+    public DroppableMessageHandler getDroppableMessageHandler() {
+
+        return droppableMessageHandler;
+    }
+
     ClientProtocolHandler(final TransportClientSession session) {
 
         this.clientSession = PreCheck.notNull(session, "session");
