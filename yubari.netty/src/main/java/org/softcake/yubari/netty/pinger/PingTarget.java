@@ -17,7 +17,7 @@
 package org.softcake.yubari.netty.pinger;
 
 
-import org.softcake.yubari.netty.TransportClientBuilder;
+import org.softcake.yubari.netty.client.TransportClientBuilder;
 
 import com.google.common.base.Objects;
 

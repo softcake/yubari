@@ -20,12 +20,12 @@ package org.softcake.authentication;
 //import static com.dukascopy.api.impl.connect.ActivityLogger.getInstance;
 
 import org.softcake.yubari.connect.authorization.AuthorizationPropertiesFactory;
-import org.softcake.yubari.netty.GreedClientAuthorizationProvider;
-import org.softcake.yubari.netty.ITransportClient;
-import org.softcake.yubari.netty.InstrumentManager;
+import org.softcake.yubari.netty.authorization.GreedClientAuthorizationProvider;
+import org.softcake.yubari.netty.client.ITransportClient;
+import org.softcake.yubari.netty.ext.InstrumentManager;
 import org.softcake.yubari.netty.SessionHandler;
-import org.softcake.yubari.netty.TransportClient;
-import org.softcake.yubari.netty.TransportClientBuilder;
+import org.softcake.yubari.netty.client.TransportClient;
+import org.softcake.yubari.netty.client.TransportClientBuilder;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;

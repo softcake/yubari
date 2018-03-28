@@ -16,7 +16,7 @@
 
 package org.softcake.yubari.netty.mina;
 
-import org.softcake.yubari.netty.ITransportClient;
+import org.softcake.yubari.netty.client.ITransportClient;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

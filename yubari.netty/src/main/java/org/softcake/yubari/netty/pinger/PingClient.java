@@ -18,7 +18,7 @@ package org.softcake.yubari.netty.pinger;
 
 
 import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
-import org.softcake.yubari.netty.TransportClientBuilder;
+import org.softcake.yubari.netty.client.TransportClientBuilder;
 
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.mina.ssl.ClientSSLContextListener;

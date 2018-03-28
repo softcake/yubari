@@ -17,7 +17,7 @@
 package org.softcake.authentication;
 
 
-import org.softcake.yubari.netty.TransportClient;
+import org.softcake.yubari.netty.client.TransportClient;
 
 import com.dukascopy.dds3.transport.msg.acc.AccountInfoMessage;
 import com.dukascopy.dds3.transport.msg.acc.AccountInfoMessageInit;

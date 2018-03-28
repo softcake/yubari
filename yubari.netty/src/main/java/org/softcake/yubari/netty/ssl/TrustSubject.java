@@ -14,17 +14,11 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty.mina;
+package org.softcake.yubari.netty.ssl;
 
+public enum TrustSubject {
+    ANDROID;
 
-import org.softcake.yubari.netty.client.ITransportClient;
-
-import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-
-public interface ClientListener {
-    void authorized(ITransportClient var1);
-
-    void feedbackMessageReceived(ITransportClient var1, ProtocolMessage var2);
-
-    void disconnected(ITransportClient var1, DisconnectedEvent var2);
+    TrustSubject() {
+    }
 }

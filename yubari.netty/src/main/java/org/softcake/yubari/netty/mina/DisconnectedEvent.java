@@ -17,7 +17,7 @@
 package org.softcake.yubari.netty.mina;
 
 
-import org.softcake.yubari.netty.ITransportClient;
+import org.softcake.yubari.netty.client.ITransportClient;
 
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.msg.system.DisconnectHint;

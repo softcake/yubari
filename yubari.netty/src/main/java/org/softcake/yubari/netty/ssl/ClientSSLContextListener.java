@@ -14,17 +14,14 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty.mina;
+package org.softcake.yubari.netty.ssl;
 
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 
-import org.softcake.yubari.netty.client.ITransportClient;
-
-import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-
-public interface ClientListener {
-    void authorized(ITransportClient var1);
-
-    void feedbackMessageReceived(ITransportClient var1, ProtocolMessage var2);
-
-    void disconnected(ITransportClient var1, DisconnectedEvent var2);
+/**
+ * @author The Softcake Authors.
+ */
+public interface ClientSSLContextListener {
+    void securityException(X509Certificate[] chain, String authType, CertificateException exception);
 }
