@@ -78,11 +78,6 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
     private final DroppableMessageHandler droppableMessageHandler;
     private ClientConnector clientConnector;
 
-    public DroppableMessageHandler getDroppableMessageHandler() {
-
-        return droppableMessageHandler;
-    }
-
     ClientProtocolHandler(final TransportClientSession session) {
 
         this.clientSession = PreCheck.notNull(session, "session");
@@ -99,6 +94,10 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
 
     }
 
+    public DroppableMessageHandler getDroppableMessageHandler() {
+
+        return droppableMessageHandler;
+    }
 
     public void setClientConnector(final ClientConnector clientConnector) {
 
@@ -338,52 +337,63 @@ class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMe
 
         final int[] messagesCounter = this.sentMessagesCounterThreadLocal.get();
         ++messagesCounter[0];
-        boolean notWritable = false;
-        if (!channel.isWritable()) {
-            notWritable = true;
-        }
+        final boolean notWritable = !channel.isWritable();
 
         final ChannelFuture channelFuture = channel.writeAndFlush(responseMessage);
         final ChannelAttachment ca = channel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
+
         channelFuture.addListener(ca.getWriteIoListener());
+
         if (notWritable) {
+
             if (this.clientSession.getPrimaryConnectionPingTimeout() > 0L) {
-                final ChannelWriteTimeoutChecker
-                    channelWriteTimeoutChecker
-                    = new ChannelWriteTimeoutChecker(this.clientSession, channelFuture);
+                final ChannelWriteTimeoutChecker timeoutChecker = new ChannelWriteTimeoutChecker(this.clientSession,
+                                                                                                 channelFuture);
                 final ScheduledFuture<?> scheduledFuture = this.clientSession.getScheduledExecutorService().schedule(
-                    channelWriteTimeoutChecker,
+                    timeoutChecker,
                     this.clientSession.getPrimaryConnectionPingTimeout(),
                     TimeUnit.MILLISECONDS);
-                channelWriteTimeoutChecker.setScheduledFuture(scheduledFuture);
-                channelFuture.addListener(channelWriteTimeoutChecker);
+                timeoutChecker.setScheduledFuture(scheduledFuture);
+                channelFuture.addListener(timeoutChecker);
             }
 
             if (this.clientSession.getSendCompletionErrorDelay() > 0L) {
-                this.addErrorTimeoutSendingCheck(channelFuture);
+                this.scheduleSendErrorCheck(channelFuture);
             }
-        } else if (this.clientSession.getSendCompletionErrorDelay() > 0L
-                   && this.clientSession.getSendCompletionDelayCheckEveryNTimesError() > 0
-                   && messagesCounter[0] % this.clientSession.getSendCompletionDelayCheckEveryNTimesError() == 0) {
-            this.addErrorTimeoutSendingCheck(channelFuture);
-        } else if (this.clientSession.getSendCompletionWarningDelay() > 0L
-                   && this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() > 0
-                   && messagesCounter[0] % this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() == 0) {
-            this.addWarningTimeoutSendingCheck(channelFuture);
+
+        } else if (isError(messagesCounter[0])) {
+            this.scheduleSendErrorCheck(channelFuture);
+
+        } else if (isWarning(messagesCounter[0])) {
+            this.scheduleSendWarningCheck(channelFuture);
         }
 
         return channelFuture;
     }
 
-    private void addWarningTimeoutSendingCheck(final ChannelFuture channelFuture) {
+    private boolean isWarning(final int i) {
 
-        SendingWarningCheck warningCheck = new SendingWarningCheck(channelFuture, this.clientSession);
+        return this.clientSession.getSendCompletionWarningDelay() > 0L
+               && this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() > 0
+               && i % this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() == 0;
+    }
+
+    private boolean isError(final int i) {
+
+        return this.clientSession.getSendCompletionErrorDelay() > 0L
+               && this.clientSession.getSendCompletionDelayCheckEveryNTimesError() > 0
+               && i % this.clientSession.getSendCompletionDelayCheckEveryNTimesError() == 0;
+    }
+
+    private void scheduleSendWarningCheck(final ChannelFuture channelFuture) {
+
+        final SendingWarningCheck warningCheck = new SendingWarningCheck(channelFuture, this.clientSession);
         warningCheck.schedule();
     }
 
-    private void addErrorTimeoutSendingCheck(final ChannelFuture channelFuture) {
+    private void scheduleSendErrorCheck(final ChannelFuture channelFuture) {
 
-        SendingErrorCheck errorCheck = new SendingErrorCheck(channelFuture, this.clientSession);
+        final SendingErrorCheck errorCheck = new SendingErrorCheck(channelFuture, this.clientSession);
         errorCheck.schedule();
     }
 

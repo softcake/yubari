@@ -174,31 +174,28 @@ abstract class AbstractEventExecutorChannelTask implements OrderedThreadPoolExec
 
     private Runnable getRunnableListenerForWarnOrErrorMessage(final boolean isError, final long startTime) {
 
-        return new Runnable() {
-            @Override
-            public void run() {
+        return () -> {
 
-                final String shortMessage = StrUtils.toSafeString(message, SHORT_MESSAGE_LENGTH);
-                final long executionTime = System.currentTimeMillis() - startTime;
-                final boolean isErrorMessage = ((session.getEventExecutionErrorDelay() > 0L)
-                                                && (executionTime >= session.getEventExecutionErrorDelay()))
-                                               || isError;
-                if (isErrorMessage) {
-                    LOGGER.error("[{}] Event execution took {}ms, critical timeout time {}ms, possible"
-                                 + " application problem or deadLock, message [{}]",
-                                 session.getTransportName(),
-                                 executionTime,
-                                 session.getEventExecutionErrorDelay(),
-                                 shortMessage);
-                } else {
-                    LOGGER.warn("[{}] Event execution took more time than expected, execution time: "
-                                + "{}ms, possible application problem or deadLock, message [{}]",
-                                session.getTransportName(),
-                                executionTime,
-                                shortMessage);
-                }
-
+            final String shortMessage = StrUtils.toSafeString(message, SHORT_MESSAGE_LENGTH);
+            final long executionTime = System.currentTimeMillis() - startTime;
+            final boolean isErrorMessage = ((session.getEventExecutionErrorDelay() > 0L)
+                                            && (executionTime >= session.getEventExecutionErrorDelay()))
+                                           || isError;
+            if (isErrorMessage) {
+                LOGGER.error("[{}] Event execution took {}ms, critical timeout time {}ms, possible"
+                             + " application problem or deadLock, message [{}]",
+                             session.getTransportName(),
+                             executionTime,
+                             session.getEventExecutionErrorDelay(),
+                             shortMessage);
+            } else {
+                LOGGER.warn("[{}] Event execution took more time than expected, execution time: "
+                            + "{}ms, possible application problem or deadLock, message [{}]",
+                            session.getTransportName(),
+                            executionTime,
+                            shortMessage);
             }
+
         };
     }
 
