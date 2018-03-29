@@ -17,8 +17,8 @@
 package org.softcake.yubari.netty.client;
 
 import org.softcake.yubari.netty.AuthorizationProviderListener;
-import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
+import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
@@ -170,7 +170,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         this.clientSession.setServerSessionId(sessionId);
         this.clientSession.getRemoteCallSupport().setSession(session);
         if (this.tryToSetState(ClientState.AUTHORIZING, ClientState.ONLINE)) {
-            this.fireAuthorized();
+            this.protocolHandler.fireAuthorized();
         }
 
     }
@@ -1098,9 +1098,9 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         this.disconnectReason = disconnectReason;
     }
 
-    public void setChildSocketAuthAcceptorMessage(final ChildSocketAuthAcceptorMessage childSocketAuthAcceptorMessage) {
+    public void setChildSocketAuthAcceptorMessage(final ChildSocketAuthAcceptorMessage acceptorMessage) {
 
-        this.childSocketAuthAcceptorMessage = childSocketAuthAcceptorMessage;
+        this.childSocketAuthAcceptorMessage = acceptorMessage;
 
         synchronized (this.stateWaitLock) {
             this.stateWaitLock.notifyAll();
@@ -1108,9 +1108,9 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
     }
 
     public void setPrimarySocketAuthAcceptorMessage(final PrimarySocketAuthAcceptorMessage
-                                                        primarySocketAuthAcceptorMessage) {
+                                                        acceptorMessage) {
 
-        this.primarySocketAuthAcceptorMessage = primarySocketAuthAcceptorMessage;
+        this.primarySocketAuthAcceptorMessage = acceptorMessage;
 
         synchronized (this.stateWaitLock) {
             this.stateWaitLock.notifyAll();
@@ -1128,11 +1128,11 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
 
         final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
 
-        DisconnectedEvent disconnectedEvent = new DisconnectedEvent(this.clientSession.getTransportClient(),
-                                                                    disconnectReason.getDisconnectReason(),
-                                                                    disconnectReason.getDisconnectHint(),
-                                                                    disconnectReason.getError(),
-                                                                    disconnectReason.getDisconnectComments());
+        final DisconnectedEvent disconnectedEvent = new DisconnectedEvent(this.clientSession.getTransportClient(),
+                                                                          disconnectReason.getDisconnectReason(),
+                                                                          disconnectReason.getDisconnectHint(),
+                                                                          disconnectReason.getError(),
+                                                                          disconnectReason.getDisconnectComments());
         listeners.forEach(new Consumer<ClientListener>() {
             @Override
             public void accept(final ClientListener clientListener) {
@@ -1168,22 +1168,6 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         } else {
             LOGGER.info(builder.toString());
         }
-
-    }
-
-    private void fireAuthorized() {
-
-        final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
-
-        listeners.forEach(clientListener -> this.protocolHandler.fireAuthorizedEvent(clientListener,
-                                                                                     this.clientSession
-                                                                                         .getTransportClient()));
-
-
-        LOGGER.info("Authorize task in queue, server address [{}], transport name [{}]",
-                    this.clientSession.getAddress(),
-                    this.clientSession.getTransportName());
-
 
     }
 

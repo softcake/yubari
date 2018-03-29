@@ -286,7 +286,21 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             }
         }, (ProtocolMessage) requestMessage);
     }
+    public void fireAuthorized() {
 
+        final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
+
+        listeners.forEach(clientListener -> this.fireAuthorizedEvent(clientListener,
+                                                                                     this.clientSession
+                                                                                         .getTransportClient()));
+
+
+        LOGGER.info("Authorize task in queue, server address [{}], transport name [{}]",
+                    this.clientSession.getAddress(),
+                    this.clientSession.getTransportName());
+
+
+    }
     void fireAuthorizedEvent(final ClientListener clientListener, final ITransportClient transportClient) {
 
         final AbstractEventExecutorTask task = new AbstractEventExecutorTask(this.clientSession, this) {

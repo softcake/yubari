@@ -23,14 +23,10 @@ module org.softcake.yubari.netty {
     requires java.rmi;
     requires JForex.API;
     requires com.google.common;
-    requires annotations.java8;
     exports org.softcake.yubari.netty;
     exports org.softcake.yubari.netty.mina;
     exports org.softcake.yubari.netty.stream;
     exports org.softcake.yubari.netty.client;
     exports org.softcake.yubari.netty.authorization;
     exports org.softcake.yubari.netty.ext;
-    //requires transport.common;
-    // requires netty.transport.client;
-    //requires transport.common;
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty.mina;
+package org.softcake.yubari.netty.mbean;
 
 import com.dukascopy.dds4.ping.PingManager;
 import com.dukascopy.dds4.ping.PingStats;
@@ -24,7 +24,7 @@ import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class TransportClientJMXBean implements ITransportClientJMXBean {
+public class TransportClientMBean implements ITransportClientMBean {
     public static final TimeZone GMT_TIME_ZONE = TimeZone.getTimeZone("GMT 0");
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSS");
     private final PingManager primPingManager;
@@ -32,10 +32,10 @@ public class TransportClientJMXBean implements ITransportClientJMXBean {
     private final AtomicLong droppedByTransportClientMessageCounter;
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
 
-    public TransportClientJMXBean(PingManager primPingManager,
-                                  PingManager secPingManager,
-                                  AtomicLong droppedMessageCounter,
-                                  AtomicBoolean logEventPoolThreadDumpsOnLongExecution) {
+    public TransportClientMBean(final PingManager primPingManager,
+                                final PingManager secPingManager,
+                                final AtomicLong droppedMessageCounter,
+                                final AtomicBoolean logEventPoolThreadDumpsOnLongExecution) {
 
         this.primPingManager = primPingManager;
         this.secPingManager = secPingManager;
@@ -45,7 +45,7 @@ public class TransportClientJMXBean implements ITransportClientJMXBean {
 
     public long getPrimLastAveragePing() {
 
-        PingStats latestPing = this.primPingManager.getLatestStats();
+        final PingStats latestPing = this.primPingManager.getLatestStats();
         return latestPing == null ? 0L : latestPing.getPingInterval().getRoundedAverage();
 
     }
@@ -57,55 +57,55 @@ public class TransportClientJMXBean implements ITransportClientJMXBean {
 
     public String getPrimLastPingTimeStr() {
 
-        long lastPingTime = this.getPrimLastPingTime();
+        final long lastPingTime = this.getPrimLastPingTime();
         return DATE_FORMAT.format(lastPingTime);
     }
 
     public long getPrimLastPing() {
 
-        PingStats ping = this.primPingManager.getGeneralStats();
+        final PingStats ping = this.primPingManager.getGeneralStats();
        return ping == null ? 0L : ping.getPingInterval().getRoundedLast();
 
     }
 
     public long getPrimMinPing() {
 
-        PingStats ping = this.primPingManager.getGeneralStats();
+        final PingStats ping = this.primPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getRoundedMin();
 
     }
 
     public long getPrimMaxPing() {
 
-        PingStats ping = this.primPingManager.getGeneralStats();
+        final PingStats ping = this.primPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getRoundedMax();
 
     }
 
     public long getPrimTotalPingCount() {
 
-        PingStats ping = this.primPingManager.getGeneralStats();
+        final PingStats ping = this.primPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getCount();
 
     }
 
     public long getPrimFirstPing() {
 
-        PingStats ping = this.primPingManager.getGeneralStats();
+        final PingStats ping = this.primPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getRoundedFirst();
 
     }
 
     public long getPrimAveragePing() {
 
-        PingStats ping = this.primPingManager.getGeneralStats();
+        final PingStats ping = this.primPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getRoundedAverage();
 
     }
 
     public long getSecLastAveragePing() {
 
-        PingStats latestPing = this.secPingManager.getLatestStats();
+        final PingStats latestPing = this.secPingManager.getLatestStats();
         return latestPing == null ? 0L : latestPing.getPingInterval().getRoundedAverage();
 
     }
@@ -117,48 +117,48 @@ public class TransportClientJMXBean implements ITransportClientJMXBean {
 
     public String getSecLastPingTimeStr() {
 
-        long lastPingTime = this.getSecLastPingTime();
+        final long lastPingTime = this.getSecLastPingTime();
         return DATE_FORMAT.format(lastPingTime);
     }
 
     public long getSecLastPing() {
 
-        PingStats ping = this.secPingManager.getGeneralStats();
+        final PingStats ping = this.secPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getRoundedLast();
 
     }
 
     public long getSecMinPing() {
 
-        PingStats ping = this.secPingManager.getGeneralStats();
+        final PingStats ping = this.secPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getRoundedMin();
 
     }
 
     public long getSecMaxPing() {
 
-        PingStats ping = this.secPingManager.getGeneralStats();
+        final PingStats ping = this.secPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getRoundedMax();
 
     }
 
     public long getSecTotalPingCount() {
 
-        PingStats ping = this.secPingManager.getGeneralStats();
+        final PingStats ping = this.secPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getCount();
 
     }
 
     public long getSecFirstPing() {
 
-        PingStats ping = this.secPingManager.getGeneralStats();
+        final PingStats ping = this.secPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getRoundedFirst();
 
     }
 
     public long getSecAveragePing() {
 
-        PingStats ping = this.secPingManager.getGeneralStats();
+        final PingStats ping = this.secPingManager.getGeneralStats();
         return ping == null ? 0L : ping.getPingInterval().getRoundedAverage();
 
     }
@@ -168,7 +168,7 @@ public class TransportClientJMXBean implements ITransportClientJMXBean {
         return this.droppedByTransportClientMessageCounter.get();
     }
 
-    public void setLogEventPoolThreadDumpsOnLongExecution(boolean logEventPoolThreadDumpsOnLongExecution) {
+    public void setLogEventPoolThreadDumpsOnLongExecution(final boolean logEventPoolThreadDumpsOnLongExecution) {
 
         this.logEventPoolThreadDumpsOnLongExecution.set(logEventPoolThreadDumpsOnLongExecution);
     }

@@ -87,7 +87,7 @@ import org.softcake.yubari.netty.mina.RequestListenableFuture;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.mina.ServerAddress;
 import org.softcake.yubari.netty.mina.SyncInstrumentsAndAllOtherConcurrencyPolicy;
-import org.softcake.yubari.netty.mina.TransportClientJMXBean;
+import org.softcake.yubari.netty.mbean.TransportClientMBean;
 import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
@@ -540,10 +540,10 @@ public class TransportClient implements ITransportClient {
         if (this.needJmxBean) {
             try {
                 final MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-                mbs.registerMBean(new TransportClientJMXBean(this.getPingManager(true),
-                                                             this.getPingManager(false),
-                                                             this.droppedMessageCounter,
-                                                             this.logEventPoolThreadDumpsOnLongExecution),
+                mbs.registerMBean(new TransportClientMBean(this.getPingManager(true),
+                                                           this.getPingManager(false),
+                                                           this.droppedMessageCounter,
+                                                           this.logEventPoolThreadDumpsOnLongExecution),
                                   new ObjectName(this.checkAndGetJmxName()));
             } catch (final MalformedObjectNameException | NotCompliantMBeanException | MBeanRegistrationException |
                 InstanceAlreadyExistsException e) {

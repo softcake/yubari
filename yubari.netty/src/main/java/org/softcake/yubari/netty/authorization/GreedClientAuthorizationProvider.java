@@ -34,14 +34,14 @@ public class GreedClientAuthorizationProvider extends AbstractClientAuthorizatio
     private String sessionId;
     private String ticket;
 
-    public GreedClientAuthorizationProvider(String login, String ticket, String sessionId) {
+    public GreedClientAuthorizationProvider(final String login, final String ticket, final String sessionId) {
         this.login = login;
         this.sessionId = sessionId;
         this.ticket = ticket;
     }
 
-    public void authorize(IoSessionWrapper ioSession) {
-        HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
+    public void authorize(final IoSessionWrapper ioSession) {
+        final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
         haloRequestMessage.setPingable(true);
         haloRequestMessage.setUseragent(this.getUserAgent());
         haloRequestMessage.setSecondaryConnectionDisabled(this.isSecondaryConnectionDisabled());
@@ -50,14 +50,14 @@ public class GreedClientAuthorizationProvider extends AbstractClientAuthorizatio
         ioSession.write(haloRequestMessage);
     }
 
-    public void messageReceived(IoSessionWrapper ioSession, ProtocolMessage protocolMessage) {
+    public void messageReceived(final IoSessionWrapper ioSession, final ProtocolMessage protocolMessage) {
 
         if (protocolMessage instanceof OkResponseMessage) {
             this.getListener().authorized(this.sessionId, ioSession, this.login);
         } else if (protocolMessage instanceof ErrorResponseMessage) {
             this.getListener().authorizationError(ioSession, ((ErrorResponseMessage)protocolMessage).getReason());
         } else if (protocolMessage instanceof HaloResponseMessage) {
-            LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
+            final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
             loginRequestMessage.setUsername(this.login);
             loginRequestMessage.setTicket(this.ticket);
             loginRequestMessage.setSessionId(this.sessionId);
@@ -66,6 +66,7 @@ public class GreedClientAuthorizationProvider extends AbstractClientAuthorizatio
 
     }
 
+    @Override
     public void cleanUp() {
     }
 
@@ -73,7 +74,7 @@ public class GreedClientAuthorizationProvider extends AbstractClientAuthorizatio
         return this.login;
     }
 
-    public void setLogin(String login) {
+    public void setLogin(final String login) {
         this.login = login;
     }
 
@@ -81,7 +82,7 @@ public class GreedClientAuthorizationProvider extends AbstractClientAuthorizatio
         return this.sessionId;
     }
 
-    public void setSessionId(String sessionId) {
+    public void setSessionId(final String sessionId) {
         this.sessionId = sessionId;
     }
 
@@ -89,7 +90,7 @@ public class GreedClientAuthorizationProvider extends AbstractClientAuthorizatio
         return this.ticket;
     }
 
-    public void setTicket(String ticket) {
+    public void setTicket(final String ticket) {
         this.ticket = ticket;
     }
 }

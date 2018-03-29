@@ -45,6 +45,7 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
         this.transportName = transportName;
     }
 
+    @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object msg) {
 
         if (isSuspended(ctx)
@@ -64,6 +65,7 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
 
     }
 
+    @Override
     public void read(final ChannelHandlerContext ctx) {
 
         if (!isSuspended(ctx)) {

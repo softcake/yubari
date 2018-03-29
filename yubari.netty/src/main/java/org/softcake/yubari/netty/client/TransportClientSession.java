@@ -333,7 +333,7 @@ public class TransportClientSession implements ClientSSLContextListener {
         this.protocolHandler = new ClientProtocolHandler(this);
 
         final EventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup(this.transportPoolSize, new ThreadFactory() {
-            private AtomicInteger counter = new AtomicInteger();
+            private final AtomicInteger counter = new AtomicInteger();
 
             public Thread newThread(final Runnable r) {
 
@@ -623,6 +623,7 @@ public class TransportClientSession implements ClientSSLContextListener {
     }
 
     TransportClient getTransportClient() {
+
 
         return this.transportClient;
     }

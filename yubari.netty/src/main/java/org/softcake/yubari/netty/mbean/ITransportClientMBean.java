@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package org.softcake.yubari.netty.mina;
+package org.softcake.yubari.netty.mbean;
 
 import javax.management.MXBean;
 
 @MXBean
-public interface ITransportClientJMXBean {
+public interface ITransportClientMBean {
     long getPrimLastAveragePing();
 
     long getPrimAveragePing();
