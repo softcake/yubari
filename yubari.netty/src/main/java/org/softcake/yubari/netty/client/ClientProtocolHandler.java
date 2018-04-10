@@ -271,7 +271,17 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             }
         });
     }
+    void handleAuthorization(final Channel session) {
 
+        LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
+        this.clientSession.getAuthorizationProvider().authorize(new NettyIoSessionWrapperAdapter(session) {
+            @Override
+            public ChannelFuture write(final Object message) {
+
+                return writeMessage(this.channel, (BinaryProtocolMessage) message);
+            }
+        });
+    }
     private void processAuthorizationMessage(final ChannelHandlerContext ctx,
                                              final BinaryProtocolMessage requestMessage) {
 

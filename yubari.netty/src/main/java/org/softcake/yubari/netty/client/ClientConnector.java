@@ -17,7 +17,6 @@
 package org.softcake.yubari.netty.client;
 
 import org.softcake.yubari.netty.AuthorizationProviderListener;
-import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
@@ -84,7 +83,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
     private ChannelAttachment primarySessionChannelAttachment;
     private volatile Channel childChannel;
     private ChannelAttachment secondarySessionChannelAttachment;
-    private ClientAuthorizationProvider authorizationProvider;
+    //private ClientAuthorizationProvider authorizationProvider;
     private Long sslHandshakeStartTime;
     private Long protocolVersionNegotiationStartTime;
     private Long authorizationStartTime;
@@ -319,7 +318,8 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                         if (this.tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL,
                                                ClientState.AUTHORIZING)) {
                             this.authorizationStartTime = System.currentTimeMillis();
-                            this.protocolHandler.handleAuthorization(this.authorizationProvider, this.primaryChannel);
+                           // this.protocolHandler.handleAuthorization(this.authorizationProvider, this.primaryChannel);
+                            this.protocolHandler.handleAuthorization( this.primaryChannel);
                         }
                         continue;
                     case AUTHORIZING:
@@ -490,8 +490,10 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
     private void processConnectingPreConditions() {
 
         this.disconnectReason = null;
-        this.authorizationProvider = this.clientSession.getAuthorizationProvider();
-        this.authorizationProvider.setListener(this);
+       // this.authorizationProvider = this.clientSession.getAuthorizationProvider();
+
+        this.clientSession.getAuthorizationProvider().setListener(this);
+       // this.authorizationProvider.setListener(this);
         this.primarySessionChannelAttachment = new ChannelAttachment(Boolean.TRUE);
         this.secondarySessionChannelAttachment = new ChannelAttachment(Boolean.FALSE);
     }
@@ -571,11 +573,11 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
 
     private boolean processOnline() throws InterruptedException {
 
-        if (this.authorizationProvider != null) {
+        /*if (this.authorizationProvider != null) {
             this.authorizationProvider.cleanUp();
             this.authorizationProvider = null;
-        }
-
+        }*/
+        this.clientSession.getAuthorizationProvider().cleanUp();
         if (this.primaryChannel == null || !this.primaryChannel.isActive()) {
             LOGGER.warn("[{}] Primary session disconnected. Disconnecting transport client",
                         this.clientSession.getTransportName());
@@ -949,12 +951,12 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
 
 
         this.closeAllSessions();
-
+/*
         if (this.authorizationProvider != null) {
             this.authorizationProvider.cleanUp();
             this.authorizationProvider = null;
-        }
-
+        }*/
+        this.clientSession.getAuthorizationProvider().cleanUp();
 
         this.primarySocketAuthAcceptorMessage = null;
         this.childSocketAuthAcceptorMessage = null;
