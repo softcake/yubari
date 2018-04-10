@@ -17,11 +17,19 @@
 package org.softcake.yubari.netty.authorization;
 
 
-import org.softcake.yubari.netty.AuthorizationProvider;
 import org.softcake.yubari.netty.AuthorizationProviderListener;
+import org.softcake.yubari.netty.mina.IoSessionWrapper;
 
-public interface ClientAuthorizationProvider extends AuthorizationProvider {
+import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+
+public interface ClientAuthorizationProvider {
     void setUserAgent(String var1);
+
+    void authorize(IoSessionWrapper var1);
+
+    void messageReceived(IoSessionWrapper var1, ProtocolMessage var2);
+
+    void cleanUp();
 
     void setSecondaryConnectionDisabled(boolean var1);
 

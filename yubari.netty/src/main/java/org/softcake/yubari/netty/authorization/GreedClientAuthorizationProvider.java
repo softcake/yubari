@@ -17,6 +17,7 @@
 package org.softcake.yubari.netty.authorization;
 
 
+import org.softcake.yubari.netty.AuthorizationProviderListener;
 import org.softcake.yubari.netty.mina.IoSessionWrapper;
 
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
@@ -28,19 +29,26 @@ import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class GreedClientAuthorizationProvider extends AbstractClientAuthorizationProvider {
+public class GreedClientAuthorizationProvider implements ClientAuthorizationProvider {
     protected static final Logger LOGGER = LoggerFactory.getLogger(GreedClientAuthorizationProvider.class);
+    protected AuthorizationProviderListener listener;
+    protected String userAgent;
+    protected boolean secondaryConnectionDisabled;
+    protected long droppableMessageServerTTL;
+    protected String sessionName;
     private String login;
     private String sessionId;
     private String ticket;
 
     public GreedClientAuthorizationProvider(final String login, final String ticket, final String sessionId) {
+
         this.login = login;
         this.sessionId = sessionId;
         this.ticket = ticket;
     }
 
     public void authorize(final IoSessionWrapper ioSession) {
+
         final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
         haloRequestMessage.setPingable(true);
         haloRequestMessage.setUseragent(this.getUserAgent());
@@ -55,7 +63,7 @@ public class GreedClientAuthorizationProvider extends AbstractClientAuthorizatio
         if (protocolMessage instanceof OkResponseMessage) {
             this.getListener().authorized(this.sessionId, ioSession, this.login);
         } else if (protocolMessage instanceof ErrorResponseMessage) {
-            this.getListener().authorizationError(ioSession, ((ErrorResponseMessage)protocolMessage).getReason());
+            this.getListener().authorizationError(ioSession, ((ErrorResponseMessage) protocolMessage).getReason());
         } else if (protocolMessage instanceof HaloResponseMessage) {
             final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
             loginRequestMessage.setUsername(this.login);
@@ -66,31 +74,91 @@ public class GreedClientAuthorizationProvider extends AbstractClientAuthorizatio
 
     }
 
-    @Override
-    public void cleanUp() {
-    }
-
     public String getLogin() {
+
         return this.login;
     }
 
     public void setLogin(final String login) {
+
         this.login = login;
     }
 
     public String getSessionId() {
+
         return this.sessionId;
     }
 
     public void setSessionId(final String sessionId) {
+
         this.sessionId = sessionId;
     }
 
     public String getTicket() {
+
         return this.ticket;
     }
 
     public void setTicket(final String ticket) {
+
         this.ticket = ticket;
     }
+
+    public String getUserAgent() {
+
+        return this.userAgent;
+    }
+
+    public void setUserAgent(final String userAgent) {
+
+        this.userAgent = userAgent;
+    }
+
+    public boolean isSecondaryConnectionDisabled() {
+
+        return this.secondaryConnectionDisabled;
+    }
+
+    public void setSecondaryConnectionDisabled(final boolean secondaryConnectionDisabled) {
+
+        this.secondaryConnectionDisabled = secondaryConnectionDisabled;
+    }
+
+    public long getDroppableMessageServerTTL() {
+
+        return this.droppableMessageServerTTL;
+    }
+
+    public void setDroppableMessageServerTTL(final long droppableMessageServerTTL) {
+
+        this.droppableMessageServerTTL = droppableMessageServerTTL;
+    }
+
+
+    public AuthorizationProviderListener getListener() {
+
+        return this.listener;
+    }
+
+    public void setListener(final AuthorizationProviderListener listener) {
+
+        this.listener = listener;
+    }
+
+    public void cleanUp() {
+
+        this.listener = null;
+    }
+
+    public String getSessionName() {
+
+        return this.sessionName;
+    }
+
+    public void setSessionName(final String sessionName) {
+
+        this.sessionName = sessionName;
+    }
 }
+
+
