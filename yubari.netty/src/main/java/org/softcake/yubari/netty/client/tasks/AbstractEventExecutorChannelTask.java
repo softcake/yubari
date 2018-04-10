@@ -36,6 +36,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 public abstract class AbstractEventExecutorChannelTask implements OrderedThreadPoolExecutor.OrderedRunnable {
     private static final long ERROR_TIME_OFFSET = 5000000000L;
@@ -48,7 +49,13 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
     private static final AtomicLong LAST_EXECUTION_ERROR_TIME = new AtomicLong(System.nanoTime() - 100000000000L);
     private static final ThreadLocal<int[]>
         EVENT_EXECUTOR_MESSAGES_COUNTER_THREAD_LOCAL
-        = ThreadLocal.withInitial(() -> new int[1]);
+        = ThreadLocal.withInitial(new Supplier<int[]>() {
+        @Override
+        public int[] get() {
+
+            return new int[1];
+        }
+    });
     protected final ProtocolMessage message;
     protected final long currentDropableMessageTime;
     private final Channel channel;
@@ -76,7 +83,7 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
 
         final int[] messagesCounter = EVENT_EXECUTOR_MESSAGES_COUNTER_THREAD_LOCAL.get();
         ++messagesCounter[0];
-
+LOGGER.info(String.valueOf(messagesCounter[0] % this.session.getEventExecutionDelayCheckEveryNTimesError()));
         final ScheduledExecutorService executorService = this.session.getScheduledExecutorService();
 
         if (executorService.isShutdown() || executorService.isTerminated()) {
@@ -223,49 +230,48 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
                             this.message);
             }
 
-            this.delayedExecutionTask = new Runnable() {
-                @Override
-                public void run() {
+            this.delayedExecutionTask = () -> {
 
-                    try {
-                        if (future != null) {
-                            future.setFuture(executor.submit(AbstractEventExecutorChannelTask.this));
-                        } else {
-                            executor.execute(AbstractEventExecutorChannelTask.this);
-                        }
-
-                        session.getChannelTrafficBlocker().resume(channel);
-
-                        if (!session.getLogEventPoolThreadDumpsOnLongExecution().get()) {
-                            LOGGER.warn("Transport client's [{}, {}] channel reading resumed on [{}]",
-                                        session.getTransportName(),
-                                        session.getAddress(),
-                                        message);
-                        }
-                    } catch (final RejectedExecutionException ex) {
-                        final long currentTime = System.currentTimeMillis();
-                        final long executionTime = currentTime - procStartTime;
-
-                        if (executionTime > session.getEventExecutionErrorDelay()) {
-                            LOGGER.error(
-                                "[{}] Event executor queue overloaded, CRITICAL EXECUTION WAIT TIME: {}ms, possible "
-                                + "application problem or deadLock, message [{}]",
-                                session.getTransportName(),
-                                executionTime,
-                                StrUtils.toSafeString(message, SHORT_MESSAGE_LENGTH));
-
-                            protocolHandler.checkAndLogEventPoolThreadDumps();
-
-                            procStartTime = currentTime;
-                            sleepTime = LONGER_SLEEP_TIME;
-                        }
-
-                        channel.eventLoop().schedule(delayedExecutionTask, sleepTime, TimeUnit.MILLISECONDS);
+                try {
+                    if (future != null) {
+                        future.setFuture(executor.submit(AbstractEventExecutorChannelTask.this));
+                    } else {
+                        executor.execute(AbstractEventExecutorChannelTask.this);
                     }
 
+                    session.getChannelTrafficBlocker().resume(channel);
+
+                    if (!session.getLogEventPoolThreadDumpsOnLongExecution().get()) {
+                        LOGGER.warn("Transport client's [{}, {}] channel reading resumed on [{}]",
+                                    session.getTransportName(),
+                                    session.getAddress(),
+                                    message);
+                    }
+                } catch (final RejectedExecutionException ex) {
+                    final long currentTime = System.currentTimeMillis();
+                    final long executionTime = currentTime - procStartTime;
+
+                    if (executionTime > session.getEventExecutionErrorDelay()) {
+                        LOGGER.error(
+                            "[{}] Event executor queue overloaded, CRITICAL EXECUTION WAIT TIME: {}ms, possible "
+                            + "application problem or deadLock, message [{}]",
+                            session.getTransportName(),
+                            executionTime,
+                            StrUtils.toSafeString(message, SHORT_MESSAGE_LENGTH));
+
+                        protocolHandler.checkAndLogEventPoolThreadDumps();
+
+                        procStartTime = currentTime;
+                        sleepTime = LONGER_SLEEP_TIME;
+                    }
+
+                    channel.eventLoop().schedule(delayedExecutionTask, sleepTime, TimeUnit.MILLISECONDS);
                 }
+
             };
-            this.channel.eventLoop().schedule(this.delayedExecutionTask, SHORTER_SLEEP_TIME, TimeUnit.MILLISECONDS);
+            this.channel.eventLoop().schedule(this.delayedExecutionTask,
+                                                                            SHORTER_SLEEP_TIME,
+                                                                            TimeUnit.MILLISECONDS);
         }
 
         return future;
