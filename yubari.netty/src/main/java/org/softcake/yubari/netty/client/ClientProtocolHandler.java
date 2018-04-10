@@ -22,8 +22,6 @@ import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.NettyIoSessionWrapperAdapter;
 import org.softcake.yubari.netty.ProtocolVersionNegotiationSuccessEvent;
 import org.softcake.yubari.netty.client.processors.HeartbeatProcessor;
-import org.softcake.yubari.netty.client.processors.SerializableProcessor;
-import org.softcake.yubari.netty.client.processors.StreamProcessor;
 import org.softcake.yubari.netty.client.tasks.AbstractEventExecutorChannelTask;
 import org.softcake.yubari.netty.client.tasks.AbstractEventExecutorTask;
 import org.softcake.yubari.netty.client.tasks.ChannelWriteTimeoutChecker;
@@ -87,7 +85,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private final ThreadLocal<int[]> sentMessagesCounterThreadLocal = ThreadLocal.withInitial(() -> new int[1]);
     private final StreamProcessor streamProcessor;
     private final HeartbeatProcessor heartbeatProcessor;
-    private final SerializableProcessor serializableProcessor;
+
     private final DroppableMessageHandler droppableMessageHandler;
     private ClientConnector clientConnector;
 
@@ -103,7 +101,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         this.syncRequestProcessingExecutor = this.initSyncRequestProcessingExecutor();
         this.streamProcessor = new StreamProcessor(clientSession, this.streamProcessingExecutor);
         this.heartbeatProcessor = new HeartbeatProcessor(clientSession);
-        this.serializableProcessor = new SerializableProcessor(clientSession, this.eventExecutor);
+
 
     }
 
@@ -459,11 +457,13 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         } else if (requestMessage instanceof HeartbeatOkResponseMessage) {
             //  this.processSyncResponse(requestMessage);
         } else if (requestMessage instanceof JSonSerializableWrapper) {
-            this.serializableProcessor.process(ctx, (JSonSerializableWrapper) requestMessage);
+
+                throw new UnsupportedOperationException("Do you really need this?");
         } else if (msg instanceof BinaryPartMessage
                    || msg instanceof StreamHeaderMessage
                    || msg instanceof StreamingStatus) {
-            this.streamProcessor.process(ctx, msg);
+
+                throw new UnsupportedOperationException("Do you really need this?");
         } else if (this.clientConnector.isAuthorizing()) {
             this.processAuthorizationMessage(ctx, msg);
         } else {

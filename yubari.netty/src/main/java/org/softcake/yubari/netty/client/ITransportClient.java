@@ -47,11 +47,7 @@ public interface ITransportClient  {
 
     RequestListenableFuture sendRequestAsync(ProtocolMessage var1);
 
-    void exportInterfaceForRemoteCalls(Class<?> var1, Object var2);
 
-    <T> T getExportedForRemoteCallsImplementation(Class<T> var1);
-
-    <T> T getRemoteInterface(Class<T> var1, long var2, TimeUnit var4);
 
 
     List<ClientListener> getListeners();

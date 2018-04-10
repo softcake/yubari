@@ -17,20 +17,19 @@
 package org.softcake.yubari.netty.client;
 
 
-import org.softcake.yubari.netty.channel.ChannelTrafficBlocker;
-import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
-import org.softcake.yubari.netty.client.tasks.MessageListenableFuture;
 import org.softcake.yubari.netty.NettyIoSessionWrapperAdapter;
 import org.softcake.yubari.netty.ProtocolEncoderDecoder;
 import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
-import org.softcake.yubari.netty.client.tasks.SyncMessageTimeoutChecker;
 import org.softcake.yubari.netty.TransportClientSessionStateHandler;
+import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
+import org.softcake.yubari.netty.channel.ChannelTrafficBlocker;
+import org.softcake.yubari.netty.client.tasks.MessageListenableFuture;
+import org.softcake.yubari.netty.client.tasks.SyncMessageTimeoutChecker;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.IoSessionWrapper;
 import org.softcake.yubari.netty.mina.MessageSentListener;
-import org.softcake.yubari.netty.mina.RemoteCallSupport;
 import org.softcake.yubari.netty.mina.RequestListenableFuture;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.ssl.ClientSSLContextListener;
@@ -587,10 +586,7 @@ public class TransportClientSession implements ClientSSLContextListener {
         return this.sessionWrapper;
     }
 
-    public RemoteCallSupport getRemoteCallSupport() {
 
-        return this.transportClient.getRemoteCallSupport();
-    }
 
     public RequestMessageListenableFuture getSyncRequestFuture(final Long syncId) {
 

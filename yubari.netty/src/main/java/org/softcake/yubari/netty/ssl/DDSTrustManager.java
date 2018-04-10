@@ -35,12 +35,12 @@ class DDSTrustManager implements X509TrustManager {
     private HostNameVerifier verifier;
     private String hostName;
 
-    public DDSTrustManager(ClientSSLContextListener listener, X509TrustManager manager) {
+    public DDSTrustManager(final ClientSSLContextListener listener, final X509TrustManager manager) {
 
         this(listener, manager, null);
     }
 
-    public DDSTrustManager(ClientSSLContextListener listener, X509TrustManager manager, TrustSubject trustSubject) {
+    public DDSTrustManager(final ClientSSLContextListener listener, final X509TrustManager manager, final TrustSubject trustSubject) {
 
         this.verifier = new HostNameVerifier();
         this.listener = listener;
@@ -53,17 +53,17 @@ class DDSTrustManager implements X509TrustManager {
         return this.hostName;
     }
 
-    public void setHostName(String hostName) {
+    public void setHostName(final String hostName) {
 
         this.hostName = hostName;
     }
 
-    public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+    public void checkServerTrusted(final X509Certificate[] chain, final String authType) throws CertificateException {
 
         PreCheck.parameterNotNullOrEmpty(chain, "chain");
 
         if (TrustSubject.ANDROID.equals(this.trustSubject)) {
-            boolean[] peerCertKeyUsage = chain[0].getKeyUsage();
+            final boolean[] peerCertKeyUsage = chain[0].getKeyUsage();
             if (peerCertKeyUsage != null) {
                 peerCertKeyUsage[3] = true;
             }
@@ -79,7 +79,7 @@ class DDSTrustManager implements X509TrustManager {
 
 
                 for (int i = 0; i < chain.length; ++i) {
-                    X509Certificate x509Certificate = chain[i];
+                    final X509Certificate x509Certificate = chain[i];
 
                     LOGGER.debug("\tIssuer: {}; Subject: {}; SN: {}; Basic constraints: {}",
                                  x509Certificate.getIssuerDN().getName(),
@@ -103,17 +103,17 @@ class DDSTrustManager implements X509TrustManager {
 
 
                 this.verifier.check(new String[]{this.hostName}, chain[0]);
-            } catch (SSLException e) {
+            } catch (final SSLException e) {
                 LOGGER.error("SSLException while checking host name validity for host [{}] and certificate subject "
                              + "[{}]", this.hostName, chain[0].getSubjectDN().getName());
                 throw new CertificateException(e.getMessage());
             }
-        } catch (CertificateException e) {
+        } catch (final CertificateException e) {
             LOGGER.error("Certificate exception for certificates chain:",e);
             if (chain != null && chain.length > 0) {
 
                 for (int i = 0; i < chain.length; ++i) {
-                    X509Certificate x509Certificate = chain[i];
+                    final X509Certificate x509Certificate = chain[i];
 
                     LOGGER.debug("\tIssuer: {}; Subject: {}; SN: {}; Basic constraints: {}",
                                  x509Certificate.getIssuerDN().getName(),
@@ -131,11 +131,11 @@ class DDSTrustManager implements X509TrustManager {
 
     }
 
-    public void checkClientTrusted(X509Certificate[] chain, String authType) {
+    public void checkClientTrusted(final X509Certificate[] chain, final String authType) {
 
         try {
             this.sunX509TrustManager.checkClientTrusted(chain, authType);
-        } catch (CertificateException var4) {
+        } catch (final CertificateException var4) {
             this.listener.securityException(chain, authType, var4);
         }
 

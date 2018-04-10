@@ -76,18 +76,16 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_TR
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_USE_FEEDER_SOCKET;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_USE_SSL;
 
-import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.TransportClientSessionStateHandler;
+import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
+import org.softcake.yubari.netty.mbean.TransportClientMBean;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
-import org.softcake.yubari.netty.mina.ProxyInterfaceFactory;
-import org.softcake.yubari.netty.mina.RemoteCallSupport;
 import org.softcake.yubari.netty.mina.RequestListenableFuture;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.mina.ServerAddress;
 import org.softcake.yubari.netty.mina.SyncInstrumentsAndAllOtherConcurrencyPolicy;
-import org.softcake.yubari.netty.mbean.TransportClientMBean;
 import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
@@ -209,7 +207,7 @@ public class TransportClient implements ITransportClient {
     private FeedbackEventsConcurrencyPolicy concurrencyPolicy;
     private SecurityExceptionHandler securityExceptionHandler;
     private boolean debugMode;
-    private RemoteCallSupport remoteCallSupport = new RemoteCallSupport(new ProxyInterfaceFactory());
+
     private volatile TransportClientSession transportClientSession;
     private AtomicLong requestId = new AtomicLong(0L);
     private AtomicInteger ticksCounter = new AtomicInteger();
@@ -1194,30 +1192,7 @@ public class TransportClient implements ITransportClient {
         return task;
     }
 
-    public void exportInterfaceForRemoteCalls(final Class<?> interfaceClass, final Object interfaceImpl) {
 
-        this.remoteCallSupport.exportInterface(interfaceClass, interfaceImpl);
-    }
-
-    public <T> T getExportedForRemoteCallsImplementation(final Class<T> interfaceClass) {
-
-        return this.remoteCallSupport.getInterfaceImplementation(interfaceClass);
-    }
-
-    public <T> T getRemoteInterface(final Class<T> remoteInterfaceClass,
-                                    final long timeout,
-                                    final TimeUnit timeoutUnit) {
-
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-        if (transportClientSessionLocal != null) {
-            return this.remoteCallSupport.getRemoteInterface(remoteInterfaceClass,
-                                                             transportClientSessionLocal.getIoSessionWrapper(),
-                                                             timeout,
-                                                             timeoutUnit);
-        } else {
-            throw new RuntimeException(String.format("[%s] TransportClient not connected",this.transportName));
-        }
-    }
 
     long getNextId() {
 
@@ -1235,13 +1210,8 @@ public class TransportClient implements ITransportClient {
             this.transportClientSession = null;
         }
 
-        this.remoteCallSupport.setSession(null);
     }
 
-    RemoteCallSupport getRemoteCallSupport() {
-
-        return this.remoteCallSupport;
-    }
 
     public boolean isDebugMode() {
 

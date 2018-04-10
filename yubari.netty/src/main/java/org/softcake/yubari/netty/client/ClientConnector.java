@@ -167,7 +167,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
 
 
         this.clientSession.setServerSessionId(sessionId);
-        this.clientSession.getRemoteCallSupport().setSession(session);
+
         if (this.tryToSetState(ClientState.AUTHORIZING, ClientState.ONLINE)) {
             this.protocolHandler.fireAuthorized();
         }
