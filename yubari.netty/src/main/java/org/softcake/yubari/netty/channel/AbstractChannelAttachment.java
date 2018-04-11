@@ -16,6 +16,7 @@
 
 package org.softcake.yubari.netty.channel;
 
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -23,18 +24,21 @@ import java.util.concurrent.atomic.AtomicLong;
 public class AbstractChannelAttachment {
     private long lastReadIoTime = Long.MIN_VALUE;
     private long lastWriteIoTime = Long.MIN_VALUE;
-    private AtomicLong lastPingRequestTime = new AtomicLong(Long.MIN_VALUE);
-    private AtomicLong lastSubsequentFailedPingCount = new AtomicLong(0L);
-    private AtomicLong writtenMessagesCount = new AtomicLong(0L);
-    private final ChannelFutureListener writeListener = future -> {
+    private final AtomicLong lastPingRequestTime = new AtomicLong(Long.MIN_VALUE);
+    private final AtomicLong lastSubsequentFailedPingCount = new AtomicLong(0L);
+    private final AtomicLong writtenMessagesCount = new AtomicLong(0L);
+    private final ChannelFutureListener writeListener = new ChannelFutureListener() {
+        @Override
+        public void operationComplete(final ChannelFuture future) throws Exception {
 
-        setLastWriteIoTime(System.currentTimeMillis());
-        messageWritten();
+            AbstractChannelAttachment.this.setLastWriteIoTime(System.currentTimeMillis());
+            AbstractChannelAttachment.this.messageWritten();
+        }
     };
-    private AtomicLong scheduledServiceMessagesCount = new AtomicLong(0L);
-    private AtomicLong scheduledBusinessMessagesCount = new AtomicLong(0L);
-    private AtomicLong preScheduledDroppableMessagesCount = new AtomicLong(0L);
-    private AtomicLong scheduledDroppableMessagesCount = new AtomicLong(0L);
+    private final AtomicLong scheduledServiceMessagesCount = new AtomicLong(0L);
+    private final AtomicLong scheduledBusinessMessagesCount = new AtomicLong(0L);
+    private final AtomicLong preScheduledDroppableMessagesCount = new AtomicLong(0L);
+    private final AtomicLong scheduledDroppableMessagesCount = new AtomicLong(0L);
 
     public AbstractChannelAttachment() {
 

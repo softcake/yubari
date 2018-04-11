@@ -32,8 +32,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class RequestMessageListenableFuture extends AbstractFuture<ProtocolMessage>
-    implements RequestListenableFuture {
+public class RequestMessageListenableFuture extends AbstractFuture<ProtocolMessage> implements RequestListenableFuture {
     private static final Logger LOGGER = LoggerFactory.getLogger(RequestMessageListenableFuture.class);
     private final Object channelFutureLock = new Object();
     private final ProtocolMessage requestMessage;
@@ -47,19 +46,20 @@ public class RequestMessageListenableFuture extends AbstractFuture<ProtocolMessa
 
     public RequestMessageListenableFuture(final String transportName,
                                           final Long syncRequestId,
-                                          final Map<Long, RequestMessageListenableFuture>
-                                                       syncRequests,
+                                          final Map<Long, RequestMessageListenableFuture> syncRequests,
                                           final ProtocolMessage requestMessage) {
+
         transportClientSession = null;
         this.transportName = transportName;
         this.syncRequestId = syncRequestId;
         this.syncRequests = syncRequests;
         this.requestMessage = requestMessage;
     }
+
     public RequestMessageListenableFuture(final TransportClient transportClientSession,
-                                          final Map<Long, RequestMessageListenableFuture>
-                                                       syncRequests,
+                                          final Map<Long, RequestMessageListenableFuture> syncRequests,
                                           final ProtocolMessage requestMessage) {
+
         this.transportName = transportClientSession.getTransportName();
         this.transportClientSession = transportClientSession;
         this.syncRequestId = transportClientSession.getNextId();
@@ -67,6 +67,7 @@ public class RequestMessageListenableFuture extends AbstractFuture<ProtocolMessa
         this.syncRequests.put(syncRequestId, this);
         this.requestMessage = requestMessage;
     }
+
     public boolean set(final ProtocolMessage value) {
 
         final boolean result = super.set(value);
@@ -130,8 +131,8 @@ public class RequestMessageListenableFuture extends AbstractFuture<ProtocolMessa
     }
 
     public void scheduleTimeoutCheck(final SyncMessageTimeoutChecker timeoutChecker,
-                              final long timeout,
-                              final TimeUnit timeoutUnits) {
+                                     final long timeout,
+                                     final TimeUnit timeoutUnits) {
 
         this.timeoutScheduledFuture = timeoutChecker.scheduleCheck(timeout, timeoutUnits);
     }
@@ -142,30 +143,29 @@ public class RequestMessageListenableFuture extends AbstractFuture<ProtocolMessa
             throw new NullPointerException("Passed channel future is null");
         }
 
-            synchronized (this.channelFutureLock) {
-                this.channelFuture = cf;
-                cf.addListener((GenericFutureListener<ChannelFuture>) future -> {
+        synchronized (this.channelFutureLock) {
+            this.channelFuture = cf;
+            cf.addListener((GenericFutureListener<ChannelFuture>) future -> {
 
-                        synchronized (channelFutureLock) {
-                            channelFuture = null;
-                        }
+                synchronized (channelFutureLock) {
+                    channelFuture = null;
+                }
 
-                        if (!future.isSuccess()) {
-                            if (future.isCancelled()) {
-                                if (!isCancelled()) {
-                                    cancel(Boolean.FALSE);
-                                }
-                            } else if (future.isDone() && future.cause() != null) {
-                                setException(future.cause());
-                            } else {
-                                setException(new Exception(String.format("[%s] Unexpected future state",
-                                                                         transportName)));
-                            }
-                        }
+                if (future.isSuccess()) {return;}
+
+                if (future.isCancelled()) {
+                    if (!isCancelled()) {
+                        cancel(Boolean.FALSE);
+                    }
+                } else if (future.isDone() && future.cause() != null) {
+                    setException(future.cause());
+                } else {
+                    setException(new Exception(String.format("[%s] Unexpected future state", transportName)));
+                }
 
 
-                });
-            }
+            });
+        }
 
     }
 

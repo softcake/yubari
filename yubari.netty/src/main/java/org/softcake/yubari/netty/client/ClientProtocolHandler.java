@@ -17,11 +17,12 @@
 package org.softcake.yubari.netty.client;
 
 import org.softcake.cherry.core.base.PreCheck;
-import org.softcake.yubari.netty.channel.ChannelAttachment;
-import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.NettyIoSessionWrapperAdapter;
 import org.softcake.yubari.netty.ProtocolVersionNegotiationSuccessEvent;
+import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
+import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.processors.HeartbeatProcessor;
+import org.softcake.yubari.netty.client.processors.StreamProcessor;
 import org.softcake.yubari.netty.client.tasks.AbstractEventExecutorChannelTask;
 import org.softcake.yubari.netty.client.tasks.AbstractEventExecutorTask;
 import org.softcake.yubari.netty.client.tasks.ChannelWriteTimeoutChecker;
@@ -269,6 +270,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             }
         });
     }
+
     void handleAuthorization(final Channel session) {
 
         LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
@@ -280,6 +282,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             }
         });
     }
+
     private void processAuthorizationMessage(final ChannelHandlerContext ctx,
                                              final BinaryProtocolMessage requestMessage) {
 
@@ -294,13 +297,13 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             }
         }, (ProtocolMessage) requestMessage);
     }
+
     public void fireAuthorized() {
 
         final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
 
         listeners.forEach(clientListener -> this.fireAuthorizedEvent(clientListener,
-                                                                                     this.clientSession
-                                                                                         .getTransportClient()));
+                                                                     this.clientSession.getTransportClient()));
 
 
         LOGGER.info("Authorize task in queue, server address [{}], transport name [{}]",
@@ -309,6 +312,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
 
     }
+
     void fireAuthorizedEvent(final ClientListener clientListener, final ITransportClient transportClient) {
 
         final AbstractEventExecutorTask task = new AbstractEventExecutorTask(this.clientSession, this) {
@@ -458,12 +462,12 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             //  this.processSyncResponse(requestMessage);
         } else if (requestMessage instanceof JSonSerializableWrapper) {
 
-                throw new UnsupportedOperationException("Do you really need this?");
+            throw new UnsupportedOperationException("Do you really need this?");
         } else if (msg instanceof BinaryPartMessage
                    || msg instanceof StreamHeaderMessage
                    || msg instanceof StreamingStatus) {
-
-                throw new UnsupportedOperationException("Do you really need this?");
+            this.streamProcessor.process(ctx, msg);
+            throw new UnsupportedOperationException("Do you really need this?");
         } else if (this.clientConnector.isAuthorizing()) {
             this.processAuthorizationMessage(ctx, msg);
         } else {

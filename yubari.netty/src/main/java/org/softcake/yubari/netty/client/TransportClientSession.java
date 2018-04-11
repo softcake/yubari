@@ -323,10 +323,9 @@ public class TransportClientSession implements ClientSSLContextListener {
 
     void init() {
 
-        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
-            .setDaemon(true)
-            .setNameFormat(String.format("[%s] SyncMessagesTimeouter", this.transportName))
-            .build();
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(String.format(
+            "[%s] SyncMessagesTimeouter",
+            this.transportName)).build();
 
         this.scheduledExecutorService = Executors.newScheduledThreadPool(1, threadFactory);
         this.protocolHandler = new ClientProtocolHandler(this);
@@ -336,9 +335,10 @@ public class TransportClientSession implements ClientSSLContextListener {
 
             public Thread newThread(final Runnable r) {
 
-                return new Thread(r, String.format("[%s] NettyTransportThread - %d",
-                                                   transportName,
-                                                   this.counter.getAndIncrement()));
+                return new Thread(r,
+                                  String.format("[%s] NettyTransportThread - %d",
+                                                transportName,
+                                                this.counter.getAndIncrement()));
             }
         });
         this.channelBootstrap = new Bootstrap();
@@ -417,7 +417,7 @@ public class TransportClientSession implements ClientSSLContextListener {
         this.clientConnector.connect();
     }
 
-    public void disconnect() {
+    void disconnect() {
 
         this.clientConnector.disconnect();
     }
@@ -460,7 +460,7 @@ public class TransportClientSession implements ClientSSLContextListener {
         this.syncRequests.clear();
     }
 
-    public boolean sendMessageNaive(final ProtocolMessage message) {
+    boolean sendMessageNaive(final ProtocolMessage message) {
 
         if (this.isOnline()) {
             this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
@@ -471,44 +471,42 @@ public class TransportClientSession implements ClientSSLContextListener {
         }
     }
 
-    public ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
+    ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
         throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
 
-        if (this.isOnline()) {
-            final Long syncRequestId = this.transportClient.getNextId();
-            message.setSynchRequestId(syncRequestId);
-            final RequestMessageListenableFuture
-                task
-                = new RequestMessageListenableFuture(this.transportName,
-                                                     syncRequestId,
-                                                     this.syncRequests,
-                                                     message);
-            this.syncRequests.put(syncRequestId, task);
-            final ChannelFuture future = this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(),
-                                                                           message);
-            task.setChannelFuture(future);
-            task.scheduleTimeoutCheck(new SyncMessageTimeoutChecker(this.scheduledExecutorService,
-                                                                    task,
-                                                                    timeoutUnits.toMillis(timeout),
-                                                                    true));
-
-
-            return task.get(timeout, timeoutUnits);
-
-
-        } else {
+        if (!this.isOnline()) {
             throw new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
                                                      this.transportName,
                                                      message.toString(400)));
         }
+
+        final Long syncRequestId = this.transportClient.getNextId();
+        message.setSynchRequestId(syncRequestId);
+        final RequestMessageListenableFuture task = new RequestMessageListenableFuture(this.transportName,
+                                                                                       syncRequestId,
+                                                                                       this.syncRequests,
+                                                                                       message);
+        this.syncRequests.put(syncRequestId, task);
+        final ChannelFuture future = this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(),
+                                                                       message);
+        task.setChannelFuture(future);
+        task.scheduleTimeoutCheck(new SyncMessageTimeoutChecker(this.scheduledExecutorService,
+                                                                task,
+                                                                timeoutUnits.toMillis(timeout),
+                                                                true));
+
+
+        return task.get(timeout, timeoutUnits);
+
+
     }
 
-    public <V> ListenableFuture<V> sendMessageAsync(final ProtocolMessage message) {
+    <V> ListenableFuture<V> sendMessageAsync(final ProtocolMessage message) {
 
         if (this.isOnline()) {
-            return new MessageListenableFuture<>(this.protocolHandler
-                                                     .writeMessage(this.clientConnector.getPrimaryChannel(),
-                                                                   message));
+            return new MessageListenableFuture<>(this.protocolHandler.writeMessage(this.clientConnector
+                                                                                       .getPrimaryChannel(),
+                                                                                   message));
         } else {
             return Futures.immediateFailedFuture(new ConnectException(String.format(
                 "[%s] TransportClient not connected, message: %s",
@@ -517,7 +515,7 @@ public class TransportClientSession implements ClientSSLContextListener {
         }
     }
 
-    public RequestListenableFuture sendRequestAsync(final ProtocolMessage message) {
+    RequestListenableFuture sendRequestAsync(final ProtocolMessage message) {
 
         return this.sendRequestAsync(message,
                                      this.clientConnector.getPrimaryChannel(),
@@ -526,21 +524,19 @@ public class TransportClientSession implements ClientSSLContextListener {
                                      null);
     }
 
-    public RequestListenableFuture sendRequestAsync(final ProtocolMessage message,
-                                                    final Channel channel,
-                                                    final long timeout,
-                                                    final boolean doNotRestartTimerOnInProcessResponse,
-                                                    final MessageSentListener messageSentListener) {
+    RequestListenableFuture sendRequestAsync(final ProtocolMessage message,
+                                             final Channel channel,
+                                             final long timeout,
+                                             final boolean doNotRestartTimerOnInProcessResponse,
+                                             final MessageSentListener messageSentListener) {
 
         if (this.isOnline()) {
             final Long syncRequestId = this.transportClient.getNextId();
             message.setSynchRequestId(syncRequestId);
-            final RequestMessageListenableFuture
-                task
-                = new RequestMessageListenableFuture(this.transportName,
-                                                     syncRequestId,
-                                                     this.syncRequests,
-                                                     message);
+            final RequestMessageListenableFuture task = new RequestMessageListenableFuture(this.transportName,
+                                                                                           syncRequestId,
+                                                                                           this.syncRequests,
+                                                                                           message);
             this.syncRequests.put(syncRequestId, task);
             final ChannelFuture channelFuture = this.protocolHandler.writeMessage(channel, message);
             if (messageSentListener != null) {
@@ -587,13 +583,12 @@ public class TransportClientSession implements ClientSSLContextListener {
     }
 
 
-
-    public RequestMessageListenableFuture getSyncRequestFuture(final Long syncId) {
+    RequestMessageListenableFuture getSyncRequestFuture(final Long syncId) {
 
         return this.syncRequests.get(syncId);
     }
 
-    public boolean isOnline() {
+    boolean isOnline() {
 
         return this.clientConnector.isOnline();
     }
@@ -744,12 +739,12 @@ public class TransportClientSession implements ClientSSLContextListener {
         return this.sendCompletionErrorDelay;
     }
 
-    public int getSendCompletionDelayCheckEveryNTimesWarning() {
+    int getSendCompletionDelayCheckEveryNTimesWarning() {
 
         return this.sendCompletionDelayCheckEveryNTimesWarning;
     }
 
-    public int getSendCompletionDelayCheckEveryNTimesError() {
+    int getSendCompletionDelayCheckEveryNTimesError() {
 
         return this.sendCompletionDelayCheckEveryNTimesError;
     }
@@ -819,7 +814,7 @@ public class TransportClientSession implements ClientSSLContextListener {
         return this.sessionStats;
     }
 
-    protected boolean isDuplicateSyncMessagesToClientListeners() {
+    boolean isDuplicateSyncMessagesToClientListeners() {
 
         return this.duplicateSyncMessagesToClientListeners;
     }
@@ -834,7 +829,7 @@ public class TransportClientSession implements ClientSSLContextListener {
         return this.skipDroppableMessages;
     }
 
-    public void setSkipDroppableMessages(final boolean skipDroppableMessages) {
+    void setSkipDroppableMessages(final boolean skipDroppableMessages) {
 
         this.skipDroppableMessages = skipDroppableMessages;
     }
@@ -844,7 +839,7 @@ public class TransportClientSession implements ClientSSLContextListener {
         return this.droppedMessageCounter;
     }
 
-    public boolean isLogSkippedDroppableMessages() {
+    boolean isLogSkippedDroppableMessages() {
 
         return this.logSkippedDroppableMessages;
     }
@@ -904,62 +899,62 @@ public class TransportClientSession implements ClientSSLContextListener {
         return this.sendCpuInfoToServer;
     }
 
-    public int getSyncRequestProcessingPoolSize() {
+    int getSyncRequestProcessingPoolSize() {
 
         return this.syncRequestProcessingPoolSize;
     }
 
-    public long getSyncRequestProcessingPoolAutoCleanupInterval() {
+    long getSyncRequestProcessingPoolAutoCleanupInterval() {
 
         return this.syncRequestProcessingPoolAutoCleanupInterval;
     }
 
-    public int getCriticalSyncRequestProcessingQueueSize() {
+    int getCriticalSyncRequestProcessingQueueSize() {
 
         return this.criticalSyncRequestProcessingQueueSize;
     }
 
-    public long getMaxSubsequentPingFailedCount() {
+    long getMaxSubsequentPingFailedCount() {
 
         return this.maxSubsequentPingFailedCount;
     }
 
-    public long getEventPoolTerminationTimeUnitCount() {
+    long getEventPoolTerminationTimeUnitCount() {
 
         return this.eventPoolTerminationTimeUnitCount;
     }
 
-    public TimeUnit getEventPoolTerminationTimeUnit() {
+    TimeUnit getEventPoolTerminationTimeUnit() {
 
         return this.eventPoolTerminationTimeUnit;
     }
 
-    public long getAuthEventPoolTerminationTimeUnitCount() {
+    long getAuthEventPoolTerminationTimeUnitCount() {
 
         return this.authEventPoolTerminationTimeUnitCount;
     }
 
-    public TimeUnit getAuthEventPoolTerminationTimeUnit() {
+    TimeUnit getAuthEventPoolTerminationTimeUnit() {
 
         return this.authEventPoolTerminationTimeUnit;
     }
 
-    public long getStreamProcessingPoolTerminationTimeUnitCount() {
+    long getStreamProcessingPoolTerminationTimeUnitCount() {
 
         return this.streamProcessingPoolTerminationTimeUnitCount;
     }
 
-    public TimeUnit getStreamProcessingPoolTerminationTimeUnit() {
+    TimeUnit getStreamProcessingPoolTerminationTimeUnit() {
 
         return this.streamProcessingPoolTerminationTimeUnit;
     }
 
-    public long getSyncRequestProcessingPoolTerminationTimeUnitCount() {
+    long getSyncRequestProcessingPoolTerminationTimeUnitCount() {
 
         return this.syncRequestProcessingPoolTerminationTimeUnitCount;
     }
 
-    public TimeUnit getSyncRequestProcessingPoolTerminationTimeUnit() {
+    TimeUnit getSyncRequestProcessingPoolTerminationTimeUnit() {
 
         return this.syncRequestProcessingPoolTerminationTimeUnit;
     }
