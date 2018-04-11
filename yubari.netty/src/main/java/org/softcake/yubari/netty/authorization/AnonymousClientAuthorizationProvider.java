@@ -27,6 +27,7 @@ import com.dukascopy.dds4.transport.msg.system.OkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.GenericFutureListener;
+import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,7 +50,12 @@ public class AnonymousClientAuthorizationProvider extends AbstractClientAuthoriz
         haloRequestMessage.setSecondaryConnectionMessagesTTL(this.getDroppableMessageServerTTL());
         haloRequestMessage.setSessionName(this.getSessionName());
         final ChannelFuture future = (ChannelFuture) session.write(haloRequestMessage);
-        future.addListener(getChannelFutureGenericFutureListener(session));
+        future.addListener(getChannelFutureGenericFutureListener());
+    }
+
+    @Override
+    public void authorize(final Consumer<Object> ioSession) {
+
     }
 
     public void messageReceived(final IoSessionWrapper session, final ProtocolMessage message) {
@@ -62,18 +68,18 @@ public class AnonymousClientAuthorizationProvider extends AbstractClientAuthoriz
             loginRequestMessage.setSessionId(this.haloResponseMessage.getSessionId());
             loginRequestMessage.setMode(-2147483648);
             final ChannelFuture future = (ChannelFuture) session.write(loginRequestMessage);
-            future.addListener(getChannelFutureGenericFutureListener(session));
+            future.addListener(getChannelFutureGenericFutureListener());
         } else if (message instanceof OkResponseMessage && this.haloResponseMessage != null) {
-            this.getListener().authorized(this.haloResponseMessage.getSessionId(), session, "anonymous");
+            this.getListener().authorized(this.haloResponseMessage.getSessionId(), "anonymous");
         } else if (message instanceof ErrorResponseMessage) {
-            this.getListener().authorizationError(session, ((ErrorResponseMessage) message).getReason());
+            this.getListener().authorizationError(((ErrorResponseMessage) message).getReason());
         } else if (this.haloResponseMessage == null) {
-            this.getListener().authorizationError(session, "No halo response message");
+            this.getListener().authorizationError( "No halo response message");
         }
 
     }
 
-    public GenericFutureListener<ChannelFuture> getChannelFutureGenericFutureListener(final IoSessionWrapper session) {
+    public GenericFutureListener<ChannelFuture> getChannelFutureGenericFutureListener() {
 
         return channelFuture -> {
 
@@ -81,7 +87,7 @@ public class AnonymousClientAuthorizationProvider extends AbstractClientAuthoriz
                 channelFuture.get();
             } catch (InterruptedException | ExecutionException e) {
                 LOGGER.error("Error occurred...", e);
-                getListener().authorizationError(session, e.getLocalizedMessage());
+                getListener().authorizationError( e.getLocalizedMessage());
             }
 
         };

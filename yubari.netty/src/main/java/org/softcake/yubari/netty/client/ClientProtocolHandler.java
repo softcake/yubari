@@ -59,6 +59,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.util.Attribute;
+import io.reactivex.Observable;
+import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -274,13 +276,16 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     void handleAuthorization(final Channel session) {
 
         LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
-        this.clientSession.getAuthorizationProvider().authorize(new NettyIoSessionWrapperAdapter(session) {
+        this.clientSession.getAuthorizationProvider().authorize(o -> writeMessage(session, (BinaryProtocolMessage) o));
+
+
+       /* this.clientSession.getAuthorizationProvider().authorize(new NettyIoSessionWrapperAdapter(session) {
             @Override
             public ChannelFuture write(final Object message) {
 
                 return writeMessage(this.channel, (BinaryProtocolMessage) message);
             }
-        });
+        });*/
     }
 
     private void processAuthorizationMessage(final ChannelHandlerContext ctx,
@@ -379,6 +384,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         final boolean notWritable = !channel.isWritable();
 
         final ChannelFuture channelFuture = channel.writeAndFlush(responseMessage);
+        final Observable<Void> observable = Observable.fromFuture(channelFuture);
+     
         final ChannelAttachment ca = channel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
 
         channelFuture.addListener(ca.getWriteIoListener());

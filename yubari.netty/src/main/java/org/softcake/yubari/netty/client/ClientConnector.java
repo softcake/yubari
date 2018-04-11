@@ -141,7 +141,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
 
     }
 
-    public void authorizationError(final IoSessionWrapper session, final String errorReason) {
+    public void authorizationError(final String errorReason) {
 
 
         LOGGER.debug("[{}] Received AUTHORIZATION_ERROR notification from the authorization provider, reason: [{}]",
@@ -157,7 +157,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
 
     }
 
-    public void authorized(final String sessionId, final IoSessionWrapper session, final String userName) {
+    public void authorized(final String sessionId, final String userName) {
 
         LOGGER.debug(
             "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",

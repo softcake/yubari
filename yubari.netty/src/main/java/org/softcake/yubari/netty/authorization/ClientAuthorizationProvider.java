@@ -21,12 +21,13 @@ import org.softcake.yubari.netty.AuthorizationProviderListener;
 import org.softcake.yubari.netty.mina.IoSessionWrapper;
 
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import io.reactivex.functions.Consumer;
 
 public interface ClientAuthorizationProvider {
     void setUserAgent(String var1);
 
     void authorize(IoSessionWrapper var1);
-
+   void authorize(final Consumer<Object> ioSession);
     void messageReceived(IoSessionWrapper var1, ProtocolMessage var2);
 
     void cleanUp();

@@ -133,7 +133,7 @@ allprojects {
             dependency "com.google.guava:guava:24.1-jre"
             dependency "commons-validator:commons-validator:1.6"
             dependency "org.softcake.lemon:lemon-core:1.1.0"
-
+            dependency group: 'io.reactivex.rxjava2', name: 'rxjava', version: '2.1.12'
  //         dependency "com.dukascopy.dds2:DDS2-jClient-JForex:3.3.0"
             dependency "com.dukascopy.api:JForex-API:2.13.49"
             dependency "com.dukascopy:auth-protocol-client:1.0.16"
@@ -179,7 +179,7 @@ subprojects { subProject ->
             implementation "org.slf4j:slf4j-api"
             implementation "ch.qos.logback:logback-classic"
             implementation "ch.qos.logback:logback-core"
-
+            implementation "io.reactivex.rxjava2:rxjava"
 
   //        implementation "com.dukascopy.dds2:DDS2-jClient-JForex"
             implementation "com.dukascopy:auth-protocol-client",{

@@ -26,16 +26,22 @@ import com.dukascopy.dds4.transport.msg.system.HaloResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.LoginRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.OkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import io.reactivex.Observable;
+import io.reactivex.Observer;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+
 
 public class GreedClientAuthorizationProvider implements ClientAuthorizationProvider {
     protected static final Logger LOGGER = LoggerFactory.getLogger(GreedClientAuthorizationProvider.class);
     protected AuthorizationProviderListener listener;
-    protected String userAgent;
-    protected boolean secondaryConnectionDisabled;
-    protected long droppableMessageServerTTL;
-    protected String sessionName;
+    private String userAgent;
+    private boolean secondaryConnectionDisabled;
+    private long droppableMessageServerTTL;
+    private String sessionName;
     private String login;
     private String sessionId;
     private String ticket;
@@ -46,24 +52,54 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         this.sessionId = sessionId;
         this.ticket = ticket;
     }
+    public void authorize(final Consumer<Object> ioSession) {
+        final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
+        haloRequestMessage.setPingable(true);
+        haloRequestMessage.setUseragent(getUserAgent());
+        haloRequestMessage.setSecondaryConnectionDisabled(isSecondaryConnectionDisabled());
+        haloRequestMessage.setSecondaryConnectionMessagesTTL(getDroppableMessageServerTTL());
+        haloRequestMessage.setSessionName(getSessionName());
 
-    public void authorize(final IoSessionWrapper ioSession) {
+        final Observable<Object> observable = Observable.just(haloRequestMessage);
+        observable.subscribe(ioSession);
 
+      /*
         final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
         haloRequestMessage.setPingable(true);
         haloRequestMessage.setUseragent(this.getUserAgent());
         haloRequestMessage.setSecondaryConnectionDisabled(this.isSecondaryConnectionDisabled());
         haloRequestMessage.setSecondaryConnectionMessagesTTL(this.getDroppableMessageServerTTL());
         haloRequestMessage.setSessionName(this.getSessionName());
-        ioSession.write(haloRequestMessage);
+        ioSession.write(haloRequestMessage);*/
+    }
+    public void authorize(final IoSessionWrapper ioSession) {
+        final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
+        haloRequestMessage.setPingable(true);
+        haloRequestMessage.setUseragent(getUserAgent());
+        haloRequestMessage.setSecondaryConnectionDisabled(isSecondaryConnectionDisabled());
+        haloRequestMessage.setSecondaryConnectionMessagesTTL(getDroppableMessageServerTTL());
+        haloRequestMessage.setSessionName(getSessionName());
+
+
+
+        final Observable<Object> observable = Observable.just(haloRequestMessage);
+        observable.subscribe(new Consumer<Object>() {
+            @Override
+            public void accept(final Object msg) throws Exception {
+
+                ioSession.write(msg);
+            }
+        });
+
+
     }
 
     public void messageReceived(final IoSessionWrapper ioSession, final ProtocolMessage protocolMessage) {
 
         if (protocolMessage instanceof OkResponseMessage) {
-            this.getListener().authorized(this.sessionId, ioSession, this.login);
+            this.getListener().authorized(this.sessionId, this.login);
         } else if (protocolMessage instanceof ErrorResponseMessage) {
-            this.getListener().authorizationError(ioSession, ((ErrorResponseMessage) protocolMessage).getReason());
+            this.getListener().authorizationError(((ErrorResponseMessage) protocolMessage).getReason());
         } else if (protocolMessage instanceof HaloResponseMessage) {
             final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
             loginRequestMessage.setUsername(this.login);
@@ -104,7 +140,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         this.ticket = ticket;
     }
 
-    public String getUserAgent() {
+    private String getUserAgent() {
 
         return this.userAgent;
     }
@@ -114,7 +150,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         this.userAgent = userAgent;
     }
 
-    public boolean isSecondaryConnectionDisabled() {
+    private boolean isSecondaryConnectionDisabled() {
 
         return this.secondaryConnectionDisabled;
     }
@@ -124,7 +160,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         this.secondaryConnectionDisabled = secondaryConnectionDisabled;
     }
 
-    public long getDroppableMessageServerTTL() {
+    private long getDroppableMessageServerTTL() {
 
         return this.droppableMessageServerTTL;
     }
@@ -150,7 +186,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         this.listener = null;
     }
 
-    public String getSessionName() {
+    private String getSessionName() {
 
         return this.sessionName;
     }
