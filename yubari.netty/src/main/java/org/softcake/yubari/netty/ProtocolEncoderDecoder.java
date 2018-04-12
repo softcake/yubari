@@ -20,7 +20,6 @@ import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSession
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.common.protocol.binary.ClassInfo;
 import com.dukascopy.dds4.transport.common.protocol.binary.ClassMappingMessage;
-import com.dukascopy.dds4.transport.common.protocol.binary.DynamicSessionDictionary;
 import com.dukascopy.dds4.transport.common.protocol.binary.EncodingContext;
 import com.dukascopy.dds4.transport.common.protocol.binary.RawObject;
 import com.dukascopy.dds4.transport.common.protocol.binary.RawObject.RawData;
@@ -35,7 +34,6 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
-import io.netty.handler.codec.EncoderException;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
@@ -45,22 +43,24 @@ import org.slf4j.LoggerFactory;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Map.Entry;
+
 
 @Sharable
 public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
-    public static final AttributeKey<SessionProtocolEncoder> ENCODER_ATTACHMENT_ATTRIBUTE_KEY = AttributeKey.valueOf(
-        "encoder_attachment");
-    public static final AttributeKey<SessionProtocolDecoder> DECODER_ATTACHMENT_ATTRIBUTE_KEY = AttributeKey.valueOf(
-        "decoder_attachment");
     public static final AttributeKey<Integer> PROTOCOL_VERSION_ATTRIBUTE_KEY = AttributeKey.valueOf("protocol_version");
-    public static final AttributeKey<ArrayList<ProtocolEncoderDecoder.PendingWrite>>
+
+    private static final AttributeKey<SessionProtocolEncoder> ENCODER_ATTACHMENT_ATTRIBUTE_KEY = AttributeKey.valueOf(
+        "encoder_attachment");
+    private static final AttributeKey<SessionProtocolDecoder> DECODER_ATTACHMENT_ATTRIBUTE_KEY = AttributeKey.valueOf(
+        "decoder_attachment");
+    private static final AttributeKey<ArrayList<PendingWrite>>
         PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY
         = AttributeKey.valueOf("protocol_version_message_queue");
+    private static final int DEFAULT_VERSION = 4;
     private static final Logger LOGGER = LoggerFactory.getLogger(ProtocolEncoderDecoder.class);
     private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
 
@@ -81,31 +81,66 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         this.staticSessionDictionary = staticSessionDictionary;
     }
 
+    private static int getProtocolVersion(final ChannelHandlerContext ctx) {
+
+        final Attribute<Integer> protocolVersionAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
+        final Integer protocolVersionObj = protocolVersionAttribute.get();
+        return protocolVersionObj == null ? DEFAULT_VERSION : protocolVersionObj;
+    }
+
+    private void failScheduledWrites(final ChannelHandlerContext ctx) {
+
+        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
+            PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+        final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
+        if (messageQueue != null) {
+
+            synchronized (messageQueue) {
+                messageQueue.forEach(pendingWrite -> {
+                    ReferenceCountUtil.release(pendingWrite.getMessage());
+
+                    try {
+                        pendingWrite.getPromise().setFailure(CLOSED_CHANNEL_EXCEPTION);
+                    } catch (final IllegalStateException e) {
+                        LOGGER.error("Error occurred...", e);
+                    }
+                });
+
+                messageQueue.clear();
+            }
+        }
+
+    }
+
+    @Override
     public void channelActive(final ChannelHandlerContext ctx) throws Exception {
 
-        final Attribute<ArrayList<ProtocolEncoderDecoder.PendingWrite>> messageQueueAttribute = ctx.channel().attr(
+        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
             PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
         messageQueueAttribute.set(new ArrayList<>());
         ctx.fireChannelActive();
     }
 
+    @Override
     public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
 
-        this.failScheduledWrites(ctx);
+        failScheduledWrites(ctx);
         ctx.fireChannelInactive();
     }
 
+    @Override
     public void handlerRemoved(final ChannelHandlerContext ctx) throws Exception {
 
-        this.failScheduledWrites(ctx);
+        failScheduledWrites(ctx);
     }
 
+    @Override
     public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
 
         if (evt instanceof ProtocolVersionNegotiationSuccessEvent) {
-            final Attribute<ArrayList<ProtocolEncoderDecoder.PendingWrite>> messageQueueAttribute = ctx.channel().attr(
+            final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
                 PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
-            final ArrayList<ProtocolEncoderDecoder.PendingWrite> messageQueue = messageQueueAttribute.get();
+            final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
             if (messageQueue != null) {
                 this.sendScheduledMessages(ctx, messageQueueAttribute);
             }
@@ -114,224 +149,123 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         super.userEventTriggered(ctx, evt);
     }
 
+    @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object msg) throws Exception {
 
         if (!(msg instanceof ByteBuf)) {
             ctx.fireChannelRead(msg);
-        } else {
+            return;
+        }
 
-            final ByteBuf byteBuf = (ByteBuf) msg;
-            final Attribute<Integer> protocolVersionAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
-            final Integer protocolVersionObj = protocolVersionAttribute.get();
-            final int protocolVersion = protocolVersionObj == null ? 4 : protocolVersionObj;
+        final int protocolVersion = getProtocolVersion(ctx);
 
+        if (protocolVersion < DEFAULT_VERSION) {
+            throw new UnsupportedEncodingException("Protocolversion < 4 not supported");
+        }
 
+        final ByteBuf byteBuf = (ByteBuf) msg;
+        try (DataInputStream msgData = new DataInputStream(new ByteBufInputStream(byteBuf))) {
 
-            try(final DataInputStream msgData = new DataInputStream(new ByteBufInputStream(byteBuf))) {
+            final SessionProtocolDecoder sessionProtocolDecoder = getSessionProtocolDecoder(ctx);
+            final BinaryProtocolMessage message = sessionProtocolDecoder.decodeMessage(protocolVersion, msgData);
 
+            LOGGER.debug("[{}] Decoded message [{}]", this.transportName, message);
 
-
-                try {
-                    final Attribute<SessionProtocolDecoder> decoderAttribute = ctx.channel().attr(
-                        DECODER_ATTACHMENT_ATTRIBUTE_KEY);
-                    SessionProtocolDecoder sessionProtocolDecoder = decoderAttribute.get();
-                    if (sessionProtocolDecoder == null) {
-                        if (protocolVersion < 4) {
-                            sessionProtocolDecoder = new SessionProtocolDecoder(this.transportName,
-                                                                                new DynamicSessionDictionary(),
-                                                                                this.codecFactoryAndCache);
-                        } else {
-                            sessionProtocolDecoder = new SessionProtocolDecoder(this.transportName,
-                                                                                this.staticSessionDictionary,
-                                                                                this.codecFactoryAndCache);
-                        }
-
-                        final SessionProtocolDecoder old = decoderAttribute.setIfAbsent(sessionProtocolDecoder);
-                        if (old != null) {
-                            sessionProtocolDecoder = old;
-                        }
-                    }
-
-                    final BinaryProtocolMessage message = sessionProtocolDecoder.decodeMessage(protocolVersion,
-                                                                                               msgData);
-
-                        LOGGER.debug("[{}] Decoded message [{}]", this.transportName, message);
-
-
-                    if (message != null) {
-                        if (message instanceof ClassMappingMessage) {
-                            final ClassMappingMessage cmm = (ClassMappingMessage) message;
-                            sessionProtocolDecoder.classMappingReceived(protocolVersion, cmm);
-                        } else {
-                            ctx.fireChannelRead(message);
-                        }
-                    }
-                } catch (final Exception e) {
-                    LOGGER.error(String.format("[%s] (%s) protocol exception - %s message decoding error",
-                                               this.transportName,
-                                               ctx.channel().remoteAddress(),
-                                               e.getMessage()), e);
-                    throw e;
+            if (message != null) {
+                if (message instanceof ClassMappingMessage) {
+                    final ClassMappingMessage cmm = (ClassMappingMessage) message;
+                    sessionProtocolDecoder.classMappingReceived(protocolVersion, cmm);
+                } else {
+                    ctx.fireChannelRead(message);
                 }
-            } finally {
-                ReferenceCountUtil.release(msg);
             }
-
+        } finally {
+            ReferenceCountUtil.release(msg);
         }
     }
 
+    private SessionProtocolDecoder getSessionProtocolDecoder(final ChannelHandlerContext ctx) {
+
+        final Attribute<SessionProtocolDecoder> decoderAttribute = ctx.channel().attr(DECODER_ATTACHMENT_ATTRIBUTE_KEY);
+        SessionProtocolDecoder sessionProtocolDecoder = decoderAttribute.get();
+        if (sessionProtocolDecoder == null) {
+
+            sessionProtocolDecoder = new SessionProtocolDecoder(this.transportName,
+                                                                this.staticSessionDictionary,
+                                                                this.codecFactoryAndCache);
+
+            final SessionProtocolDecoder old = decoderAttribute.setIfAbsent(sessionProtocolDecoder);
+            if (old != null) {
+                sessionProtocolDecoder = old;
+            }
+        }
+        return sessionProtocolDecoder;
+    }
+
+    @Override
     public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise)
         throws Exception {
 
         final Attribute<Integer> firstMessageAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
         final Object firstMessage = firstMessageAttribute.get();
-        final Attribute messageQueueAttribute;
-        final ArrayList messageQueue;
+        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
+            PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+        final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
+
         if (firstMessage == null) {
-            messageQueueAttribute = ctx.channel().attr(PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
-            messageQueue = (ArrayList) messageQueueAttribute.get();
-            boolean scheduled = false;
+
             synchronized (messageQueue) {
-                if (messageQueueAttribute.get() != null) {
-                    final ProtocolEncoderDecoder.PendingWrite pendingWrite = new ProtocolEncoderDecoder.PendingWrite();
-                    pendingWrite.msg = msg;
-                    pendingWrite.promise = promise;
-                    messageQueue.add(pendingWrite);
-                    scheduled = true;
-                }
+                messageQueue.add(new PendingWrite(msg, promise));
             }
 
-            if (!scheduled) {
-                this.doEncode(ctx, msg, promise);
-            }
         } else {
-            messageQueueAttribute = ctx.channel().attr(PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
-            messageQueue = (ArrayList) messageQueueAttribute.get();
-            if (messageQueue != null) {
-                this.sendScheduledMessages(ctx, messageQueueAttribute);
-            }
 
+            this.sendScheduledMessages(ctx, messageQueueAttribute);
             this.doEncode(ctx, msg, promise);
         }
-
     }
 
-    private void doEncode(final ChannelHandlerContext ctx, final Object messageObject, final ChannelPromise promise)
-        throws IOException, InterruptedException {
+    private void doEncode(final ChannelHandlerContext ctx, final Object messageObject, final ChannelPromise promise) {
 
-        ByteBuf buf = null;
+        ByteBuf buf = ctx.alloc().ioBuffer();
 
-        try {
-            buf = ctx.alloc().ioBuffer();
+        try (DataOutputStream dataOutputStream = new DataOutputStream(new ByteBufOutputStream(buf))) {
 
-            try {
-                if (LOGGER.isTraceEnabled()) {
-                    LOGGER.trace("[{}] Encoding [{}] to bytes", this.transportName, messageObject);
-                }
+            LOGGER.trace("[{}] Encoding [{}] to bytes", this.transportName, messageObject);
 
-                final Attribute<Integer> protocolVersionAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
-                final Integer protocolVersionObj = protocolVersionAttribute.get();
-                final int protocolVersion = protocolVersionObj == null ? 4 : protocolVersionObj;
-                final ByteBufOutputStream byteBufOutputStream = new ByteBufOutputStream(buf);
-                final DataOutputStream dataOutputStream = new DataOutputStream(byteBufOutputStream);
-                final EncodingContext encodingContext = new EncodingContext();
-                final Attribute<SessionProtocolEncoder> encoderAttribute = ctx.channel().attr(
-                    ENCODER_ATTACHMENT_ATTRIBUTE_KEY);
-                SessionProtocolEncoder sessionProtocolEncoder = encoderAttribute.get();
-                if (sessionProtocolEncoder == null) {
-                    if (protocolVersion < 4) {
-                        sessionProtocolEncoder = new SessionProtocolEncoder(this.transportName,
-                                                                            new DynamicSessionDictionary(),
-                                                                            this.codecFactoryAndCache);
-                    } else {
-                        sessionProtocolEncoder = new SessionProtocolEncoder(this.transportName,
-                                                                            this.staticSessionDictionary,
-                                                                            this.codecFactoryAndCache);
-                    }
+            final int protocolVersion = getProtocolVersion(ctx);
 
-                    final SessionProtocolEncoder old = encoderAttribute.setIfAbsent(sessionProtocolEncoder);
-                    if (old != null) {
-                        sessionProtocolEncoder = old;
-                    }
-                }
+            if (protocolVersion < DEFAULT_VERSION) {
+                throw new UnsupportedEncodingException("Protocolversion < 4 not supported");
+            }
 
-                if (messageObject instanceof RawObject) {
-                    final RawObject rawObject = (RawObject) messageObject;
-                    final RawData rawData = rawObject.getData(protocolVersion);
-                    if (rawData == null) {
-                        sessionProtocolEncoder.encodeMessage(protocolVersion,
-                                                             dataOutputStream,
-                                                             rawObject.getMessage(),
-                                                             encodingContext);
-                    } else {
-                        final Map<Integer, Class> deferredClassIdPositions = rawData.getDeferredClassIdPositions();
-                        final byte[] data = (byte[]) rawData.getData();
-                        int index = 0;
-                        if (deferredClassIdPositions != null && !deferredClassIdPositions.isEmpty()) {
-                            final Iterator i$ = deferredClassIdPositions.entrySet().iterator();
+            final EncodingContext encodingContext = new EncodingContext();
+            final SessionProtocolEncoder sessionProtocolEncoder = getSessionProtocolEncoder(ctx);
 
-                            while (i$.hasNext()) {
-                                final Entry<Integer, Class> entry = (Entry) i$.next();
-                                final ClassInfo<Short> classInfo = sessionProtocolEncoder.getDictionary().getClassInfo(
-                                    entry.getValue(),
-                                    encodingContext);
-                                if (classInfo == null) {
-                                    throw new IllegalArgumentException("Unable to find "
-                                                                       + entry.getValue()
-                                                                       + " in dictionary");
-                                }
-
-                                final int idIndex = entry.getKey();
-                                if (index < idIndex) {
-                                    dataOutputStream.write(data, index, idIndex - index);
-                                    index = idIndex;
-                                }
-
-                                if (protocolVersion < 4) {
-                                    dataOutputStream.writeShort(classInfo.id);
-                                    index += 2;
-                                } else {
-                                    sessionProtocolEncoder.getDictionary().writeClassId(protocolVersion,
-                                                                                        dataOutputStream,
-
-                                                                                        entry.getValue(),
-                                                                                        encodingContext);
-                                    index += 4;
-                                }
-                            }
-                        }
-
-                        if (index < data.length) {
-                            dataOutputStream.write(data, index, data.length - index);
-                        }
-                    }
-                } else {
+            if (messageObject instanceof RawObject) {
+                final RawObject rawObject = (RawObject) messageObject;
+                final RawData rawData = rawObject.getData(protocolVersion);
+                if (rawData == null) {
                     sessionProtocolEncoder.encodeMessage(protocolVersion,
                                                          dataOutputStream,
-                                                         (BinaryProtocolMessage) messageObject,
+                                                         rawObject.getMessage(),
                                                          encodingContext);
+                } else {
+                    processRawData(ctx, dataOutputStream, rawData, encodingContext);
                 }
-
-                dataOutputStream.flush();
-                if (protocolVersion < 4 && (encodingContext.getClassesToMap() != null
-                                            && encodingContext.getClassesToMap().size() > 0
-                                            || encodingContext.getClassDirectInvocationHandlers() != null
-                                               && encodingContext.getClassDirectInvocationHandlers().size() > 0)) {
-                    final ClassMappingMessage cmm = new ClassMappingMessage(encodingContext);
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("[{}] Sending mapping [{}]", this.transportName, cmm);
-                    }
-
-                    this.doEncode(ctx, cmm, ctx.newPromise());
-                }
-
-                if (LOGGER.isTraceEnabled()) {
-                    LOGGER.trace("[{}] Message [{}] encoded to {} bytes",
-                                 new Object[]{this.transportName, messageObject, buf.readableBytes()});
-                }
-            } finally {
-                ReferenceCountUtil.release(messageObject);
+            } else {
+                sessionProtocolEncoder.encodeMessage(protocolVersion,
+                                                     dataOutputStream,
+                                                     (BinaryProtocolMessage) messageObject,
+                                                     encodingContext);
             }
+
+            dataOutputStream.flush();
+
+            LOGGER.trace("[{}] Message [{}] encoded to {} bytes",
+                         this.transportName,
+                         messageObject,
+                         buf.readableBytes());
 
             if (buf.isReadable()) {
                 ctx.write(buf, promise);
@@ -341,76 +275,115 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
             }
 
             buf = null;
-        } catch (final EncoderException var33) {
-            throw var33;
-        } catch (final Throwable var34) {
-            throw new EncoderException(var34);
+
+        } catch (final IOException e) {
+            LOGGER.error("[{}] Encoding [{}] to failed", this.transportName, messageObject, e);
         } finally {
+            ReferenceCountUtil.release(messageObject);
             if (buf != null) {
                 buf.release();
             }
+        }
+
+    }
+
+    private void processRawData(final ChannelHandlerContext ctx,
+                                final DataOutputStream dataOutputStream,
+                                final RawData rawData,
+                                final EncodingContext encodingContext) throws IOException {
+
+        final int protocolVersion = getProtocolVersion(ctx);
+        final SessionProtocolEncoder sessionProtocolEncoder = getSessionProtocolEncoder(ctx);
+        final Map<Integer, Class> deferredClassIdPositions = rawData.getDeferredClassIdPositions();
+        final byte[] data = (byte[]) rawData.getData();
+        int index = 0;
+
+        if (deferredClassIdPositions != null && !deferredClassIdPositions.isEmpty()) {
+
+            for (final Map.Entry<Integer, Class> entry : deferredClassIdPositions.entrySet()) {
+                final ClassInfo<Short> classInfo = sessionProtocolEncoder.getDictionary().getClassInfo(entry.getValue(),
+                                                                                                       encodingContext);
+                if (classInfo == null) {
+                    throw new IllegalArgumentException(String.format("Unable to find %s in dictionary",
+                                                                     entry.getValue()));
+                }
+
+                final int idIndex = entry.getKey();
+                if (index < idIndex) {
+                    dataOutputStream.write(data, index, idIndex - index);
+                    index = idIndex;
+                }
+                sessionProtocolEncoder.getDictionary().writeClassId(protocolVersion,
+                                                                    dataOutputStream,
+                                                                    entry.getValue(),
+                                                                    encodingContext);
+                index += DEFAULT_VERSION;
+
+            }
 
         }
 
+        if (index < data.length) {
+            dataOutputStream.write(data, index, data.length - index);
+        }
+    }
+
+    private SessionProtocolEncoder getSessionProtocolEncoder(final ChannelHandlerContext ctx) {
+
+        final Attribute<SessionProtocolEncoder> encoderAttribute = ctx.channel().attr(ENCODER_ATTACHMENT_ATTRIBUTE_KEY);
+        SessionProtocolEncoder sessionProtocolEncoder = encoderAttribute.get();
+
+        if (sessionProtocolEncoder == null) {
+
+            sessionProtocolEncoder = new SessionProtocolEncoder(this.transportName,
+                                                                this.staticSessionDictionary,
+                                                                this.codecFactoryAndCache);
+
+            final SessionProtocolEncoder old = encoderAttribute.setIfAbsent(sessionProtocolEncoder);
+            if (old != null) {
+                sessionProtocolEncoder = old;
+            }
+        }
+        return sessionProtocolEncoder;
     }
 
     private void sendScheduledMessages(final ChannelHandlerContext ctx,
-                                       final Attribute<ArrayList<ProtocolEncoderDecoder.PendingWrite>>
-                                           messageQueueAttribute)
-        throws Exception {
+                                       final Attribute<ArrayList<PendingWrite>> messageQueueAttribute) {
 
-        final ArrayList<ProtocolEncoderDecoder.PendingWrite> messageQueue = messageQueueAttribute.get();
+        final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
+
+        if (messageQueue == null || messageQueue.isEmpty()) {
+            return;
+        }
+
         synchronized (messageQueue) {
-            final Iterator i$ = messageQueue.iterator();
-
-            while (i$.hasNext()) {
-                final ProtocolEncoderDecoder.PendingWrite
-                    pendingWrite
-                    = (ProtocolEncoderDecoder.PendingWrite) i$.next();
-                this.doEncode(ctx, pendingWrite.msg, pendingWrite.promise);
-            }
-
+            messageQueue.forEach(pendingWrite -> doEncode(ctx, pendingWrite.getMessage(), pendingWrite.getPromise()));
             ctx.flush();
             messageQueue.clear();
-            messageQueueAttribute.set(null);
         }
     }
 
-    private void failScheduledWrites(final ChannelHandlerContext ctx) {
+    private class PendingWrite {
+        private Object msg;
+        private ChannelPromise promise;
 
-        final Attribute<ArrayList<ProtocolEncoderDecoder.PendingWrite>> messageQueueAttribute = ctx.channel().attr(
-            PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
-        final ArrayList<ProtocolEncoderDecoder.PendingWrite> messageQueue = messageQueueAttribute.get();
-        if (messageQueue != null) {
-            synchronized (messageQueue) {
-                final Iterator i$ = messageQueue.iterator();
+        PendingWrite(final Object message, final ChannelPromise promise) {
 
-                while (i$.hasNext()) {
-                    final ProtocolEncoderDecoder.PendingWrite
-                        pendingWrite
-                        = (ProtocolEncoderDecoder.PendingWrite) i$.next();
-                    ReferenceCountUtil.release(pendingWrite.msg);
-
-                    try {
-                        pendingWrite.promise.setFailure(CLOSED_CHANNEL_EXCEPTION);
-                    } catch (final Exception var9) {
-                        ;
-                    }
-                }
-
-                messageQueue.clear();
-                messageQueueAttribute.set(null);
-            }
+            this.msg = message;
+            this.promise = promise;
         }
 
-    }
+        Object getMessage() {
 
-    private static class PendingWrite {
-        public Object msg;
-        public ChannelPromise promise;
-
-        private PendingWrite() {
-
+            return msg;
         }
+
+
+        ChannelPromise getPromise() {
+
+            return promise;
+        }
+
+
     }
 }

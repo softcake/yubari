@@ -153,7 +153,7 @@ allprojects {
             dependency "com.dukascopy.dds2:msg:1.0.199"
            dependency "com.dukascopy.dds4:transport-common:0.5.153"
 
-
+            dependency"org.jetbrains:annotations:16.0.1"
            dependency "io.netty:netty-transport:4.1.22.Final"
             dependency "io.netty:netty-handler:4.1.22.Final"
         }
@@ -173,7 +173,7 @@ subprojects { subProject ->
             testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
             testImplementation "com.google.guava:guava"
             testImplementation "org.softcake.lemon:lemon-core"
-
+            compileOnly"org.jetbrains:annotations"
             implementation "com.google.guava:guava"
             // Logging
             implementation "org.slf4j:slf4j-api"

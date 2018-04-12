@@ -24,6 +24,7 @@ module org.softcake.yubari.netty {
     requires JForex.API;
     requires com.google.common;
     requires io.reactivex.rxjava2;
+
     exports org.softcake.yubari.netty;
     exports org.softcake.yubari.netty.mina;
     exports org.softcake.yubari.netty.stream;

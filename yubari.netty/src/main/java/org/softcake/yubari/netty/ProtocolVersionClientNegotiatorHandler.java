@@ -27,8 +27,11 @@ import io.netty.util.AttributeKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.UnsupportedEncodingException;
+
 @Sharable
 public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler {
+    private static final int BODY_LENGTH = 4;
     private static final String TRANSPORT_HELLO_MESSAGE = "DDS4TRANSPORT";
     private static final int SEVER_RESPONSE_MESSAGE_SIZE = TRANSPORT_HELLO_MESSAGE.length() + 2 + 4;
     private static final AttributeKey<ByteBuf>
@@ -36,42 +39,12 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
         = AttributeKey.valueOf("protocol_version_response_buffer");
     private static final Logger LOGGER = LoggerFactory.getLogger(ProtocolVersionClientNegotiatorHandler.class);
 
-    @Override
-    public void channelActive(final ChannelHandlerContext ctx) throws Exception {
-
-        final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(
-            PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
-        byteBufAttribute.set(ctx.alloc().buffer(SEVER_RESPONSE_MESSAGE_SIZE));
-        final ByteBuf response = ctx.alloc().buffer(TRANSPORT_HELLO_MESSAGE.length()
-                                                    + 2
-                                                    + SessionProtocolEncoder.SUPPORTED_VERSIONS.size() * 4);
-        response.writeBytes("DDS4TRANSPORT".getBytes("US-ASCII"));
-        response.writeShort(SessionProtocolEncoder.SUPPORTED_VERSIONS.size() * 4);
-
-        SessionProtocolEncoder.SUPPORTED_VERSIONS.forEach(response::writeInt);
-
-        LOGGER.trace("Sending supported versions list: {}", SessionProtocolEncoder.SUPPORTED_VERSIONS);
-        ctx.writeAndFlush(response);
-        ctx.fireChannelActive();
-    }
-
-    public void handlerRemoved(final ChannelHandlerContext ctx) throws Exception {
-
-        this.cleanUp(ctx);
-        super.handlerRemoved(ctx);
-    }
-
-    public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
-
-        this.cleanUp(ctx);
-        super.channelInactive(ctx);
-    }
-
-    private void cleanUp(final ChannelHandlerContext ctx) throws Exception {
+    private static void cleanUp(final ChannelHandlerContext ctx) {
 
         final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(
             PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
         final ByteBuf byteBuf = byteBufAttribute.get();
+
         if (byteBuf != null) {
             byteBuf.release();
 
@@ -82,6 +55,79 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
 
     }
 
+    @SuppressWarnings({"squid:S109", "MagicNumber", "BooleanExpressionComplexity"})
+    private static int getAcceptedVersionFromResponse(final ByteBuf serverResponseBuf, final int bodyLength) {
+
+        final byte[] data = new byte[bodyLength];
+        serverResponseBuf.readBytes(data);
+        return ((data[0] & 255) << 24) | ((data[1] & 255) << 16) | ((data[2] & 255) << 8) | (data[3] & 255);
+    }
+
+    @SuppressWarnings({"squid:S109", "MagicNumber"})
+    private static int getBodyLengthFromResponse(final ByteBuf serverResponseBuf) {
+
+        return ((serverResponseBuf.readByte() & 255) << 8) | (serverResponseBuf.readByte() & 255);
+    }
+
+    private static String getHelloMessageFromResponse(final ByteBuf serverResponseBuf)
+        throws UnsupportedEncodingException {
+
+        final byte[] helloMessageArray = new byte[TRANSPORT_HELLO_MESSAGE.length()];
+        serverResponseBuf.readBytes(helloMessageArray);
+        return new String(helloMessageArray, "US-ASCII");
+    }
+
+    private static Integer getProtocolVersionAttribute(final ChannelHandlerContext ctx) {
+
+        final Attribute<Integer> firstMessageAttribute = ctx.channel()
+                                                            .attr(ProtocolEncoderDecoder
+                                                                      .PROTOCOL_VERSION_ATTRIBUTE_KEY);
+
+        return firstMessageAttribute.get();
+    }
+
+    private static void setProtocolVersionAttribute(final ChannelHandlerContext ctx, final int acceptedVersion) {
+
+        final Attribute<Integer> protocolVersionAttribute = ctx.channel()
+                                                               .attr(ProtocolEncoderDecoder
+                                                                         .PROTOCOL_VERSION_ATTRIBUTE_KEY);
+        protocolVersionAttribute.set(acceptedVersion);
+    }
+
+    @Override
+    public void channelActive(final ChannelHandlerContext ctx) throws Exception {
+
+        final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(
+            PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
+        byteBufAttribute.set(ctx.alloc().buffer(SEVER_RESPONSE_MESSAGE_SIZE));
+        final int size = SessionProtocolEncoder.SUPPORTED_VERSIONS.size();
+
+        final ByteBuf response = ctx.alloc().buffer(TRANSPORT_HELLO_MESSAGE.length() + 2 + size * 4);
+        response.writeBytes(TRANSPORT_HELLO_MESSAGE.getBytes("US-ASCII"));
+        response.writeShort(size * 4);
+        SessionProtocolEncoder.SUPPORTED_VERSIONS.forEach(response::writeInt);
+
+        LOGGER.trace("Sending supported versions list: {}", SessionProtocolEncoder.SUPPORTED_VERSIONS);
+        ctx.writeAndFlush(response);
+        ctx.fireChannelActive();
+    }
+
+    @Override
+    public void handlerRemoved(final ChannelHandlerContext ctx) throws Exception {
+
+        cleanUp(ctx);
+        super.handlerRemoved(ctx);
+    }
+
+    @Override
+    public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
+
+        cleanUp(ctx);
+        super.channelInactive(ctx);
+    }
+
+    @SuppressWarnings({"squid:S1142", "ReturnCount"})
+    @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object message) throws Exception {
 
         if (!(message instanceof ByteBuf)) {
@@ -89,98 +135,87 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
             return;
         }
 
-
         final ByteBuf byteBuffer = (ByteBuf) message;
+        final Integer versionAttribute = getProtocolVersionAttribute(ctx);
+
+        if (versionAttribute != null) {
+            byteBuffer.retain();
+            ctx.fireChannelRead(byteBuffer);
+            return;
+        }
+
+        final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(
+            PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
+        final ByteBuf serverResponseBuf = byteBufAttribute.get();
 
         try {
-            final Attribute<Integer> firstMessageAttribute = ctx.channel()
-                                                                .attr(ProtocolEncoderDecoder.PROTOCOL_VERSION_ATTRIBUTE_KEY);
 
-            final Object firstMessage = firstMessageAttribute.get();
+            serverResponseBuf.writeBytes(byteBuffer,
+                                         Math.min(SEVER_RESPONSE_MESSAGE_SIZE - serverResponseBuf.readableBytes(),
+                                                  byteBuffer.readableBytes()));
 
-            if (firstMessage == null) {
-                final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(
-                    PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
-                final ByteBuf serverResponseBuf = byteBufAttribute.get();
-                serverResponseBuf.writeBytes(byteBuffer,
-                                             Math.min(SEVER_RESPONSE_MESSAGE_SIZE - serverResponseBuf.readableBytes(),
-                                                      byteBuffer.readableBytes()));
-                if (serverResponseBuf.readableBytes() >= SEVER_RESPONSE_MESSAGE_SIZE) {
-                    try {
-                        final byte[] helloMessageArray = new byte["DDS4TRANSPORT".length()];
-                        serverResponseBuf.readBytes(helloMessageArray);
-                        final String transportHelloMessage = new String(helloMessageArray, "US-ASCII");
-                        if (transportHelloMessage.equals("DDS4TRANSPORT")) {
-                            final int bodyLength = (serverResponseBuf.readByte() & 255) << 8
-                                                   | serverResponseBuf.readByte() & 255;
-                            if (bodyLength != 4) {
-                                LOGGER.error("Server sent the incorrect version negotiation response, data.length != "
-                                             + "4");
-                                ctx.close();
-                            } else {
-                                assert serverResponseBuf.readableBytes() == bodyLength;
+            if (serverResponseBuf.readableBytes() >= SEVER_RESPONSE_MESSAGE_SIZE) {
 
-                                final byte[] data = new byte[bodyLength];
-                                serverResponseBuf.readBytes(data);
-                                final int acceptedVersion = (data[0] & 255) << 24
-                                                            | (data[1] & 255) << 16
-                                                            | (data[2] & 255) << 8
-                                                            | data[3] & 255;
-                                if (SessionProtocolEncoder.SUPPORTED_VERSIONS.contains(acceptedVersion)) {
-                                    final Attribute<Integer> protocolVersionAttribute = ctx.channel().attr(
-                                        ProtocolEncoderDecoder.PROTOCOL_VERSION_ATTRIBUTE_KEY);
-                                    protocolVersionAttribute.set(acceptedVersion);
+                final String transportHelloMessage = getHelloMessageFromResponse(serverResponseBuf);
 
-                                    LOGGER.trace("Server responded with version: {}", acceptedVersion);
+                if (!transportHelloMessage.equals(TRANSPORT_HELLO_MESSAGE)) {
+                    LOGGER.warn("Server did not send transport version negotiation message");
+                    ctx.close();
+                    return;
+                }
 
+                final int bodyLength = getBodyLengthFromResponse(serverResponseBuf);
 
-                                    ctx.fireUserEventTriggered(ProtocolVersionNegotiationSuccessEvent.SUCCESS);
-                                } else {
-                                    if (acceptedVersion < 0) {
-                                        LOGGER.error("Server has sent error message while negotiating protocol "
-                                                     + "version");
-                                    } else {
-                                        LOGGER.error("Server has sent version that client does not support");
-                                    }
+                if (bodyLength != BODY_LENGTH) {
+                    LOGGER.error("Server sent the incorrect version negotiation response, data.length != {}",
+                                 BODY_LENGTH);
+                    ctx.close();
+                    return;
+                }
 
-                                    ctx.close();
-                                }
-                            }
-                        } else {
-                            LOGGER.warn("Server did not send transport version negotiation message");
-                            ctx.close();
-                        }
-                    } finally {
-                        serverResponseBuf.release();
-                        byteBufAttribute.set(null);
+                assert serverResponseBuf.readableBytes() == bodyLength;
+
+                final int acceptedVersion = getAcceptedVersionFromResponse(serverResponseBuf, bodyLength);
+
+                if (SessionProtocolEncoder.SUPPORTED_VERSIONS.contains(acceptedVersion)) {
+
+                    setProtocolVersionAttribute(ctx, acceptedVersion);
+                    LOGGER.trace("Server responded with version: {}", acceptedVersion);
+                    ctx.fireUserEventTriggered(ProtocolVersionNegotiationSuccessEvent.SUCCESS);
+
+                } else {
+
+                    if (acceptedVersion < 0) {
+                        LOGGER.error("Server has sent error message while negotiating protocol version: [{}]",
+                                     acceptedVersion);
+                    } else {
+                        LOGGER.error("Server has sent version that client does not support! version: [{}]",
+                                     acceptedVersion);
                     }
-                }
 
-                if (byteBuffer.readableBytes() > 0) {
-                    byteBuffer.retain();
-                    ctx.fireChannelRead(byteBuffer);
+                    ctx.close();
                 }
-            } else {
+            }
+
+            if (byteBuffer.readableBytes() > 0) {
                 byteBuffer.retain();
                 ctx.fireChannelRead(byteBuffer);
             }
+
         } finally {
+            serverResponseBuf.release();
+            byteBufAttribute.set(null);
             byteBuffer.release();
         }
-
-
     }
 
+    @Override
     public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise)
         throws Exception {
 
-        final Attribute<Integer> firstMessageAttribute = ctx.channel()
-                                                            .attr(ProtocolEncoderDecoder
-                                                                      .PROTOCOL_VERSION_ATTRIBUTE_KEY);
-        final Object firstMessage = firstMessageAttribute.get();
-        if (firstMessage == null) {
-            LOGGER.warn("Received write request while version is not negotiated yet");
-            throw new Exception("Received write request while version is not negotiated yet");
+        final Integer versionAttribute = getProtocolVersionAttribute(ctx);
+        if (versionAttribute == null) {
+            throw new UnsupportedOperationException("Received write request while version is not negotiated yet");
         } else {
             ctx.write(msg, promise);
         }
