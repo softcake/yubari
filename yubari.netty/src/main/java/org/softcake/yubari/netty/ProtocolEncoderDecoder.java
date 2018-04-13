@@ -16,6 +16,11 @@
 
 package org.softcake.yubari.netty;
 
+import static  org.softcake.yubari.netty.TransportAttributeKeys.DECODER_ATTACHMENT_ATTRIBUTE_KEY;
+import static  org.softcake.yubari.netty.TransportAttributeKeys.ENCODER_ATTACHMENT_ATTRIBUTE_KEY;
+import static org.softcake.yubari.netty.TransportAttributeKeys.PROTOCOL_VERSION_ATTRIBUTE_KEY;
+import static org.softcake.yubari.netty.TransportAttributeKeys.PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY;
+
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.common.protocol.binary.ClassInfo;
@@ -35,8 +40,8 @@ import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.Attribute;
-import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.internal.PendingWrite;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,16 +56,8 @@ import java.util.Map;
 
 @Sharable
 public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
-    public static final AttributeKey<Integer> PROTOCOL_VERSION_ATTRIBUTE_KEY = AttributeKey.valueOf("protocol_version");
 
-    private static final AttributeKey<SessionProtocolEncoder> ENCODER_ATTACHMENT_ATTRIBUTE_KEY = AttributeKey.valueOf(
-        "encoder_attachment");
-    private static final AttributeKey<SessionProtocolDecoder> DECODER_ATTACHMENT_ATTRIBUTE_KEY = AttributeKey.valueOf(
-        "decoder_attachment");
-    private static final AttributeKey<ArrayList<PendingWrite>>
-        PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY
-        = AttributeKey.valueOf("protocol_version_message_queue");
-    private static final int DEFAULT_VERSION = 4;
+    private static final int DEFAULT_PROTOCOL_VERSION = 4;
     private static final Logger LOGGER = LoggerFactory.getLogger(ProtocolEncoderDecoder.class);
     private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
 
@@ -85,7 +82,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
         final Attribute<Integer> protocolVersionAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
         final Integer protocolVersionObj = protocolVersionAttribute.get();
-        return protocolVersionObj == null ? DEFAULT_VERSION : protocolVersionObj;
+        return protocolVersionObj == null ? DEFAULT_PROTOCOL_VERSION : protocolVersionObj;
     }
 
     private void failScheduledWrites(final ChannelHandlerContext ctx) {
@@ -97,10 +94,10 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
             synchronized (messageQueue) {
                 messageQueue.forEach(pendingWrite -> {
-                    ReferenceCountUtil.release(pendingWrite.getMessage());
+                   // ReferenceCountUtil.release(pendingWrite.msg());
 
                     try {
-                        pendingWrite.getPromise().setFailure(CLOSED_CHANNEL_EXCEPTION);
+                        pendingWrite.failAndRecycle(CLOSED_CHANNEL_EXCEPTION);
                     } catch (final IllegalStateException e) {
                         LOGGER.error("Error occurred...", e);
                     }
@@ -137,7 +134,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
     @Override
     public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
 
-        if (evt instanceof ProtocolVersionNegotiationSuccessEvent) {
+        if (evt instanceof ProtocolVersionNegotiationEvent) {
             final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
                 PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
             final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
@@ -159,7 +156,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
         final int protocolVersion = getProtocolVersion(ctx);
 
-        if (protocolVersion < DEFAULT_VERSION) {
+        if (protocolVersion < DEFAULT_PROTOCOL_VERSION) {
             throw new UnsupportedEncodingException("Protocolversion < 4 not supported");
         }
 
@@ -215,7 +212,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         if (firstMessage == null) {
 
             synchronized (messageQueue) {
-                messageQueue.add(new PendingWrite(msg, promise));
+                messageQueue.add(PendingWrite.newInstance(msg, promise));
             }
 
         } else {
@@ -235,7 +232,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
             final int protocolVersion = getProtocolVersion(ctx);
 
-            if (protocolVersion < DEFAULT_VERSION) {
+            if (protocolVersion < DEFAULT_PROTOCOL_VERSION) {
                 throw new UnsupportedEncodingException("Protocolversion < 4 not supported");
             }
 
@@ -317,7 +314,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
                                                                     dataOutputStream,
                                                                     entry.getValue(),
                                                                     encodingContext);
-                index += DEFAULT_VERSION;
+                index += DEFAULT_PROTOCOL_VERSION;
 
             }
 
@@ -357,12 +354,12 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         }
 
         synchronized (messageQueue) {
-            messageQueue.forEach(pendingWrite -> doEncode(ctx, pendingWrite.getMessage(), pendingWrite.getPromise()));
+            messageQueue.forEach(pendingWrite -> doEncode(ctx, pendingWrite.msg(), (ChannelPromise) pendingWrite.promise()));
             ctx.flush();
             messageQueue.clear();
         }
     }
-
+/*
     private class PendingWrite {
         private Object msg;
         private ChannelPromise promise;
@@ -385,5 +382,5 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         }
 
 
-    }
+    }*/
 }

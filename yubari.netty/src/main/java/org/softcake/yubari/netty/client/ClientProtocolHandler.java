@@ -16,9 +16,11 @@
 
 package org.softcake.yubari.netty.client;
 
+import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
+
 import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.NettyIoSessionWrapperAdapter;
-import org.softcake.yubari.netty.ProtocolVersionNegotiationSuccessEvent;
+import org.softcake.yubari.netty.ProtocolVersionNegotiationEvent;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.processors.HeartbeatProcessor;
@@ -60,7 +62,6 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.util.Attribute;
 import io.reactivex.Observable;
-import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -209,8 +210,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
 
         final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel()
-                                                                           .attr(ChannelAttachment
-                                                                                     .CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+                                                                           .attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
         final ChannelAttachment attachment = channelAttachmentAttribute.get();
 
         LOGGER.trace("[{}] Message received {}, primary channel: {}",
@@ -229,7 +229,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
         super.channelInactive(ctx);
         final Attribute<ChannelAttachment> attribute = ctx.channel()
-                                                          .attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+                                                          .attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
         final ChannelAttachment attachment = attribute.get();
         if (attachment != null && this.clientConnector != null) {
             if (attachment.isPrimaryConnection()) {
@@ -245,12 +245,12 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
 
         super.userEventTriggered(ctx, evt);
+
         if (evt instanceof SslHandshakeCompletionEvent && ((SslHandshakeCompletionEvent) evt).isSuccess()) {
             this.clientConnector.sslHandshakeSuccess();
-        } else if (evt instanceof ProtocolVersionNegotiationSuccessEvent) {
+        } else if (evt instanceof ProtocolVersionNegotiationEvent&& ((ProtocolVersionNegotiationEvent) evt).isSuccess()) {
             this.clientConnector.protocolVersionHandshakeSuccess();
         }
-
     }
 
     @Override
@@ -385,8 +385,15 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
         final ChannelFuture channelFuture = channel.writeAndFlush(responseMessage);
         final Observable<Void> observable = Observable.fromFuture(channelFuture);
-     
-        final ChannelAttachment ca = channel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
+        final ChannelAttachment ca = channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
+    /* observable.flatMap(new Function<Void, ObservableSource<?>>() {
+         @Override
+         public ObservableSource<?> apply(final Void aVoid) throws Exception {
+
+             return Observable.just(ca.getWriteIoListener());
+         }
+     });
+observable.subscribe();*/
 
         channelFuture.addListener(ca.getWriteIoListener());
 

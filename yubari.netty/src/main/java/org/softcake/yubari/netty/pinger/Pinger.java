@@ -16,20 +16,22 @@
 
 package org.softcake.yubari.netty.pinger;
 
+import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 
 public class Pinger {
     public static final int DEFAULT_PING_DATA_SIZE = 10240;
@@ -45,11 +47,11 @@ public class Pinger {
     private final boolean waitForDisconnect;
     private final AbstractStaticSessionDictionary staticSessionDictionary;
 
-    public Pinger(AbstractStaticSessionDictionary staticSessionDictionary, List<PingTarget> targets) {
+    public Pinger(final AbstractStaticSessionDictionary staticSessionDictionary, final List<PingTarget> targets) {
         this(staticSessionDictionary, targets, DEFAULT_PING_DATA_SIZE, DEFAULT_MAX_PING_TIME_OUT, DEFAULT_MAX_PING_TIME_OUT_UNIT, DEFAULT_MAX_PING_THREADS_COUNT, false);
     }
 
-    public Pinger(AbstractStaticSessionDictionary staticSessionDictionary, List<PingTarget> targets, int pingDataSizeInBytes, long pingTimeout, TimeUnit pingTimeoutTimeUnit, int maxPingThreadsCount, boolean waitForDisconnect) {
+    public Pinger(final AbstractStaticSessionDictionary staticSessionDictionary, final List<PingTarget> targets, final int pingDataSizeInBytes, final long pingTimeout, final TimeUnit pingTimeoutTimeUnit, final int maxPingThreadsCount, final boolean waitForDisconnect) {
         if (staticSessionDictionary == null) {
             throw new IllegalArgumentException("No staticSessionDictionary");
         } else if (targets != null && !targets.isEmpty()) {
@@ -60,8 +62,8 @@ public class Pinger {
             } else if (pingTimeoutTimeUnit == null) {
                 throw new IllegalArgumentException("Ping pingTimeoutTimeUnit of wrong value " + pingTimeoutTimeUnit);
             } else {
-                long pingTimeoutMillis = pingTimeoutTimeUnit.toMillis(pingTimeout);
-                long maxPingTimeoutMillis = DEFAULT_MAX_PING_TIME_OUT_UNIT.toMillis(10L);
+                final long pingTimeoutMillis = pingTimeoutTimeUnit.toMillis(pingTimeout);
+                final long maxPingTimeoutMillis = DEFAULT_MAX_PING_TIME_OUT_UNIT.toMillis(10L);
                 if (pingTimeoutMillis > maxPingTimeoutMillis) {
                     throw new IllegalArgumentException("Ping time out " + pingTimeoutMillis + " is too big, max possible is " + maxPingTimeoutMillis);
                 } else if (maxPingThreadsCount <= 0) {
@@ -73,12 +75,12 @@ public class Pinger {
                     this.pingTimeout = pingTimeout;
                     this.pingTimeoutTimeUnit = pingTimeoutTimeUnit;
                     this.waitForDisconnect = waitForDisconnect;
-                    int threadCount = Math.min(targets.size(), maxPingThreadsCount);
+                    final int threadCount = Math.min(targets.size(), maxPingThreadsCount);
                     this.executor = new ThreadPoolExecutor(threadCount, threadCount, 1L, TimeUnit.MINUTES, new LinkedBlockingQueue(), new ThreadFactory() {
                         private final AtomicInteger threadCounter = new AtomicInteger(1);
 
-                        public Thread newThread(Runnable r) {
-                            Thread thread = new Thread(r, "PingerThread" + this.threadCounter.getAndIncrement());
+                        public Thread newThread(final Runnable r) {
+                            final Thread thread = new Thread(r, "PingerThread" + this.threadCounter.getAndIncrement());
                             thread.setDaemon(true);
                             thread.setPriority(10);
                             return thread;
@@ -93,59 +95,64 @@ public class Pinger {
     }
 
     public Map<PingTarget, PingResult> ping() {
-        Map<PingTarget, PingResult> result = new LinkedHashMap();
-        Map<PingTarget, Future<Long>> futures = new LinkedHashMap();
-        final List<Future<?>> transportTerminationFutures = new ArrayList();
-        Iterator i$ = this.targets.iterator();
+        final Map<PingTarget, PingResult> result = new LinkedHashMap<>();
+        final Map<PingTarget, Future<Long>> futures = new LinkedHashMap<>();
+        final List<Future<?>> transportTerminationFutures = new ArrayList<>();
 
-
-        while(i$.hasNext()) {
-            final PingTarget target  = (PingTarget)i$.next();
-            futures.put(target, this.executor.submit(new Callable<Long>() {
-                public Long call() throws Exception {
-                    try {
-                        return Pinger.this.doPing(target, transportTerminationFutures);
-                    } catch (Throwable var2) {
-                        throw new RuntimeException(var2);
-                    }
+        for (final PingTarget target : this.targets) {
+            futures.put(target, this.executor.submit(() -> {
+                try {
+                    return Pinger.this.doPing(target, transportTerminationFutures);
+                } catch (final Throwable var2) {
+                    throw new RuntimeException(var2);
                 }
             }));
         }
 
-        Throwable error;
-        Long pingTime;
-        PingTarget target;
-        for(i$ = futures.keySet().iterator(); i$.hasNext(); result.put(target, new PingResult(pingTime, error))) {
-            target = (PingTarget)i$.next();
-            Future<Long> future = (Future)futures.get(target);
-            error = null;
-            pingTime = null;
 
-            try {
-                pingTime = (Long)future.get(2L * this.pingTimeout, this.pingTimeoutTimeUnit);
-            } catch (Throwable var11) {
-                error = var11;
+        futures.forEach(new BiConsumer<>() {
+            @Override
+            public void accept(final PingTarget target, final Future<Long> future) {
+
+                Long pingTime = Long.MAX_VALUE;
+                Throwable error = null;
+                try {
+                    pingTime = future.get(2L * pingTimeout, pingTimeoutTimeUnit);
+                } catch (InterruptedException | TimeoutException | ExecutionException e) {
+                    error = e;
+                }
+
+                result.put(target, new PingResult(pingTime, error));
             }
-        }
+        });
 
         if (this.waitForDisconnect) {
+
             try {
                 this.executor.awaitTermination(this.pingTimeout, this.pingTimeoutTimeUnit);
-            } catch (Throwable var10) {
-                ;
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
+
         }
 
         this.executor.shutdown();
         return result;
     }
 
-    private Long doPing(PingTarget target, List<Future<?>> transportTerminationFutures) throws Throwable {
-        long before = System.currentTimeMillis();
+    private Long doPing(final PingTarget target, final List<Future<?>> transportTerminationFutures) throws Throwable {
+        final long before = System.currentTimeMillis();
         final Throwable[] exceptions = new Throwable[1];
         final PingClient pingerNettyClient = new PingClient(target, this.staticSessionDictionary,
-                                                            (t, reason) -> exceptions[0] = t, this.pingDataSizeInBytes + 1024);
-        long timeout = this.pingTimeoutTimeUnit.toMillis(this.pingTimeout);
+                                                            new IPingClientListener() {
+                                                                @Override
+                                                                public void disconnected(final Throwable t,
+                                                                                         final DisconnectReason reason) {
+
+                                                                    exceptions[0] = t;
+                                                                }
+                                                            }, this.pingDataSizeInBytes + 1024);
+        final long timeout = this.pingTimeoutTimeUnit.toMillis(this.pingTimeout);
 
         Long var10;
         try {
@@ -154,9 +161,9 @@ public class Pinger {
                 throw exceptions[0];
             }
 
-            Long result = System.currentTimeMillis() - before;
+            final Long result = System.currentTimeMillis() - before;
             var10 = result;
-        } catch (Throwable var14) {
+        } catch (final Throwable var14) {
             if (exceptions[0] != null) {
                 throw exceptions[0];
             }
@@ -170,7 +177,7 @@ public class Pinger {
     }
 
     public String toString() {
-        StringBuilder builder = new StringBuilder();
+        final StringBuilder builder = new StringBuilder();
         builder.append("Pinger [");
         if (this.targets != null) {
             builder.append("targets=");

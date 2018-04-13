@@ -17,11 +17,8 @@
 package org.softcake.yubari.netty.channel;
 
 
-import io.netty.util.AttributeKey;
-
 public class ChannelAttachment extends AbstractChannelAttachment {
-    public static final AttributeKey<ChannelAttachment> CHANNEL_ATTACHMENT_ATTRIBUTE_KEY = AttributeKey.valueOf(
-        "channel_attachment");
+
     private final boolean isPrimaryConnection;
     private long lastConnectAttemptTime = Long.MIN_VALUE;
     private int reconnectAttempt = -1;

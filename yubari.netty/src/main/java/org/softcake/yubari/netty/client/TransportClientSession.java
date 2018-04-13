@@ -162,8 +162,7 @@ public class TransportClientSession implements ClientSSLContextListener {
     private boolean skipDroppableMessages;
     private Bootstrap channelBootstrap;
     private ProtocolVersionClientNegotiatorHandler
-        protocolVersionClientNegotiatorHandler
-        = new ProtocolVersionClientNegotiatorHandler();
+        protocolVersionClientNegotiatorHandler;
     private ClientProtocolHandler protocolHandler;
     private ClientConnector clientConnector;
     private ScheduledExecutorService scheduledExecutorService;
@@ -323,6 +322,7 @@ public class TransportClientSession implements ClientSSLContextListener {
 
     void init() {
 
+        this.protocolVersionClientNegotiatorHandler = new ProtocolVersionClientNegotiatorHandler(this.transportName);
         final ThreadFactory threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(String.format(
             "[%s] SyncMessagesTimeouter",
             this.transportName)).build();
@@ -344,7 +344,7 @@ public class TransportClientSession implements ClientSSLContextListener {
         this.channelBootstrap = new Bootstrap();
         this.channelBootstrap.group(nettyEventLoopGroup);
         this.channelBootstrap.channel(NioSocketChannel.class);
-        this.channelOptions.forEach((key, value) -> channelBootstrap.option((ChannelOption) key, value));
+        this.channelOptions.forEach((key, value) -> this.channelBootstrap.option((ChannelOption) key, value));
 
 
         this.channelBootstrap.handler(new ChannelInitializer<SocketChannel>() {
@@ -363,8 +363,30 @@ public class TransportClientSession implements ClientSSLContextListener {
                     final List<String>
                         enabledCipherSuites
                         = new ArrayList<>(Arrays.asList(engine.getSupportedCipherSuites()));
-                    analyzeCipher(pipeline, engine, enabledCipherSuites);
+                  //  analyzeCipher(pipeline, engine, enabledCipherSuites);
+                    final Iterator iterator = enabledCipherSuites.iterator();
 
+                    label36:
+                    while (true) {
+                        String cipher;
+                        do {
+                            if (!iterator.hasNext()) {
+                                engine.setEnabledCipherSuites(enabledCipherSuites.toArray(new String[enabledCipherSuites
+                                    .size()]));
+                                pipeline.addLast("ssl", new SslHandler(engine));
+                                break label36;
+                            }
+
+                            cipher = (String) iterator.next();
+                            LOGGER.info(cipher) ;
+                        } while (!cipher.toUpperCase().contains("EXPORT")
+                                 && !cipher.toUpperCase().contains("NULL")
+                                 && !cipher.toUpperCase().contains("ANON")
+                                 && !cipher.toUpperCase().contains("_DES_")
+                                 && !cipher.toUpperCase().contains("MD5"));
+
+                        iterator.remove();
+                    }
                 }
 
                 pipeline.addLast("protocol_version_negotiator", protocolVersionClientNegotiatorHandler);
@@ -547,11 +569,11 @@ public class TransportClientSession implements ClientSSLContextListener {
                     } else if (channelFuture.isDone() && channelFuture.cause() != null) {
                         final Throwable cause = channelFuture.cause();
                         LOGGER.error("[{}] Request send failed because of {}: {}",
-                                     getTransportName(),
+                                     this.getTransportName(),
                                      cause.getClass().getSimpleName(),
                                      cause.getMessage());
                     } else {
-                        LOGGER.error("[{}] Request send failed", getTransportName());
+                        LOGGER.error("[{}] Request send failed", this.getTransportName());
                     }
 
                 });

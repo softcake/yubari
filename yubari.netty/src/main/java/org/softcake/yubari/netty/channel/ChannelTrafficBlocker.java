@@ -16,6 +16,9 @@
 
 package org.softcake.yubari.netty.channel;
 
+import static org.softcake.yubari.netty.TransportAttributeKeys.MESSAGES_BUFFER;
+import static org.softcake.yubari.netty.TransportAttributeKeys.READ_SUSPENDED;
+
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import io.netty.channel.Channel;
@@ -23,7 +26,6 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.Attribute;
-import io.netty.util.AttributeKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,12 +34,7 @@ import java.util.ArrayDeque;
 @Sharable
 public class ChannelTrafficBlocker extends ChannelDuplexHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(ChannelTrafficBlocker.class);
-    private static final AttributeKey<Boolean>
-        READ_SUSPENDED
-        = AttributeKey.valueOf(ChannelTrafficBlocker.class.getName() + ".READ_SUSPENDED");
-    private static final AttributeKey<ArrayDeque<Object>>
-        MESSAGES_BUFFER
-        = AttributeKey.valueOf(ChannelTrafficBlocker.class.getName() + ".MESSAGES_BUFFER");
+
     private final String transportName;
 
     public ChannelTrafficBlocker(final String transportName) {

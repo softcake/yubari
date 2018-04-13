@@ -29,11 +29,11 @@ public class PingTarget {
     private final boolean useSsl;
     private final Set<String> enabledSslProtocols;
 
-    public PingTarget(InetSocketAddress address, boolean useSsl) {
+    public PingTarget(final InetSocketAddress address, final boolean useSsl) {
         this(address, useSsl, TransportClientBuilder.DEFAULT_SSL_PROTOCOLS);
     }
 
-    public PingTarget(InetSocketAddress address, boolean useSsl, Set<String> enabledSslProtocols) {
+    public PingTarget(final InetSocketAddress address, final boolean useSsl, final Set<String> enabledSslProtocols) {
         this.address = address;
         this.useSsl = useSsl;
         this.enabledSslProtocols = enabledSslProtocols;
@@ -52,58 +52,29 @@ public class PingTarget {
     }
 
     @Override
+    public boolean equals(final Object o) {
+
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        final PingTarget that = (PingTarget) o;
+        return useSsl == that.useSsl &&
+               Objects.equal(address, that.address) &&
+               Objects.equal(enabledSslProtocols, that.enabledSslProtocols);
+    }
+
+    @Override
     public int hashCode() {
 
         return Objects.hashCode(address, useSsl, enabledSslProtocols);
     }
 
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        } else if (obj == null) {
-            return false;
-        } else if (this.getClass() != obj.getClass()) {
-            return false;
-        } else {
-            PingTarget other = (PingTarget)obj;
-            if (this.address == null) {
-                if (other.address != null) {
-                    return false;
-                }
-            } else if (!this.address.equals(other.address)) {
-                return false;
-            }
-
-            if (this.enabledSslProtocols == null) {
-                if (other.enabledSslProtocols != null) {
-                    return false;
-                }
-            } else if (!this.enabledSslProtocols.equals(other.enabledSslProtocols)) {
-                return false;
-            }
-
-            return this.useSsl == other.useSsl;
-        }
-    }
-
+    @Override
     public String toString() {
-        StringBuilder builder = new StringBuilder();
-        builder.append("PingTarget [");
-        if (this.address != null) {
-            builder.append("address=");
-            builder.append(this.address);
-            builder.append(", ");
-        }
 
-        builder.append("useSsl=");
-        builder.append(this.useSsl);
-        builder.append(", ");
-        if (this.enabledSslProtocols != null) {
-            builder.append("enabledSslProtocols=");
-            builder.append(this.enabledSslProtocols);
-        }
-
-        builder.append("]");
-        return builder.toString();
+        return "PingTarget{" +
+               "address=" + address +
+               ", useSsl=" + useSsl +
+               ", enabledSslProtocols=" + enabledSslProtocols +
+               '}';
     }
 }

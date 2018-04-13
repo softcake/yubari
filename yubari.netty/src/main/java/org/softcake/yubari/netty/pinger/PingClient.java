@@ -16,17 +16,16 @@
 
 package org.softcake.yubari.netty.pinger;
 
-
+import org.softcake.yubari.netty.ProtocolEncoderDecoder;
 import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
 import org.softcake.yubari.netty.client.TransportClientBuilder;
+import org.softcake.yubari.netty.ssl.ClientSSLContextListener;
+import org.softcake.yubari.netty.ssl.SSLContextFactory;
 
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
-import com.dukascopy.dds4.transport.common.mina.ssl.ClientSSLContextListener;
-import com.dukascopy.dds4.transport.common.mina.ssl.SSLContextFactory;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.msg.system.PingRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.dukascopy.dds4.transport.netty.ProtocolEncoderDecoder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -69,85 +68,119 @@ public class PingClient {
     private final AtomicBoolean online = new AtomicBoolean(false);
     private final IPingClientListener clientListener;
 
-    public PingClient(PingTarget pingTarget, AbstractStaticSessionDictionary staticSessionDictionary, IPingClientListener clientListener, int maxMessageSizeBytes) {
+    public PingClient(final PingTarget pingTarget,
+                      final AbstractStaticSessionDictionary staticSessionDictionary,
+                      final IPingClientListener clientListener,
+                      final int maxMessageSizeBytes) {
+
         this.pingTarget = pingTarget;
-        this.protocolEncoderDecoder = new ProtocolEncoderDecoder("Pinger", maxMessageSizeBytes, staticSessionDictionary);
+        this.protocolEncoderDecoder = new ProtocolEncoderDecoder("Pinger",
+                                                                 maxMessageSizeBytes,
+                                                                 staticSessionDictionary);
         this.maxMessageSizeBytes = maxMessageSizeBytes;
         this.clientListener = clientListener;
-        this.protocolVersionClientNegotiatorHandler = new ProtocolVersionClientNegotiatorHandler();
+        this.protocolVersionClientNegotiatorHandler = new ProtocolVersionClientNegotiatorHandler("Pinger");
     }
 
-    public void ping(long timeout, byte[] pingData) throws InterruptedException, TimeoutException {
-        long before = System.currentTimeMillis();
+    public void ping(final long timeout, final byte[] pingData) throws InterruptedException, TimeoutException {
+
+        final long before = System.currentTimeMillis();
         this.connect(timeout);
-        long after = System.currentTimeMillis();
-        long pingTimeout = timeout - (after - before);
+        final long after = System.currentTimeMillis();
+        final long pingTimeout = timeout - (after - before);
         if (pingTimeout > 0L) {
-            PingRequestMessage pingRequestMessage = new PingRequestMessage();
+            final PingRequestMessage pingRequestMessage = new PingRequestMessage();
             pingRequestMessage.setPingData(pingData);
-            ProtocolMessage response = this.sendSynched(pingRequestMessage, pingTimeout);
+            final ProtocolMessage response = this.sendSynched(pingRequestMessage, pingTimeout);
             if (response == null) {
-                throw new TimeoutException("No ping response from server during " + pingTimeout + " ms, for ping request " + pingRequestMessage.toString(100));
+                throw new TimeoutException(String.format(
+                    "No ping response from server during %d ms, for ping request %s",
+                    pingTimeout,
+                    pingRequestMessage.toString(100)));
             }
         } else {
-            throw new TimeoutException("Connect timed out to " + this.pingTarget + " within specified timeout " + timeout);
+            throw new TimeoutException(String.format("Connect timed out to %s within specified timeout %d",
+                                                     this.pingTarget,
+                                                     timeout));
         }
     }
 
-    public void connect(long connectionTimeout) throws InterruptedException, TimeoutException {
+    public void connect(final long connectionTimeout) throws InterruptedException, TimeoutException {
+
         if (this.online.get()) {
             throw new IllegalStateException("Transport is already online " + this.pingTarget);
         } else {
-            NioEventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup(1);
+            final NioEventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup(1);
             this.channelBootstrap = new Bootstrap();
             this.channelBootstrap.group(nettyEventLoopGroup);
             this.channelBootstrap.channel(NioSocketChannel.class);
             this.channelBootstrap.handler(new ChannelInitializer<SocketChannel>() {
-                protected void initChannel(SocketChannel ch) throws Exception {
-                    ChannelPipeline pipeline = ch.pipeline();
+                protected void initChannel(final SocketChannel ch) throws Exception {
+
+                    final ChannelPipeline pipeline = ch.pipeline();
                     if (PingClient.this.pingTarget.isUseSsl()) {
-                        SSLEngine engine = SSLContextFactory.getInstance(false, new ClientSSLContextListener() {
-                            public void securityException(X509Certificate[] chain, String authType, CertificateException certificateException) {
-                                PingClient.this.disconnect(DisconnectReason.CERTIFICATE_EXCEPTION, certificateException);
+                        final SSLEngine engine = SSLContextFactory.getInstance(false, new ClientSSLContextListener() {
+                            public void securityException(final X509Certificate[] chain,
+                                                          final String authType,
+                                                          final CertificateException certificateException) {
+
+                                PingClient.this.disconnect(DisconnectReason.CERTIFICATE_EXCEPTION,
+                                                           certificateException);
                             }
                         }, PingClient.this.pingTarget.getAddress().getHostName()).createSSLEngine();
-                        Set<String> sslProtocols = PingClient.this.pingTarget.getEnabledSslProtocols().isEmpty() ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS : PingClient.this.pingTarget.getEnabledSslProtocols();
+                        final Set<String> sslProtocols = PingClient.this.pingTarget.getEnabledSslProtocols().isEmpty()
+                                                         ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS
+                                                         : PingClient.this.pingTarget.getEnabledSslProtocols();
                         engine.setUseClientMode(true);
-                        engine.setEnabledProtocols((String[])sslProtocols.toArray(new String[sslProtocols.size()]));
-                        List<String> enabledCipherSuites = new ArrayList(Arrays.asList(engine.getSupportedCipherSuites()));
-                        Iterator iterator = enabledCipherSuites.iterator();
+                        engine.setEnabledProtocols(sslProtocols.toArray(new String[0]));
+                        final List<String> enabledCipherSuites
+                            = new ArrayList<>(Arrays.asList(engine.getSupportedCipherSuites()));
+                        final Iterator iterator = enabledCipherSuites.iterator();
 
                         label36:
-                        while(true) {
+                        while (true) {
                             String cipher;
                             do {
                                 if (!iterator.hasNext()) {
-                                    engine.setEnabledCipherSuites((String[])enabledCipherSuites.toArray(new String[enabledCipherSuites.size()]));
+                                    engine.setEnabledCipherSuites(enabledCipherSuites.toArray(new String[enabledCipherSuites
+                                        .size()]));
                                     pipeline.addLast("ssl", new SslHandler(engine));
                                     break label36;
                                 }
 
-                                cipher = (String)iterator.next();
-                            } while(!cipher.toUpperCase().contains("EXPORT") && !cipher.toUpperCase().contains("NULL") && !cipher.toUpperCase().contains("ANON") && !cipher.toUpperCase().contains("_DES_") && !cipher.toUpperCase().contains("MD5"));
+                                cipher = (String) iterator.next();
+                            } while (!cipher.toUpperCase().contains("EXPORT")
+                                     && !cipher.toUpperCase().contains("NULL")
+                                     && !cipher.toUpperCase().contains("ANON")
+                                     && !cipher.toUpperCase().contains("_DES_")
+                                     && !cipher.toUpperCase().contains("MD5"));
 
                             iterator.remove();
                         }
                     }
 
-                    pipeline.addLast("protocol_version_negotiator", PingClient.this.protocolVersionClientNegotiatorHandler);
-                    pipeline.addLast("frame_handler", new LengthFieldBasedFrameDecoder(PingClient.this.maxMessageSizeBytes, 0, 4, 0, 4, true));
+                    pipeline.addLast("protocol_version_negotiator",
+                                     PingClient.this.protocolVersionClientNegotiatorHandler);
+                    pipeline.addLast("frame_handler",
+                                     new LengthFieldBasedFrameDecoder(PingClient.this.maxMessageSizeBytes,
+                                                                      0,
+                                                                      4,
+                                                                      0,
+                                                                      4,
+                                                                      true));
                     pipeline.addLast("frame_encoder", new LengthFieldPrepender(4, false));
                     pipeline.addLast("protocol_encoder_decoder", PingClient.this.protocolEncoderDecoder);
                     pipeline.addLast("handler", new ChannelInboundHandlerAdapter() {
-                        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+                        public void channelRead(final ChannelHandlerContext ctx, final Object msg) throws Exception {
+
                             if (msg instanceof ProtocolMessage) {
-                                ProtocolMessage protocolMsg = (ProtocolMessage)msg;
+                                final ProtocolMessage protocolMsg = (ProtocolMessage) msg;
                                 String requestId = protocolMsg.getRequestId();
                                 if (requestId != null) {
                                     requestId = requestId.intern();
                                     PingClient.this.syncRequestsMap.remove(requestId);
                                     PingClient.this.syncResponsesMap.put(requestId, protocolMsg);
-                                    synchronized(requestId) {
+                                    synchronized (requestId) {
                                         requestId.notifyAll();
                                     }
                                 }
@@ -157,43 +190,50 @@ public class PingClient {
                             }
                         }
 
-                        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-                            PingClient.this.disconnect(DisconnectReason.CLIENT_APP_REQUEST, (Throwable)null);
+                        public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
+
+                            PingClient.this.disconnect(DisconnectReason.CLIENT_APP_REQUEST, null);
                         }
 
-                        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+                        public void exceptionCaught(final ChannelHandlerContext ctx, final Throwable cause) {
+
                             ctx.close();
                             PingClient.this.disconnect(DisconnectReason.EXCEPTION_CAUGHT, cause);
                         }
                     });
                 }
             });
-            ChannelFuture connectFuture = this.channelBootstrap.connect(this.pingTarget.getAddress());
-            boolean connected = connectFuture.await(connectionTimeout);
+            final ChannelFuture connectFuture = this.channelBootstrap.connect(this.pingTarget.getAddress());
+            final boolean connected = connectFuture.await(connectionTimeout);
             if (connected) {
                 this.channel = connectFuture.sync().channel();
                 this.online.set(true);
             } else {
-                throw new TimeoutException("Connect timed out to " + this.pingTarget + " within specified timeout " + connectionTimeout);
+                throw new TimeoutException("Connect timed out to "
+                                           + this.pingTarget
+                                           + " within specified timeout "
+                                           + connectionTimeout);
             }
         }
     }
 
     public void disconnect() {
-        this.disconnect(DisconnectReason.CLIENT_APP_REQUEST, (Throwable)null);
+
+        this.disconnect(DisconnectReason.CLIENT_APP_REQUEST, null);
     }
 
-    private void disconnect(DisconnectReason reason, Throwable e) {
+    private void disconnect(final DisconnectReason reason, final Throwable e) {
+
         if (this.channel != null) {
-            Channel ch = this.channel;
+            final Channel ch = this.channel;
             this.channel = null;
             ch.close();
         }
 
         if (this.channelBootstrap != null) {
-            Bootstrap bootstrap = this.channelBootstrap;
+            final Bootstrap bootstrap = this.channelBootstrap;
             this.channelBootstrap = null;
-            EventLoopGroup group = bootstrap.group();
+            final EventLoopGroup group = bootstrap.config().group();
             group.shutdownGracefully();
         }
 
@@ -205,42 +245,54 @@ public class PingClient {
     }
 
     public PingTarget getPingTarget() {
+
         return this.pingTarget;
     }
 
-    public ProtocolMessage sendSynched(ProtocolMessage msg, long timeout) throws InterruptedException, TimeoutException {
+    public ProtocolMessage sendSynched(final ProtocolMessage msg, final long timeout)
+        throws InterruptedException, TimeoutException {
+
         if (!this.online.get()) {
-            throw new IllegalArgumentException("Transport is offline " + this.pingTarget + ", failed to send " + msg.toString(100));
+            throw new IllegalArgumentException("Transport is offline "
+                                               + this.pingTarget
+                                               + ", failed to send "
+                                               + msg.toString(100));
         } else {
-            String requestId = UUID.randomUUID().toString().intern();
+            final String requestId = UUID.randomUUID().toString().intern();
             msg.setRequestId(requestId);
             this.syncRequestsMap.put(requestId, msg);
             this.channel.writeAndFlush(msg);
-            synchronized(requestId) {
+            synchronized (requestId) {
                 requestId.wait(timeout);
             }
 
-            ProtocolMessage response = (ProtocolMessage)this.syncResponsesMap.remove(requestId);
+            final ProtocolMessage response = this.syncResponsesMap.remove(requestId);
             if (response != null) {
-                response.setRequestId((String)null);
+                response.setRequestId(null);
                 return response;
             } else if (!this.online.get()) {
-                throw new IllegalStateException("Transport " + this.pingTarget + " is offline, failed to receive answer for " + msg.toString(100));
+                throw new IllegalStateException(String.format("Transport %s is offline, failed to receive answer for "
+                                                              + "%s",
+                                                              this.pingTarget,
+                                                              msg.toString(100)));
             } else {
-                throw new TimeoutException("Response from server " + this.pingTarget + " timed out within " + timeout + " ms, on " + msg.toString(100));
+                throw new TimeoutException(String.format("Response from server %s timed out within %d ms, on %s",
+                                                         this.pingTarget,
+                                                         timeout,
+                                                         msg.toString(100)));
             }
         }
     }
 
     private void releaseAllWaiters() {
-        Iterator i$ = this.syncRequestsMap.keySet().iterator();
 
-        while(i$.hasNext()) {
-            String requestId = (String)i$.next();
-            synchronized(requestId) {
+
+        this.syncRequestsMap.forEach((requestId, protocolMessage) -> {
+            synchronized (requestId) {
                 requestId.notifyAll();
             }
-        }
+        });
+
 
         this.syncRequestsMap.clear();
     }

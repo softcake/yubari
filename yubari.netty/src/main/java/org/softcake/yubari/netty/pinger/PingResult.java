@@ -22,7 +22,7 @@ public class PingResult {
     private final Long pingTime;
     private final Throwable error;
 
-    public PingResult(Long pingTime, Throwable error) {
+    public PingResult(final Long pingTime, final Throwable error) {
         this.pingTime = pingTime;
         this.error = error;
     }
@@ -36,42 +36,23 @@ public class PingResult {
     }
 
     @Override
+    public boolean equals(final Object o) {
+
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        final PingResult that = (PingResult) o;
+        return Objects.equal(pingTime, that.pingTime) &&
+               Objects.equal(error, that.error);
+    }
+
+    @Override
     public int hashCode() {
 
         return Objects.hashCode(pingTime, error);
     }
 
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        } else if (obj == null) {
-            return false;
-        } else if (this.getClass() != obj.getClass()) {
-            return false;
-        } else {
-            PingResult other = (PingResult)obj;
-            if (this.error == null) {
-                if (other.error != null) {
-                    return false;
-                }
-            } else if (!this.error.equals(other.error)) {
-                return false;
-            }
-
-            if (this.pingTime == null) {
-                if (other.pingTime != null) {
-                    return false;
-                }
-            } else if (!this.pingTime.equals(other.pingTime)) {
-                return false;
-            }
-
-            return true;
-        }
-    }
-
     public String toString() {
-        StringBuilder builder = new StringBuilder();
+        final StringBuilder builder = new StringBuilder();
         builder.append("PingResult [");
         if (this.pingTime != null) {
             builder.append("pingTime=");

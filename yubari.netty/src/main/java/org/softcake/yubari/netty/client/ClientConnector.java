@@ -16,12 +16,13 @@
 
 package org.softcake.yubari.netty.client;
 
+import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
+
 import org.softcake.yubari.netty.AuthorizationProviderListener;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
-import org.softcake.yubari.netty.mina.IoSessionWrapper;
 import org.softcake.yubari.netty.mina.MessageSentListener;
 import org.softcake.yubari.netty.mina.RequestListenableFuture;
 
@@ -129,7 +130,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                                                                         ChannelAttachment attachment) {
 
         final Channel channel = connectFuture.channel();
-        channel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY)
+        channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY)
                .set(attachment);
 
         return channel;
@@ -599,7 +600,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
             && this.clientSession.getPrimaryConnectionPingTimeout() > 0L) {
 
             final ChannelAttachment primAttachment
-                = this.primaryChannel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
+                = this.primaryChannel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
 
             final boolean needToPing = needToPing(System.currentTimeMillis(),
                                                   primAttachment,
@@ -620,7 +621,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                 && this.clientSession.getSecondaryConnectionPingTimeout() > 0L) {
                 final Attribute<ChannelAttachment>
                     attribute
-                    = this.childChannel.attr(ChannelAttachment.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+                    = this.childChannel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
                 final ChannelAttachment secAttachment = attribute.get();
                 final boolean needToPing = needToPing(System.currentTimeMillis(),
                                                       secAttachment,
