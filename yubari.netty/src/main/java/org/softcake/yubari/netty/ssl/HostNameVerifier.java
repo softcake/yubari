@@ -58,21 +58,21 @@ public class HostNameVerifier implements HostnameVerifier {
 
     public static boolean acceptableCountryWildcard(final String cn) {
 
-        int cnLen = cn.length();
+        final int cnLen = cn.length();
         if (cnLen >= 7 && cnLen <= 9 && cn.charAt(cnLen - 3) == '.') {
-            String s = cn.substring(2, cnLen - 3);
-            int x = Arrays.binarySearch(BAD_COUNTRY_2LDS, s);
+            final String s = cn.substring(2, cnLen - 3);
+            final int x = Arrays.binarySearch(BAD_COUNTRY_2LDS, s);
             return x < 0;
         } else {
             return true;
         }
     }
 
-    public static boolean isIP4Address(String cn) {
+    public static boolean isIP4Address(final String cn) {
 
         boolean isIP4 = true;
         String tld = cn;
-        int x = cn.lastIndexOf('.');
+        final int x = cn.lastIndexOf('.');
         if (x >= 0 && x + 1 < cn.length()) {
             tld = cn.substring(x + 1);
         }
@@ -87,14 +87,14 @@ public class HostNameVerifier implements HostnameVerifier {
         return isIP4;
     }
 
-    public static String[] getDNSSubjectAlts(X509Certificate cert) {
+    public static String[] getDNSSubjectAlts(final X509Certificate cert) {
 
-        LinkedList<String> subjectAltList = new LinkedList<>();
+        final LinkedList<String> subjectAltList = new LinkedList<>();
         Collection<List<?>> subjectAlternativeNames = null;
 
         try {
             subjectAlternativeNames = cert.getSubjectAlternativeNames();
-        } catch (CertificateParsingException var7) {
+        } catch (final CertificateParsingException var7) {
             LOGGER.error(var7.getMessage(), var7);
 
         }
@@ -102,9 +102,9 @@ public class HostNameVerifier implements HostnameVerifier {
         if (subjectAlternativeNames != null) {
 
             for (final List<?> name : subjectAlternativeNames) {
-                int type = (Integer) name.get(0);
+                final int type = (Integer) name.get(0);
                 if (type == 2) {
-                    String s = (String) name.get(1);
+                    final String s = (String) name.get(1);
                     subjectAltList.add(s);
                 }
             }
@@ -114,34 +114,34 @@ public class HostNameVerifier implements HostnameVerifier {
 
     }
 
-    public boolean verify(String host, SSLSession session) {
+    public boolean verify(final String host, final SSLSession session) {
 
         try {
-            Certificate[] certs = session.getPeerCertificates();
-            X509Certificate x509 = (X509Certificate) certs[0];
+            final Certificate[] certs = session.getPeerCertificates();
+            final X509Certificate x509 = (X509Certificate) certs[0];
             this.check(new String[]{host}, x509);
             return true;
-        } catch (SSLException e) {
+        } catch (final SSLException e) {
             LOGGER.error("Verification failed: ", e);
             return false;
         }
     }
 
-    public void check(String[] host, X509Certificate cert) throws SSLException {
+    public void check(final String[] host, final X509Certificate cert) throws SSLException {
 
         this.check(host, this.getCNs(cert), getDNSSubjectAlts(cert));
     }
 
-    public String getCN(X509Certificate cert) {
+    public String getCN(final X509Certificate cert) {
 
-        String[] cns = this.getCNs(cert);
+        final String[] cns = this.getCNs(cert);
         return cns != null && cns.length >= 1 ? cns[0] : null;
     }
 
-    public void check(String[] hosts, String[] cns, String[] subjectAlts) throws SSLException {
+    public void check(final String[] hosts, final String[] cns, final String[] subjectAlts) throws SSLException {
 
 
-        TreeSet<String> names = new TreeSet<>();
+        final TreeSet<String> names = new TreeSet<>();
         if (cns != null && cns.length > 0 && cns[0] != null) {
             names.add(cns[0]);
         }
@@ -155,11 +155,11 @@ public class HostNameVerifier implements HostnameVerifier {
         }
 
         if (names.isEmpty()) {
-            String msg = "Certificate for " + hosts[0] + " doesn't contain CN or DNS subjectAlt";
+            final String msg = "Certificate for " + hosts[0] + " doesn't contain CN or DNS subjectAlt";
             throw new SSLException(msg);
         }
 
-        StringBuilder buf = new StringBuilder(32);
+        final StringBuilder buf = new StringBuilder(32);
         boolean match = false;
 
         for (String cn : names) {
@@ -170,13 +170,13 @@ public class HostNameVerifier implements HostnameVerifier {
             if (!names.last().equals(cn)) {
                 buf.append(" OR");
             }
-            boolean doWildcard = cn.startsWith("*.")
-                                 && cn.lastIndexOf(46) >= 0
-                                 && !isIP4Address(cn)
-                                 && acceptableCountryWildcard(cn);
+            final boolean doWildcard = cn.startsWith("*.")
+                                       && cn.lastIndexOf(46) >= 0
+                                       && !isIP4Address(cn)
+                                       && acceptableCountryWildcard(cn);
 
-            for (int i = 0; i < hosts.length; ++i) {
-                String hostName = hosts[i].trim().toLowerCase();
+            for (final String host : hosts) {
+                final String hostName = host.trim().toLowerCase();
                 if (doWildcard) {
                     match = hostName.endsWith(cn.substring(1));
                 } else {
@@ -201,7 +201,7 @@ public class HostNameVerifier implements HostnameVerifier {
 
     private String getHostNames(final String[] hosts) {
 
-        StringBuilder buf = new StringBuilder(32);
+        final StringBuilder buf = new StringBuilder(32);
         buf.append('<');
 
         for (int i = 0; i < hosts.length; ++i) {
@@ -220,20 +220,20 @@ public class HostNameVerifier implements HostnameVerifier {
         return buf.toString();
     }
 
-    public String[] getCNs(X509Certificate cert) {
+    public String[] getCNs(final X509Certificate cert) {
 
-        LinkedList<String> cnList = new LinkedList<>();
-        String subjectPrincipal = cert.getSubjectX500Principal().toString();
-        StringTokenizer st = new StringTokenizer(subjectPrincipal, ",");
+        final LinkedList<String> cnList = new LinkedList<>();
+        final String subjectPrincipal = cert.getSubjectX500Principal().toString();
+        final StringTokenizer st = new StringTokenizer(subjectPrincipal, ",");
 
         while (st.hasMoreTokens()) {
-            String tok = st.nextToken();
-            int x = tok.indexOf("CN=");
+            final String tok = st.nextToken();
+            final int x = tok.indexOf("CN=");
             if (x >= 0) {
                 cnList.add(tok.substring(x + 3));
             }
         }
 
-        return cnList.toArray(new String[cnList.size()]);
+        return cnList.toArray(new String[0]);
     }
 }

@@ -32,15 +32,13 @@ import java.security.Security;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
 
 public final class SSLContextFactory {
     private static final String KEYSTORE_PASSFILE = "keystore.passfile";
     private static final String SSL_KEY_MANAGER_FACTORY_ALGORITHM = "ssl.KeyManagerFactory.algorithm";
     private static final Logger LOGGER = LoggerFactory.getLogger(SSLContextFactory.class);
     private static final String PROTOCOL = "SSL";
-    private static final String KEY_MANAGER_FACTORY_ALGORITHM;
+    public static final String KEY_MANAGER_FACTORY_ALGORITHM;
     private static final String KEYSTORE = "dukascopy.cert";
     private static char[] pass;
     private static SSLContext serverInstance;
@@ -87,7 +85,7 @@ public final class SSLContextFactory {
                                          TrustSubject trustSubject,
                                          String pathToCertificate) throws GeneralSecurityException, IOException {
 
-        SSLContext retInstance;
+        final SSLContext retInstance;
 
         if (server) {
             retInstance = getSeverInstance(pathToCertificate);
@@ -204,13 +202,21 @@ public final class SSLContextFactory {
                                                      String targetHost,
                                                      TrustSubject trustSubject) throws GeneralSecurityException {
 
-        SSLContext context = SSLContext.getInstance(PROTOCOL);
-        TrustManagerFactory factory = TrustManagerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
-        factory.init((KeyStore) null);
-        X509TrustManager manager = (X509TrustManager) factory.getTrustManagers()[0];
-        DDSTrustManager mg = new DDSTrustManager(listener, manager, trustSubject);
-        mg.setHostName(targetHost);
-        context.init(null, new TrustManager[]{mg}, null);
+       SSLContext context = SSLContext.getInstance(PROTOCOL);
+
+        //TrustManagerFactory factory = TrustManagerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
+//        TrustManagerFactory instance =  DukasTrustMangerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
+//        instance.init((KeyStore) null);
+//        X509TrustManager manager = (X509TrustManager) factory.getTrustManagers()[0];
+//        DDSTrustManager mg = new DDSTrustManager(listener, manager, trustSubject);
+//        mg.setHostName(targetHost);
+
+
+
+        DukasTrustMangerFactory dukasTrustMangerFactory = new DukasTrustMangerFactory();
+        TrustManager[] trustManagers = dukasTrustMangerFactory.getTrustManagers();
+
+        context.init(null, trustManagers, null);
         return context;
     }
 

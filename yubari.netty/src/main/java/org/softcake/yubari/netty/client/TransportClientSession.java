@@ -65,10 +65,7 @@ import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -358,35 +355,15 @@ public class TransportClientSession implements ClientSSLContextListener {
                     final SSLEngine engine = SSLContextFactory.getInstance(false,
                                                                            TransportClientSession.this,
                                                                            address.getHostName()).createSSLEngine();
+                   /* SSLContext sslcontext = SSLContext.getInstance("TLS");
+                    JdkSslContext jdkSslContext = new JdkSslContext(sslcontext,false, null);*/
+
                     engine.setUseClientMode(true);
-                    engine.setEnabledProtocols(sslProtocols.toArray(new String[sslProtocols.size()]));
-                    final List<String>
-                        enabledCipherSuites
-                        = new ArrayList<>(Arrays.asList(engine.getSupportedCipherSuites()));
-                  //  analyzeCipher(pipeline, engine, enabledCipherSuites);
-                    final Iterator iterator = enabledCipherSuites.iterator();
+                    engine.setEnabledProtocols(sslProtocols.toArray(new String[0]));
+                    engine.setEnabledCipherSuites(cleanUpCipherSuites(engine.getSupportedCipherSuites()));
+                    pipeline.addLast("ssl", new SslHandler(engine));
 
-                    label36:
-                    while (true) {
-                        String cipher;
-                        do {
-                            if (!iterator.hasNext()) {
-                                engine.setEnabledCipherSuites(enabledCipherSuites.toArray(new String[enabledCipherSuites
-                                    .size()]));
-                                pipeline.addLast("ssl", new SslHandler(engine));
-                                break label36;
-                            }
 
-                            cipher = (String) iterator.next();
-                            LOGGER.info(cipher) ;
-                        } while (!cipher.toUpperCase().contains("EXPORT")
-                                 && !cipher.toUpperCase().contains("NULL")
-                                 && !cipher.toUpperCase().contains("ANON")
-                                 && !cipher.toUpperCase().contains("_DES_")
-                                 && !cipher.toUpperCase().contains("MD5"));
-
-                        iterator.remove();
-                    }
                 }
 
                 pipeline.addLast("protocol_version_negotiator", protocolVersionClientNegotiatorHandler);
@@ -407,32 +384,23 @@ public class TransportClientSession implements ClientSSLContextListener {
         this.clientConnector.start();
     }
 
-    private void analyzeCipher(final ChannelPipeline pipeline,
-                               final SSLEngine engine,
-                               final List<String> enabledCipherSuites) {
+    private String[] cleanUpCipherSuites(final String[] enabledCipherSuites) {
 
-        final Iterator iterator = enabledCipherSuites.iterator();
+        return Arrays.stream(enabledCipherSuites).filter(cipher -> !cipher.toUpperCase()
+                                                                                     .contains("EXPORT")
+                                                                              && !cipher.toUpperCase()
+                                                                                            .contains("NULL")
+                                                                              && !cipher.toUpperCase()
+                                                                                            .contains("ANON")
+                                                                              && !cipher.toUpperCase()
+                                                                                            .contains("_DES_")
+                                                                              && !cipher.toUpperCase()
+                                                                                            .contains("MD5")).toArray(String[]::new);
 
-        while (true) {
-            String cipher;
-            do {
-                if (!iterator.hasNext()) {
-                    engine.setEnabledCipherSuites(enabledCipherSuites.toArray(new String[enabledCipherSuites.size()]));
-                    pipeline.addLast("ssl", new SslHandler(engine));
-                    return;
-                }
 
-                cipher = (String) iterator.next();
-
-            } while (!cipher.toUpperCase().contains("EXPORT")
-                     && !cipher.toUpperCase().contains("NULL")
-                     && !cipher.toUpperCase().contains("ANON")
-                     && !cipher.toUpperCase().contains("_DES_")
-                     && !cipher.toUpperCase().contains("MD5"));
-
-            iterator.remove();
-        }
     }
+
+
 
     public void connect() {
 
