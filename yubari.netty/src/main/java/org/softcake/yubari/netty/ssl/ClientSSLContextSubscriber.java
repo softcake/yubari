@@ -16,9 +16,13 @@
 
 package org.softcake.yubari.netty.ssl;
 
-public enum TrustSubject {
-    ANDROID;
+import org.softcake.yubari.netty.ssl.SecurityExceptionEvent;
 
-    TrustSubject() {
-    }
+import io.reactivex.Observable;
+
+/**
+ * @author René Neubert
+ */
+public interface ClientSSLContextSubscriber {
+    void subscribe(Observable<SecurityExceptionEvent> event);
 }

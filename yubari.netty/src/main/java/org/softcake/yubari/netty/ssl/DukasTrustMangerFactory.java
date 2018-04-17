@@ -17,8 +17,6 @@
 package org.softcake.yubari.netty.ssl;
 
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.security.KeyStore;
 
@@ -27,15 +25,14 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 public final class DukasTrustMangerFactory extends SimpleTrustManagerFactory {
-    private static final Logger LOGGER = LoggerFactory.getLogger(DDSTrustManager.class);
 
-    private X509TrustManager sunX509TrustManager;
-    private ClientSSLContextListener listener;
-    private HostNameVerifier verifier;
-    private String hostName;
+    private final TrustManager tm;
+    public DukasTrustMangerFactory(final ClientSSLContextSubscriber listener,
+                                   final X509TrustManager sunX509TrustManager,
+                                   final String hostName) {
 
-
-    private final TrustManager tm = new DDSTrustManager(null,null,null);
+        tm = new DukasTrustManager(listener, sunX509TrustManager, hostName);
+    }
 
     @Override
     protected void engineInit(final KeyStore keyStore) throws Exception {
@@ -50,6 +47,6 @@ public final class DukasTrustMangerFactory extends SimpleTrustManagerFactory {
     @Override
     public TrustManager[] engineGetTrustManagers() {
 
-        return new TrustManager[] { tm };
+        return new TrustManager[]{tm};
     }
 }

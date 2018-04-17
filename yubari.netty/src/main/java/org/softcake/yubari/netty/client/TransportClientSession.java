@@ -32,7 +32,7 @@ import org.softcake.yubari.netty.mina.IoSessionWrapper;
 import org.softcake.yubari.netty.mina.MessageSentListener;
 import org.softcake.yubari.netty.mina.RequestListenableFuture;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
-import org.softcake.yubari.netty.ssl.ClientSSLContextListener;
+import org.softcake.yubari.netty.ssl.ClientSSLContextSubscriber;
 import org.softcake.yubari.netty.ssl.SSLContextFactory;
 import org.softcake.yubari.netty.stream.StreamListener;
 
@@ -63,8 +63,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
@@ -83,7 +81,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.net.ssl.SSLEngine;
 
-public class TransportClientSession implements ClientSSLContextListener {
+public class TransportClientSession {
     private static final Logger LOGGER = LoggerFactory.getLogger(TransportClientSession.class);
     private final TransportClient transportClient;
     private final InetSocketAddress address;
@@ -158,8 +156,7 @@ public class TransportClientSession implements ClientSSLContextListener {
     private final Set<String> enabledSslProtocols;
     private boolean skipDroppableMessages;
     private Bootstrap channelBootstrap;
-    private ProtocolVersionClientNegotiatorHandler
-        protocolVersionClientNegotiatorHandler;
+    private ProtocolVersionClientNegotiatorHandler protocolVersionClientNegotiatorHandler;
     private ClientProtocolHandler protocolHandler;
     private ClientConnector clientConnector;
     private ScheduledExecutorService scheduledExecutorService;
@@ -342,7 +339,10 @@ public class TransportClientSession implements ClientSSLContextListener {
         this.channelBootstrap.group(nettyEventLoopGroup);
         this.channelBootstrap.channel(NioSocketChannel.class);
         this.channelOptions.forEach((key, value) -> this.channelBootstrap.option((ChannelOption) key, value));
-
+        final ClientSSLContextSubscriber subscriber
+            = event -> event.subscribe(e -> clientConnector.securityException(e.getCertificateChain(),
+                                                                              e.getAuthenticationType(),
+                                                                              e.getException()));
 
         this.channelBootstrap.handler(new ChannelInitializer<SocketChannel>() {
             protected void initChannel(final SocketChannel ch) throws Exception {
@@ -352,11 +352,9 @@ public class TransportClientSession implements ClientSSLContextListener {
                     final Set<String> sslProtocols = enabledSslProtocols == null || enabledSslProtocols.isEmpty()
                                                      ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS
                                                      : enabledSslProtocols;
-                    final SSLEngine engine = SSLContextFactory.getInstance(false,
-                                                                           TransportClientSession.this,
-                                                                           address.getHostName()).createSSLEngine();
-                   /* SSLContext sslcontext = SSLContext.getInstance("TLS");
-                    JdkSslContext jdkSslContext = new JdkSslContext(sslcontext,false, null);*/
+                    final SSLEngine engine = SSLContextFactory.getInstance(false, subscriber, address.getHostName())
+                                                              .createSSLEngine();
+
 
                     engine.setUseClientMode(true);
                     engine.setEnabledProtocols(sslProtocols.toArray(new String[0]));
@@ -375,6 +373,7 @@ public class TransportClientSession implements ClientSSLContextListener {
                 pipeline.addLast("handler", protocolHandler);
             }
         });
+
         this.clientConnector = new ClientConnector(this.address,
                                                    this.channelBootstrap,
                                                    this,
@@ -386,20 +385,15 @@ public class TransportClientSession implements ClientSSLContextListener {
 
     private String[] cleanUpCipherSuites(final String[] enabledCipherSuites) {
 
-        return Arrays.stream(enabledCipherSuites).filter(cipher -> !cipher.toUpperCase()
-                                                                                     .contains("EXPORT")
-                                                                              && !cipher.toUpperCase()
-                                                                                            .contains("NULL")
-                                                                              && !cipher.toUpperCase()
-                                                                                            .contains("ANON")
-                                                                              && !cipher.toUpperCase()
-                                                                                            .contains("_DES_")
-                                                                              && !cipher.toUpperCase()
-                                                                                            .contains("MD5")).toArray(String[]::new);
+        return Arrays.stream(enabledCipherSuites).filter(cipher -> !cipher.toUpperCase().contains("EXPORT")
+                                                                   && !cipher.toUpperCase().contains("NULL")
+                                                                   && !cipher.toUpperCase().contains("ANON")
+                                                                   && !cipher.toUpperCase().contains("_DES_")
+                                                                   && !cipher.toUpperCase().contains("MD5")).toArray(
+            String[]::new);
 
 
     }
-
 
 
     public void connect() {
@@ -558,13 +552,6 @@ public class TransportClientSession implements ClientSSLContextListener {
         }
     }
 
-
-    public void securityException(final X509Certificate[] chain,
-                                  final String authType,
-                                  final CertificateException certificateException) {
-
-        this.clientConnector.securityException(chain, authType, certificateException);
-    }
 
     public IoSessionWrapper getIoSessionWrapper() {
 

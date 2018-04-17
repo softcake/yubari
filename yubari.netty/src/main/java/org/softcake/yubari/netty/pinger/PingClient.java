@@ -19,7 +19,6 @@ package org.softcake.yubari.netty.pinger;
 import org.softcake.yubari.netty.ProtocolEncoderDecoder;
 import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
 import org.softcake.yubari.netty.client.TransportClientBuilder;
-import org.softcake.yubari.netty.ssl.ClientSSLContextListener;
 import org.softcake.yubari.netty.ssl.SSLContextFactory;
 
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
@@ -41,8 +40,6 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslHandler;
 
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -61,12 +58,12 @@ public class PingClient {
     private final ProtocolEncoderDecoder protocolEncoderDecoder;
     private final int maxMessageSizeBytes;
     private final ProtocolVersionClientNegotiatorHandler protocolVersionClientNegotiatorHandler;
-    private Channel channel;
-    private Bootstrap channelBootstrap;
     private final Map<String, ProtocolMessage> syncRequestsMap = new ConcurrentHashMap<>();
     private final Map<String, ProtocolMessage> syncResponsesMap = new ConcurrentHashMap<>();
     private final AtomicBoolean online = new AtomicBoolean(false);
     private final IPingClientListener clientListener;
+    private Channel channel;
+    private Bootstrap channelBootstrap;
 
     public PingClient(final PingTarget pingTarget,
                       final AbstractStaticSessionDictionary staticSessionDictionary,
@@ -119,21 +116,17 @@ public class PingClient {
 
                     final ChannelPipeline pipeline = ch.pipeline();
                     if (PingClient.this.pingTarget.isUseSsl()) {
-                        final SSLEngine engine = SSLContextFactory.getInstance(false, new ClientSSLContextListener() {
-                            public void securityException(final X509Certificate[] chain,
-                                                          final String authType,
-                                                          final CertificateException certificateException) {
+                        final SSLEngine engine = SSLContextFactory.getInstance(false, event -> event.subscribe(e -> {
 
-                                PingClient.this.disconnect(DisconnectReason.CERTIFICATE_EXCEPTION,
-                                                           certificateException);
-                            }
-                        }, PingClient.this.pingTarget.getAddress().getHostName()).createSSLEngine();
+                            disconnect(DisconnectReason.CERTIFICATE_EXCEPTION, e.getException());
+                        }), pingTarget.getAddress().getHostName()).createSSLEngine();
                         final Set<String> sslProtocols = PingClient.this.pingTarget.getEnabledSslProtocols().isEmpty()
                                                          ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS
                                                          : PingClient.this.pingTarget.getEnabledSslProtocols();
                         engine.setUseClientMode(true);
                         engine.setEnabledProtocols(sslProtocols.toArray(new String[0]));
-                        final List<String> enabledCipherSuites
+                        final List<String>
+                            enabledCipherSuites
                             = new ArrayList<>(Arrays.asList(engine.getSupportedCipherSuites()));
                         final Iterator iterator = enabledCipherSuites.iterator();
 
@@ -272,9 +265,7 @@ public class PingClient {
                 return response;
             } else if (!this.online.get()) {
                 throw new IllegalStateException(String.format("Transport %s is offline, failed to receive answer for "
-                                                              + "%s",
-                                                              this.pingTarget,
-                                                              msg.toString(100)));
+                                                              + "%s", this.pingTarget, msg.toString(100)));
             } else {
                 throw new TimeoutException(String.format("Response from server %s timed out within %d ms, on %s",
                                                          this.pingTarget,

@@ -26,29 +26,34 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.security.GeneralSecurityException;
+import java.security.KeyManagementException;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.Security;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 public final class SSLContextFactory {
+    public static final String KEY_MANAGER_FACTORY_ALGORITHM;
     private static final String KEYSTORE_PASSFILE = "keystore.passfile";
-    private static final String SSL_KEY_MANAGER_FACTORY_ALGORITHM = "ssl.KeyManagerFactory.algorithm";
     private static final Logger LOGGER = LoggerFactory.getLogger(SSLContextFactory.class);
     private static final String PROTOCOL = "SSL";
-    public static final String KEY_MANAGER_FACTORY_ALGORITHM;
     private static final String KEYSTORE = "dukascopy.cert";
+    private static final Object MUTEX = new Object();
     private static char[] pass;
     private static SSLContext serverInstance;
     private static SSLContext clientInstance;
-    private static String clientTargetHost;
-    private static ClientSSLContextListener clientListener;
-    private static Object mutex = new Object();
 
     static {
-        String algorithm = Security.getProperty(SSL_KEY_MANAGER_FACTORY_ALGORITHM);
+        String algorithm = Security.getProperty("ssl.KeyManagerFactory.algorithm");
         if (algorithm == null) {
             algorithm = "SunX509";
         }
@@ -65,67 +70,55 @@ public final class SSLContextFactory {
         throw new IllegalAccessError("Utility class");
     }
 
-    public static SSLContext getInstance(boolean server, ClientSSLContextListener listener, String targetHost)
-        throws GeneralSecurityException, IOException {
+
+
+    public static SSLContext getInstance(final boolean server,
+                                         final ClientSSLContextSubscriber listener,
+                                         final String targetHost) throws SSLException {
 
         return getInstance(server, listener, targetHost, null);
     }
 
-    public static SSLContext getInstance(boolean server,
-                                         ClientSSLContextListener listener,
-                                         String targetHost,
-                                         TrustSubject trustSubject) throws GeneralSecurityException, IOException {
-
-        return getInstance(server, listener, targetHost, trustSubject, null);
-    }
-
-    public static SSLContext getInstance(boolean server,
-                                         ClientSSLContextListener listener,
-                                         String targetHost,
-                                         TrustSubject trustSubject,
-                                         String pathToCertificate) throws GeneralSecurityException, IOException {
+    public static SSLContext getInstance(final boolean server,
+                                         final ClientSSLContextSubscriber listener,
+                                         final String targetHost,
+                                         final String pathToCertificate) throws SSLException {
 
         final SSLContext retInstance;
 
         if (server) {
-            retInstance = getSeverInstance(pathToCertificate);
+            retInstance = getServerInstance(pathToCertificate);
 
         } else {
-            retInstance = getClientInstance(listener, targetHost, trustSubject);
+            retInstance = getClientInstance(listener, targetHost);
 
         }
 
         return retInstance;
     }
 
-    private static SSLContext getClientInstance(final ClientSSLContextListener listener,
-                                                final String targetHost,
-                                                final TrustSubject trustSubject) throws GeneralSecurityException {
+    private static SSLContext getClientInstance(final ClientSSLContextSubscriber listener, final String targetHost)
+        throws SSLException {
 
         SSLContext retInstance = clientInstance;
         if (retInstance == null) {
-            synchronized (mutex) {
+            synchronized (MUTEX) {
                 retInstance = clientInstance;
-                if ((retInstance == null)
-                    || ((clientTargetHost != null) && !clientTargetHost.equals(targetHost))
-                    || ((clientListener != null) && !clientListener.equals(listener))) {
+                if (retInstance == null) {
 
-                    retInstance = createClientSSLContext(listener, targetHost, trustSubject);
+                    retInstance = createClientSSLContext(listener, targetHost);
                     clientInstance = retInstance;
-                    clientTargetHost = targetHost;
-                    clientListener = listener;
                 }
             }
         }
         return retInstance;
     }
 
-    private static SSLContext getSeverInstance(final String pathToCertificate)
-        throws GeneralSecurityException, IOException {
+    private static SSLContext getServerInstance(final String pathToCertificate) throws SSLException {
 
         SSLContext retInstance = serverInstance;
         if (retInstance == null) {
-            synchronized (mutex) {
+            synchronized (MUTEX) {
                 retInstance = serverInstance;
                 if (retInstance == null) {
 
@@ -138,26 +131,40 @@ public final class SSLContextFactory {
         return retInstance;
     }
 
-    private static SSLContext createServerSSLContext(String pathToCertificate)
-        throws GeneralSecurityException, IOException {
+    /**
+     * Creates a new server-side {@link SSLContext}.
+     *
+     * @param pathToCertificate path to an X.509 certificate chain file
+     *
+     * @return the JDK {@link SSLContext} for server object.
+     * @throws SSLException
+     */
+    private static SSLContext createServerSSLContext(final String pathToCertificate) throws SSLException {
 
-        KeyStore ks = KeyStore.getInstance("JKS");
-        readStorePass();
 
-        try (InputStream in = pathToCertificate == null ? SSLContextFactory.class.getClassLoader().getResourceAsStream(
-            KEYSTORE) : new FileInputStream(new File(pathToCertificate))) {
-
+        try (final InputStream in = pathToCertificate == null
+                                    ? SSLContextFactory.class.getClassLoader()
+                                                             .getResourceAsStream(KEYSTORE)
+                                    : new FileInputStream(new File(pathToCertificate))) {
+            final KeyStore ks = KeyStore.getInstance("JKS");
+            readStorePass();
             if (in == null) {
                 throw new IOException("SSL CERTIFICATE NOT FOUND");
             }
-            ks.load(in, pass);
-        }
 
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
-        kmf.init(ks, pass);
-        SSLContext sslContext = SSLContext.getInstance(PROTOCOL);
-        sslContext.init(kmf.getKeyManagers(), null, null);
-        return sslContext;
+            ks.load(in, pass);
+            final KeyManagerFactory kmf = KeyManagerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
+            kmf.init(ks, pass);
+            final SSLContext sslContext = SSLContext.getInstance(PROTOCOL);
+            sslContext.init(kmf.getKeyManagers(), null, null);
+            return sslContext;
+
+        } catch (GeneralSecurityException | IOException e) {
+            if (e instanceof SSLException) {
+                throw (SSLException) e;
+            }
+            throw new SSLException("failed to initialize the server-side SSL context", e);
+        }
     }
 
     private static void readStorePass() throws IOException {
@@ -166,16 +173,16 @@ public final class SSLContextFactory {
             LOGGER.info("Found keystore pass file name in VM properties: {}", System.getProperty(KEYSTORE_PASSFILE));
 
 
-            try (InputStream storePass = SSLContextFactory.class.getClassLoader()
-                                                                .getResourceAsStream(System.getProperty(
-                                                                    KEYSTORE_PASSFILE))) {
+            try (final InputStream storePass = SSLContextFactory.class.getClassLoader()
+                                                                      .getResourceAsStream(System.getProperty(
+                                                                          KEYSTORE_PASSFILE))) {
                 if (storePass == null) {
                     LOGGER.info("Store pass file not found: {}", System.getProperty(KEYSTORE_PASSFILE));
                     return;
                 }
 
 
-                try (BufferedReader br = new BufferedReader(new InputStreamReader(storePass))) {
+                try (final BufferedReader br = new BufferedReader(new InputStreamReader(storePass))) {
                     String line = br.readLine();
 
                     while (line != null) {
@@ -198,26 +205,42 @@ public final class SSLContextFactory {
 
     }
 
-    private static SSLContext createClientSSLContext(ClientSSLContextListener listener,
-                                                     String targetHost,
-                                                     TrustSubject trustSubject) throws GeneralSecurityException {
+    private static TrustManagerFactory buildTrustManagerFactory(TrustManagerFactory trustManagerFactory)
+        throws NoSuchAlgorithmException, KeyStoreException {
 
-       SSLContext context = SSLContext.getInstance(PROTOCOL);
+        // Set up trust manager factory to use our key store.
+        if (trustManagerFactory == null) {
+            trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        }
+        trustManagerFactory.init((KeyStore)null);
 
-        //TrustManagerFactory factory = TrustManagerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
-//        TrustManagerFactory instance =  DukasTrustMangerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
-//        instance.init((KeyStore) null);
-//        X509TrustManager manager = (X509TrustManager) factory.getTrustManagers()[0];
-//        DDSTrustManager mg = new DDSTrustManager(listener, manager, trustSubject);
-//        mg.setHostName(targetHost);
+        return trustManagerFactory;
+    }
 
+    private static SSLContext createClientSSLContext(final ClientSSLContextSubscriber listener, final String targetHost)
+        throws SSLException {
 
+        try {
 
-        DukasTrustMangerFactory dukasTrustMangerFactory = new DukasTrustMangerFactory();
-        TrustManager[] trustManagers = dukasTrustMangerFactory.getTrustManagers();
+            final SSLContext context = SSLContext.getInstance(PROTOCOL);
+            final TrustManagerFactory factory = buildTrustManagerFactory(TrustManagerFactory.getInstance(
+                KEY_MANAGER_FACTORY_ALGORITHM));
 
-        context.init(null, trustManagers, null);
-        return context;
+            final X509TrustManager x509TrustManager = (X509TrustManager) factory.getTrustManagers()[0];
+            final DukasTrustMangerFactory mangerFactory = new DukasTrustMangerFactory(listener,
+                                                                                      x509TrustManager,
+                                                                                      targetHost);
+            final TrustManager[] trustManagers = mangerFactory.getTrustManagers();
+
+            context.init(null, trustManagers, null);
+            return context;
+        } catch (Exception e) {
+            if (e instanceof SSLException) {
+                throw (SSLException) e;
+            }
+            throw new SSLException("failed to initialize the client-side SSL context", e);
+        }
+
     }
 
 
