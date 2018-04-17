@@ -37,16 +37,16 @@ public class ApiServerAddress extends ServerAddress {
     public boolean equals(final Object o) {
 
         if (this == o) { return true; }
-        if (!(o instanceof ApiServerAddress)) { return false; }
+        if (o == null || getClass() != o.getClass()) { return false; }
         if (!super.equals(o)) { return false; }
         final ApiServerAddress that = (ApiServerAddress) o;
-        return Objects.equal(ticket, that.ticket);
+        return java.util.Objects.equals(ticket, that.ticket);
     }
 
     @Override
     public int hashCode() {
 
-        return Objects.hashCode(super.hashCode(), ticket);
+        return java.util.Objects.hash(super.hashCode(), ticket);
     }
 
     @Override

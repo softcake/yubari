@@ -26,13 +26,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.security.GeneralSecurityException;
-import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Security;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.CertificateException;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -227,17 +224,11 @@ public final class SSLContextFactory {
                 KEY_MANAGER_FACTORY_ALGORITHM));
 
             final X509TrustManager x509TrustManager = (X509TrustManager) factory.getTrustManagers()[0];
-            final DukasTrustMangerFactory mangerFactory = new DukasTrustMangerFactory(listener,
-                                                                                      x509TrustManager,
-                                                                                      targetHost);
-            final TrustManager[] trustManagers = mangerFactory.getTrustManagers();
-
-            context.init(null, trustManagers, null);
+            final DukasTrustManager trustManager = new DukasTrustManager(listener, x509TrustManager, targetHost);
+            context.init(null, new TrustManager[]{trustManager}, null);
             return context;
-        } catch (Exception e) {
-            if (e instanceof SSLException) {
-                throw (SSLException) e;
-            }
+        } catch (GeneralSecurityException e) {
+
             throw new SSLException("failed to initialize the client-side SSL context", e);
         }
 
