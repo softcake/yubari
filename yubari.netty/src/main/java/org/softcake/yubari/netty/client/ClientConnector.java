@@ -811,77 +811,80 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                      (isPrimary ? PRIMARY : SECONDARY).toLowerCase(),
                      pingRequestMessage);
 
-        final Runnable runnable = () -> {
+        final Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
 
 
-            final long now = System.currentTimeMillis();
+                final long now = System.currentTimeMillis();
 
-            try {
+                try {
 
-                final ProtocolMessage protocolMessage = future.get();
+                    final ProtocolMessage protocolMessage = future.get();
 
-                if (protocolMessage instanceof HeartbeatOkResponseMessage) {
-                    final HeartbeatOkResponseMessage message = (HeartbeatOkResponseMessage) protocolMessage;
-                    final long turnOverTime = now - startTime;
+                    if (protocolMessage instanceof HeartbeatOkResponseMessage) {
+                        final HeartbeatOkResponseMessage message = (HeartbeatOkResponseMessage) protocolMessage;
+                        final long turnOverTime = now - startTime;
 
-                    attachment.pingSuccessfull();
+                        attachment.pingSuccessfull();
 
-                    final Double systemCpuLoad = ClientConnector.this.sendCpuInfoToServer
-                                                 ? pingManager.getSystemCpuLoad()
-                                                 : null;
-                    final Double processCpuLoad = ClientConnector.this.sendCpuInfoToServer
-                                                  ? pingManager.getProcessCpuLoad()
-                                                  : null;
-                    pingManager.addPing(turnOverTime,
-                                        pingSocketWriteInterval.get(),
-                                        systemCpuLoad,
-                                        processCpuLoad,
-                                        message.getSocketWriteInterval(),
-                                        message.getSystemCpuLoad(),
-                                        message.getProcessCpuLoad());
+                        final Double systemCpuLoad = ClientConnector.this.sendCpuInfoToServer
+                                                     ? pingManager.getSystemCpuLoad()
+                                                     : null;
+                        final Double processCpuLoad = ClientConnector.this.sendCpuInfoToServer
+                                                      ? pingManager.getProcessCpuLoad()
+                                                      : null;
+                        pingManager.addPing(turnOverTime,
+                                            pingSocketWriteInterval.get(),
+                                            systemCpuLoad,
+                                            processCpuLoad,
+                                            message.getSocketWriteInterval(),
+                                            message.getSystemCpuLoad(),
+                                            message.getProcessCpuLoad());
 
 
-                    if (pingListener != null) {
-                        pingListener.pingSucceded(turnOverTime,
-                                                  pingSocketWriteInterval.get(),
-                                                  systemCpuLoad,
-                                                  processCpuLoad,
-                                                  message.getSocketWriteInterval(),
-                                                  message.getSystemCpuLoad(),
-                                                  message.getProcessCpuLoad());
+                        if (pingListener != null) {
+                            pingListener.pingSucceded(turnOverTime,
+                                                      pingSocketWriteInterval.get(),
+                                                      systemCpuLoad,
+                                                      processCpuLoad,
+                                                      message.getSocketWriteInterval(),
+                                                      message.getSystemCpuLoad(),
+                                                      message.getProcessCpuLoad());
+                        }
+
+
+                        LOGGER.debug("{} synchronization ping response received: {}, time: {}",
+                                     isPrimary ? PRIMARY : SECONDARY,
+                                     protocolMessage,
+                                     turnOverTime);
+
+                    } else {
+                        attachment.pingFailed();
+                        pingManager.pingFailed();
+                        ClientConnector.this.safeNotifyPingFailed();
+
+                        LOGGER.debug("Server has returned unknown response type for ping request! Time - {}",
+                                     (now - startTime));
+
                     }
+                } catch (InterruptedException | ExecutionException e) {
 
-
-                    LOGGER.debug("{} synchronization ping response received: {}, time: {}",
-                                 isPrimary ? PRIMARY : SECONDARY,
-                                 protocolMessage,
-                                 turnOverTime);
-
-                } else {
-                    attachment.pingFailed();
-                    pingManager.pingFailed();
-                    safeNotifyPingFailed();
-
-                    LOGGER.debug("Server has returned unknown response type for ping request! Time - {}",
-                                 (now - startTime));
-
+                    if (ClientConnector.this.isOnline()) {
+                        attachment.pingFailed();
+                        pingManager.pingFailed();
+                        ClientConnector.this.safeNotifyPingFailed();
+                        LOGGER.error("{} session ping failed: {}, timeout: {}, syncRequestId: {}",
+                                     isPrimary ? PRIMARY : SECONDARY,
+                                     e.getMessage(),
+                                     pingTimeout,
+                                     pingRequestMessage.getSynchRequestId());
+                    }
+                } finally {
+                    ClientConnector.this.checkPingFailed(isPrimary, attachment, pingTimeout, now);
                 }
-            } catch (InterruptedException | ExecutionException e) {
 
-                if (isOnline()) {
-                    attachment.pingFailed();
-                    pingManager.pingFailed();
-                    safeNotifyPingFailed();
-                    LOGGER.error("{} session ping failed: {}, timeout: {}, syncRequestId: {}",
-                                 isPrimary ? PRIMARY : SECONDARY,
-                                 e.getMessage(),
-                                 pingTimeout,
-                                 pingRequestMessage.getSynchRequestId());
-                }
-            } finally {
-                checkPingFailed(isPrimary, attachment, pingTimeout, now);
             }
-
         };
 
         future.addListener(runnable, MoreExecutors.newDirectExecutorService());
