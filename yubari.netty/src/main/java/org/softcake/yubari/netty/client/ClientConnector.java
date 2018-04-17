@@ -788,12 +788,15 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         final PingManager pingManager = this.clientSession.getPingManager(isPrimary);
         final AtomicLong pingSocketWriteInterval = new AtomicLong(Long.MAX_VALUE);
 
-        final MessageSentListener messageSentListener = message -> {
+        final MessageSentListener messageSentListener = new MessageSentListener() {
+            @Override
+            public void messageSent(final ProtocolMessage message) {
 
-            LOGGER.debug("[{}] Ping sent in {} channel.",
-                         this.clientSession.getTransportName(),
-                         (isPrimary ? PRIMARY : SECONDARY).toUpperCase());
-            pingSocketWriteInterval.set(System.currentTimeMillis() - startTime);
+                LOGGER.debug("[{}] Ping sent in {} channel.",
+                             ClientConnector.this.clientSession.getTransportName(),
+                             (isPrimary ? PRIMARY : SECONDARY).toUpperCase());
+                pingSocketWriteInterval.set(System.currentTimeMillis() - startTime);
+            }
         };
 
 
