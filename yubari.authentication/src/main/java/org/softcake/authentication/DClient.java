@@ -592,6 +592,7 @@ public class DClient implements ClientListener {
 
                     this.authProvider.setUserAgent(userAgent);
                     if (this.transportClient == null) {
+                        System.setProperty("io.netty.tryReflectionSetAccessible","true");
                         TransportClientBuilder builder = TransportClient.builder();
                         builder.withStaticSessionDictionary(new StaticSessionDictionary())
                                .withTransportName("DDS2 Standalone Transport Client")
@@ -616,7 +617,7 @@ public class DClient implements ClientListener {
                                });
                         //                            if (!OperatingSystemType.LINUX && !OperatingSystemType
                         // .MACOSX) {
-                        builder.withSecondaryConnectionPingTimeout(TRANSPORT_PING_TIMEOUT);
+                        builder.withChildConnectionPingTimeout(TRANSPORT_PING_TIMEOUT);
                         //                            } else {
                         //                                builder.withSecondaryConnectionPingInterval(5000L)
                         // .withPrimaryConnectionPingTimeout(2000L).withSecondaryConnectionPingTimeout(2000L);

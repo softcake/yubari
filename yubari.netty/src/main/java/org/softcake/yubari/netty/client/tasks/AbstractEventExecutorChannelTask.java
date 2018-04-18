@@ -83,7 +83,6 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
 
         final int[] messagesCounter = EVENT_EXECUTOR_MESSAGES_COUNTER_THREAD_LOCAL.get();
         ++messagesCounter[0];
-LOGGER.info(String.valueOf(messagesCounter[0] % this.session.getEventExecutionDelayCheckEveryNTimesError()));
         final ScheduledExecutorService executorService = this.session.getScheduledExecutorService();
 
         if (executorService.isShutdown() || executorService.isTerminated()) {

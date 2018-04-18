@@ -27,8 +27,6 @@ import com.dukascopy.dds4.transport.msg.system.LoginRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.OkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.reactivex.Observable;
-import io.reactivex.Observer;
-import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +37,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
     protected static final Logger LOGGER = LoggerFactory.getLogger(GreedClientAuthorizationProvider.class);
     protected AuthorizationProviderListener listener;
     private String userAgent;
-    private boolean secondaryConnectionDisabled;
+    private boolean childConnectionDisabled;
     private long droppableMessageServerTTL;
     private String sessionName;
     private String login;
@@ -56,7 +54,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
         haloRequestMessage.setPingable(true);
         haloRequestMessage.setUseragent(getUserAgent());
-        haloRequestMessage.setSecondaryConnectionDisabled(isSecondaryConnectionDisabled());
+        haloRequestMessage.setSecondaryConnectionDisabled(isChildConnectionDisabled());
         haloRequestMessage.setSecondaryConnectionMessagesTTL(getDroppableMessageServerTTL());
         haloRequestMessage.setSessionName(getSessionName());
 
@@ -67,7 +65,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
         haloRequestMessage.setPingable(true);
         haloRequestMessage.setUseragent(this.getUserAgent());
-        haloRequestMessage.setSecondaryConnectionDisabled(this.isSecondaryConnectionDisabled());
+        haloRequestMessage.setChildConnectionDisabled(this.isChildConnectionDisabled());
         haloRequestMessage.setSecondaryConnectionMessagesTTL(this.getDroppableMessageServerTTL());
         haloRequestMessage.setSessionName(this.getSessionName());
         ioSession.write(haloRequestMessage);*/
@@ -76,7 +74,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
         haloRequestMessage.setPingable(true);
         haloRequestMessage.setUseragent(getUserAgent());
-        haloRequestMessage.setSecondaryConnectionDisabled(isSecondaryConnectionDisabled());
+        haloRequestMessage.setSecondaryConnectionDisabled(isChildConnectionDisabled());
         haloRequestMessage.setSecondaryConnectionMessagesTTL(getDroppableMessageServerTTL());
         haloRequestMessage.setSessionName(getSessionName());
 
@@ -150,14 +148,14 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         this.userAgent = userAgent;
     }
 
-    private boolean isSecondaryConnectionDisabled() {
+    private boolean isChildConnectionDisabled() {
 
-        return this.secondaryConnectionDisabled;
+        return this.childConnectionDisabled;
     }
 
-    public void setSecondaryConnectionDisabled(final boolean secondaryConnectionDisabled) {
+    public void setChildConnectionDisabled(final boolean childConnectionDisabled) {
 
-        this.secondaryConnectionDisabled = secondaryConnectionDisabled;
+        this.childConnectionDisabled = childConnectionDisabled;
     }
 
     private long getDroppableMessageServerTTL() {

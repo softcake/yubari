@@ -166,7 +166,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
             final SessionProtocolDecoder sessionProtocolDecoder = getSessionProtocolDecoder(ctx);
             final BinaryProtocolMessage message = sessionProtocolDecoder.decodeMessage(protocolVersion, msgData);
 
-            LOGGER.debug("[{}] Decoded message [{}]", this.transportName, message);
+            LOGGER.trace("[{}] Decoded message [{}]", this.transportName, message);
 
             if (message != null) {
                 if (message instanceof ClassMappingMessage) {

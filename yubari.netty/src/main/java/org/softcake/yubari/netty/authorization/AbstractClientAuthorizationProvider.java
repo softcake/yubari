@@ -22,7 +22,7 @@ import org.softcake.yubari.netty.AuthorizationProviderListener;
 public abstract class AbstractClientAuthorizationProvider implements ClientAuthorizationProvider {
     protected AuthorizationProviderListener listener;
     protected String userAgent;
-    protected boolean secondaryConnectionDisabled;
+    protected boolean childConnectionDisabled;
     protected long droppableMessageServerTTL;
     protected String sessionName;
 
@@ -40,14 +40,14 @@ public abstract class AbstractClientAuthorizationProvider implements ClientAutho
         this.userAgent = userAgent;
     }
 
-    public boolean isSecondaryConnectionDisabled() {
+    public boolean isChildConnectionDisabled() {
 
-        return this.secondaryConnectionDisabled;
+        return this.childConnectionDisabled;
     }
 
-    public void setSecondaryConnectionDisabled(final boolean secondaryConnectionDisabled) {
+    public void setChildConnectionDisabled(final boolean childConnectionDisabled) {
 
-        this.secondaryConnectionDisabled = secondaryConnectionDisabled;
+        this.childConnectionDisabled = childConnectionDisabled;
     }
 
     public long getDroppableMessageServerTTL() {

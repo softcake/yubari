@@ -100,11 +100,11 @@ public class TransportClientSession {
     private final long authEventPoolAutoCleanupInterval;
     private final int criticalAuthEventQueueSize;
     private final long primaryConnectionPingInterval;
-    private final long secondaryConnectionPingInterval;
+    private final long childConnectionPingInterval;
     private final long primaryConnectionPingTimeout;
-    private final long secondaryConnectionPingTimeout;
-    private final long secondaryConnectionReconnectAttempts;
-    private final long secondaryConnectionReconnectsResetDelay;
+    private final long childConnectionPingTimeout;
+    private final long childConnectionReconnectAttempts;
+    private final long childConnectionReconnectsResetDelay;
     private final long droppableMessagesServerTTL;
     private final long droppableMessagesClientTTL;
     private final boolean logSkippedDroppableMessages;
@@ -185,11 +185,11 @@ public class TransportClientSession {
                                      final long authEventPoolAutoCleanupInterval,
                                      final int criticalAuthEventQueueSize,
                                      final long primaryConnectionPingInterval,
-                                     final long secondaryConnectionPingInterval,
+                                     final long childConnectionPingInterval,
                                      final long primaryConnectionPingTimeout,
-                                     final long secondaryConnectionPingTimeout,
-                                     final int secondaryConnectionReconnectAttempts,
-                                     final long secondaryConnectionReconnectsResetDelay,
+                                     final long childConnectionPingTimeout,
+                                     final int childConnectionReconnectAttempts,
+                                     final long childConnectionReconnectsResetDelay,
                                      final long droppableMessagesServerTTL,
                                      final long droppableMessagesClientTTL,
                                      final boolean skipDroppableMessages,
@@ -256,11 +256,11 @@ public class TransportClientSession {
         this.authEventPoolAutoCleanupInterval = authEventPoolAutoCleanupInterval;
         this.criticalAuthEventQueueSize = criticalAuthEventQueueSize;
         this.primaryConnectionPingInterval = primaryConnectionPingInterval;
-        this.secondaryConnectionPingInterval = secondaryConnectionPingInterval;
+        this.childConnectionPingInterval = childConnectionPingInterval;
         this.primaryConnectionPingTimeout = primaryConnectionPingTimeout;
-        this.secondaryConnectionPingTimeout = secondaryConnectionPingTimeout;
-        this.secondaryConnectionReconnectAttempts = (long) secondaryConnectionReconnectAttempts;
-        this.secondaryConnectionReconnectsResetDelay = secondaryConnectionReconnectsResetDelay;
+        this.childConnectionPingTimeout = childConnectionPingTimeout;
+        this.childConnectionReconnectAttempts = (long) childConnectionReconnectAttempts;
+        this.childConnectionReconnectsResetDelay = childConnectionReconnectsResetDelay;
         this.droppableMessagesServerTTL = droppableMessagesServerTTL;
         this.droppableMessagesClientTTL = droppableMessagesClientTTL;
         this.skipDroppableMessages = skipDroppableMessages;
@@ -322,7 +322,7 @@ public class TransportClientSession {
             this.transportName)).build();
 
         this.scheduledExecutorService = Executors.newScheduledThreadPool(1, threadFactory);
-        this.protocolHandler = new ClientProtocolHandler(this);
+
 
         final EventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup(this.transportPoolSize, new ThreadFactory() {
             private final AtomicInteger counter = new AtomicInteger();
@@ -373,12 +373,11 @@ public class TransportClientSession {
                 pipeline.addLast("handler", protocolHandler);
             }
         });
-
+        this.protocolHandler = new ClientProtocolHandler(this);
         this.clientConnector = new ClientConnector(this.address,
                                                    this.channelBootstrap,
                                                    this,
-                                                   this.protocolHandler,
-                                                   this.pingListener);
+                                                   this.protocolHandler);
         this.protocolHandler.setClientConnector(this.clientConnector);
         this.clientConnector.start();
     }
@@ -427,7 +426,7 @@ public class TransportClientSession {
         }
 
         if (this.channelBootstrap != null) {
-            final EventLoopGroup group = this.channelBootstrap.group();
+            final EventLoopGroup group = this.channelBootstrap.config().group();
             if (group != null) {
                 group.shutdownGracefully();
             }
@@ -508,11 +507,11 @@ public class TransportClientSession {
                                      null);
     }
 
-    RequestListenableFuture sendRequestAsync(final ProtocolMessage message,
-                                             final Channel channel,
-                                             final long timeout,
-                                             final boolean doNotRestartTimerOnInProcessResponse,
-                                             final MessageSentListener messageSentListener) {
+    public RequestListenableFuture sendRequestAsync(final ProtocolMessage message,
+                                                    final Channel channel,
+                                                    final long timeout,
+                                                    final boolean doNotRestartTimerOnInProcessResponse,
+                                                    final MessageSentListener messageSentListener) {
 
         if (this.isOnline()) {
             final Long syncRequestId = this.transportClient.getNextId();
@@ -626,24 +625,24 @@ public class TransportClientSession {
         return this.eventPoolAutoCleanupInterval;
     }
 
-    long getPrimaryConnectionPingInterval() {
+    public long getPrimaryConnectionPingInterval() {
 
         return this.primaryConnectionPingInterval;
     }
 
-    long getSecondaryConnectionPingInterval() {
+    public long getChildConnectionPingInterval() {
 
-        return this.secondaryConnectionPingInterval;
+        return this.childConnectionPingInterval;
     }
 
-    long getPrimaryConnectionPingTimeout() {
+    public long getPrimaryConnectionPingTimeout() {
 
         return this.primaryConnectionPingTimeout;
     }
 
-    long getSecondaryConnectionPingTimeout() {
+    public long getChildConnectionPingTimeout() {
 
-        return this.secondaryConnectionPingTimeout;
+        return this.childConnectionPingTimeout;
     }
 
     long getReconnectDelay() {
@@ -656,14 +655,14 @@ public class TransportClientSession {
         return this.useFeederSocket;
     }
 
-    long getSecondaryConnectionReconnectAttempts() {
+    long getChildConnectionReconnectAttempts() {
 
-        return this.secondaryConnectionReconnectAttempts;
+        return this.childConnectionReconnectAttempts;
     }
 
-    long getSecondaryConnectionReconnectsResetDelay() {
+    long getChildConnectionReconnectsResetDelay() {
 
-        return this.secondaryConnectionReconnectsResetDelay;
+        return this.childConnectionReconnectsResetDelay;
     }
 
     long getDroppableMessagesServerTTL() {
@@ -891,7 +890,7 @@ public class TransportClientSession {
         return this.criticalSyncRequestProcessingQueueSize;
     }
 
-    long getMaxSubsequentPingFailedCount() {
+    public long getMaxSubsequentPingFailedCount() {
 
         return this.maxSubsequentPingFailedCount;
     }
@@ -934,5 +933,9 @@ public class TransportClientSession {
     TimeUnit getSyncRequestProcessingPoolTerminationTimeUnit() {
 
         return this.syncRequestProcessingPoolTerminationTimeUnit;
+    }
+
+    public IPingListener getPingListener() {
+return this.pingListener;
     }
 }

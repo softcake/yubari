@@ -46,7 +46,7 @@ public class AnonymousClientAuthorizationProvider extends AbstractClientAuthoriz
         final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
         haloRequestMessage.setPingable(true);
         haloRequestMessage.setUseragent(this.getUserAgent());
-        haloRequestMessage.setSecondaryConnectionDisabled(this.isSecondaryConnectionDisabled());
+        haloRequestMessage.setSecondaryConnectionDisabled(this.isChildConnectionDisabled());
         haloRequestMessage.setSecondaryConnectionMessagesTTL(this.getDroppableMessageServerTTL());
         haloRequestMessage.setSessionName(this.getSessionName());
         final ChannelFuture future = (ChannelFuture) session.write(haloRequestMessage);

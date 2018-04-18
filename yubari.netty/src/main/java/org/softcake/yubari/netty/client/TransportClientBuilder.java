@@ -63,8 +63,8 @@ public class TransportClientBuilder {
     public static final long DEFAULT_AUTHORIZATION_TIMEOUT = 15000L;
     public static final long DEFAULT_PING_INTERVAL = 15000L;
     public static final long DEFAULT_PING_TIMEOUT = 10000L;
-    public static final int DEFAULT_SECONDARY_CONNECTION_RECONNECT_ATTEMPTS = 3;
-    public static final long DEFAULT_SECONDARY_CONNECTION_RECONNECTS_RESET_DELAY = 30000L;
+    public static final int DEFAULT_CHILD_CONNECTION_RECONNECT_ATTEMPTS = 3;
+    public static final long DEFAULT_CHILD_CONNECTION_RECONNECTS_RESET_DELAY = 30000L;
     public static final long DEFAULT_DROPPABLE_MESSAGE_SERVER_TTL = 0L;
     public static final long DEFAULT_DROPPABLE_MESSAGE_CLIENT_TTL = 0L;
     public static final boolean DEFAULT_SKIP_DROPPABLE_MESSAGES = true;
@@ -122,6 +122,7 @@ public class TransportClientBuilder {
         DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
         DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
         DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
+
         final Map<ChannelOption<?>, Object> defaultChannelOptions = new LinkedHashMap<>();
         defaultChannelOptions.put(ChannelOption.SO_REUSEADDR, true);
         defaultChannelOptions.put(ChannelOption.TCP_NODELAY, true);
@@ -155,11 +156,11 @@ public class TransportClientBuilder {
     private long authEventPoolAutoCleanupInterval;
     private int criticalAuthEventQueueSize;
     private long primaryConnectionPingInterval;
-    private long secondaryConnectionPingInterval;
+    private long childConnectionPingInterval;
     private long primaryConnectionPingTimeout;
-    private long secondaryConnectionPingTimeout;
-    private int secondaryConnectionReconnectAttempts;
-    private long secondaryConnectionReconnectsResetDelay;
+    private long childConnectionPingTimeout;
+    private int childConnectionReconnectAttempts;
+    private long childConnectionReconnectsResetDelay;
     private long droppableMessageServerTTL;
     private long droppableMessageClientTTL;
     private boolean skipDroppableMessages;
@@ -220,11 +221,11 @@ public class TransportClientBuilder {
         this.authEventPoolAutoCleanupInterval = DEFAULT_AUTH_EVENT_POOL_AUTO_CLEANUP_INTERVAL;
         this.criticalAuthEventQueueSize = DEFAULT_CRITICAL_AUTH_EVENT_QUEUE_SIZE;
         this.primaryConnectionPingInterval = DEFAULT_PING_INTERVAL;
-        this.secondaryConnectionPingInterval = DEFAULT_PING_INTERVAL;
+        this.childConnectionPingInterval = DEFAULT_PING_INTERVAL;
         this.primaryConnectionPingTimeout = DEFAULT_PING_TIMEOUT;
-        this.secondaryConnectionPingTimeout = DEFAULT_PING_TIMEOUT;
-        this.secondaryConnectionReconnectAttempts = DEFAULT_SECONDARY_CONNECTION_RECONNECT_ATTEMPTS;
-        this.secondaryConnectionReconnectsResetDelay = DEFAULT_SECONDARY_CONNECTION_RECONNECTS_RESET_DELAY;
+        this.childConnectionPingTimeout = DEFAULT_PING_TIMEOUT;
+        this.childConnectionReconnectAttempts = DEFAULT_CHILD_CONNECTION_RECONNECT_ATTEMPTS;
+        this.childConnectionReconnectsResetDelay = DEFAULT_CHILD_CONNECTION_RECONNECTS_RESET_DELAY;
         this.droppableMessageServerTTL = DEFAULT_DROPPABLE_MESSAGE_SERVER_TTL;
         this.droppableMessageClientTTL = DEFAULT_DROPPABLE_MESSAGE_CLIENT_TTL;
         this.skipDroppableMessages = DEFAULT_SKIP_DROPPABLE_MESSAGES;
@@ -353,13 +354,13 @@ public class TransportClientBuilder {
         return this;
     }
 
-    public TransportClientBuilder withSecondaryConnectionPingInterval(long secondaryConnectionPingInterval) {
+    public TransportClientBuilder withChildConnectionPingInterval(long childConnectionPingInterval) {
 
-        if (secondaryConnectionPingInterval < 1L || secondaryConnectionPingInterval > MAX_PING_INTERVAL) {
-            secondaryConnectionPingInterval = 0L;
+        if (childConnectionPingInterval < 1L || childConnectionPingInterval > MAX_PING_INTERVAL) {
+            childConnectionPingInterval = 0L;
         }
 
-        this.secondaryConnectionPingInterval = secondaryConnectionPingInterval;
+        this.childConnectionPingInterval = childConnectionPingInterval;
         return this;
     }
 
@@ -373,33 +374,33 @@ public class TransportClientBuilder {
         return this;
     }
 
-    public TransportClientBuilder withSecondaryConnectionPingTimeout(long secondaryConnectionPingTimeout) {
+    public TransportClientBuilder withChildConnectionPingTimeout(long childConnectionPingTimeout) {
 
-        if (secondaryConnectionPingTimeout < 1L || secondaryConnectionPingTimeout > MAX_PING_TIMEOUT) {
-            secondaryConnectionPingTimeout = 0L;
+        if (childConnectionPingTimeout < 1L || childConnectionPingTimeout > MAX_PING_TIMEOUT) {
+            childConnectionPingTimeout = 0L;
         }
 
-        this.secondaryConnectionPingTimeout = secondaryConnectionPingTimeout;
+        this.childConnectionPingTimeout = childConnectionPingTimeout;
         return this;
     }
 
-    public TransportClientBuilder withSecondaryConnectionReconnectAttempts(final int
-                                                                               secondaryConnectionReconnectAttempts) {
+    public TransportClientBuilder withChildConnectionReconnectAttempts(final int
+                                                                               childConnectionReconnectAttempts) {
 
-        if (secondaryConnectionReconnectAttempts < 0) {
+        if (childConnectionReconnectAttempts < 0) {
             throw new IllegalArgumentException(
-                "Secondary connection reconnect attempts can't be less than 0. If you want to disable reconnects set "
+                "Child connection reconnect attempts can't be less than 0. If you want to disable reconnects set "
                 + "it to 0");
         } else {
-            this.secondaryConnectionReconnectAttempts = secondaryConnectionReconnectAttempts;
+            this.childConnectionReconnectAttempts = childConnectionReconnectAttempts;
             return this;
         }
     }
 
-    public TransportClientBuilder withSecondaryConnectionReconnectsResetDelay(final long
-                                                                                  secondaryConnectionReconnectsResetDelay) {
+    public TransportClientBuilder withChildConnectionReconnectsResetDelay(final long
+                                                                                  childConnectionReconnectsResetDelay) {
 
-        this.secondaryConnectionReconnectsResetDelay = secondaryConnectionReconnectsResetDelay;
+        this.childConnectionReconnectsResetDelay = childConnectionReconnectsResetDelay;
         return this;
     }
 
@@ -582,11 +583,11 @@ public class TransportClientBuilder {
                                    this.authEventPoolAutoCleanupInterval,
                                    this.criticalAuthEventQueueSize,
                                    this.primaryConnectionPingInterval,
-                                   this.secondaryConnectionPingInterval,
+                                   this.childConnectionPingInterval,
                                    this.primaryConnectionPingTimeout,
-                                   this.secondaryConnectionPingTimeout,
-                                   this.secondaryConnectionReconnectAttempts,
-                                   this.secondaryConnectionReconnectsResetDelay,
+                                   this.childConnectionPingTimeout,
+                                   this.childConnectionReconnectAttempts,
+                                   this.childConnectionReconnectsResetDelay,
                                    this.droppableMessageServerTTL,
                                    this.droppableMessageClientTTL,
                                    this.skipDroppableMessages,
@@ -725,9 +726,9 @@ public class TransportClientBuilder {
         return this.primaryConnectionPingInterval;
     }
 
-    public long getSecondaryConnectionPingInterval() {
+    public long getChildConnectionPingInterval() {
 
-        return this.secondaryConnectionPingInterval;
+        return this.childConnectionPingInterval;
     }
 
     public long getPrimaryConnectionPingTimeout() {
@@ -735,19 +736,19 @@ public class TransportClientBuilder {
         return this.primaryConnectionPingTimeout;
     }
 
-    public long getSecondaryConnectionPingTimeout() {
+    public long getChildConnectionPingTimeout() {
 
-        return this.secondaryConnectionPingTimeout;
+        return this.childConnectionPingTimeout;
     }
 
-    public int getSecondaryConnectionReconnectAttempts() {
+    public int getChildConnectionReconnectAttempts() {
 
-        return this.secondaryConnectionReconnectAttempts;
+        return this.childConnectionReconnectAttempts;
     }
 
-    public long getSecondaryConnectionReconnectsResetDelay() {
+    public long getChildConnectionReconnectsResetDelay() {
 
-        return this.secondaryConnectionReconnectsResetDelay;
+        return this.childConnectionReconnectsResetDelay;
     }
 
     public long getDroppableMessagesServerTTL() {

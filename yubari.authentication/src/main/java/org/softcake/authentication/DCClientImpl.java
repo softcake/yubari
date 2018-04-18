@@ -333,7 +333,7 @@ public class DCClientImpl implements ClientListener {
 //                                    }
 //
 //                                    @Override
-//                                    public void setSecondaryConnectionDisabled(final boolean b) {
+//                                    public void setChildConnectionDisabled(final boolean b) {
 //
 //                                    }
 //

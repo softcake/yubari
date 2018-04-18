@@ -88,7 +88,13 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
     private final ThreadLocal<int[]> sentMessagesCounterThreadLocal = ThreadLocal.withInitial(() -> new int[1]);
     private final StreamProcessor streamProcessor;
-    private final HeartbeatProcessor heartbeatProcessor;
+
+    public HeartbeatProcessor getHeartbeatProcessor() {
+
+        return heartbeatProcessor;
+    }
+
+    private HeartbeatProcessor heartbeatProcessor;
 
     private final DroppableMessageHandler droppableMessageHandler;
     private ClientConnector clientConnector;
@@ -117,6 +123,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     public void setClientConnector(final ClientConnector clientConnector) {
 
         this.clientConnector = clientConnector;
+
     }
 
     private ListeningExecutorService initEventExecutor() {
@@ -235,7 +242,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             if (attachment.isPrimaryConnection()) {
                 this.clientConnector.primaryChannelDisconnected();
             } else {
-                this.clientConnector.secondaryChannelDisconnected();
+                this.clientConnector.childChannelDisconnected();
             }
         }
 

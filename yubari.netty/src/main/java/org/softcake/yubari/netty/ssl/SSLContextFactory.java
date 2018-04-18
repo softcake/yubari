@@ -143,15 +143,7 @@ public final class SSLContextFactory {
                                     ? SSLContextFactory.class.getClassLoader()
                                                              .getResourceAsStream(KEYSTORE)
                                     : new FileInputStream(new File(pathToCertificate))) {
-            final KeyStore ks = KeyStore.getInstance("JKS");
-            readStorePass();
-            if (in == null) {
-                throw new IOException("SSL CERTIFICATE NOT FOUND");
-            }
-
-            ks.load(in, pass);
-            final KeyManagerFactory kmf = KeyManagerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
-            kmf.init(ks, pass);
+            final KeyManagerFactory kmf = getKeyManagerFactory(in);
             final SSLContext sslContext = SSLContext.getInstance(PROTOCOL);
             sslContext.init(kmf.getKeyManagers(), null, null);
             return sslContext;
@@ -162,6 +154,22 @@ public final class SSLContextFactory {
             }
             throw new SSLException("failed to initialize the server-side SSL context", e);
         }
+    }
+
+    private static KeyManagerFactory getKeyManagerFactory(final InputStream in) throws
+                                                                                GeneralSecurityException,
+                                                                                IOException{
+
+        final KeyStore ks = KeyStore.getInstance("JKS");
+        readStorePass();
+        if (in == null) {
+            throw new IOException("SSL CERTIFICATE NOT FOUND");
+        }
+
+        ks.load(in, pass);
+        final KeyManagerFactory kmf = KeyManagerFactory.getInstance(KEY_MANAGER_FACTORY_ALGORITHM);
+        kmf.init(ks, pass);
+        return kmf;
     }
 
     private static void readStorePass() throws IOException {

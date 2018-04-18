@@ -32,7 +32,7 @@ public interface ClientAuthorizationProvider {
 
     void cleanUp();
 
-    void setSecondaryConnectionDisabled(boolean var1);
+    void setChildConnectionDisabled(boolean var1);
 
     void setDroppableMessageServerTTL(long var1);
 
