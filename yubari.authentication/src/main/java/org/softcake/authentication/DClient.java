@@ -20,12 +20,12 @@ package org.softcake.authentication;
 //import static com.dukascopy.api.impl.connect.ActivityLogger.getInstance;
 
 import org.softcake.yubari.connect.authorization.AuthorizationPropertiesFactory;
+import org.softcake.yubari.netty.SessionHandler;
 import org.softcake.yubari.netty.authorization.GreedClientAuthorizationProvider;
 import org.softcake.yubari.netty.client.ITransportClient;
-import org.softcake.yubari.netty.ext.InstrumentManager;
-import org.softcake.yubari.netty.SessionHandler;
 import org.softcake.yubari.netty.client.TransportClient;
 import org.softcake.yubari.netty.client.TransportClientBuilder;
+import org.softcake.yubari.netty.ext.InstrumentManager;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
@@ -56,6 +56,7 @@ import com.dukascopy.dds3.transport.msg.ddsApi.QuitRequestMessage;
 import com.dukascopy.dds3.transport.msg.news.CalendarType;
 import com.dukascopy.dds3.transport.msg.news.NewsSubscribeRequest;
 import com.dukascopy.dds3.transport.msg.news.SubscribeRequestType;
+import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.types.EventCategory;
 import com.dukascopy.dds4.transport.msg.types.GeoRegion;
@@ -864,16 +865,22 @@ public class DClient implements ClientListener {
     }
 public int anInt;
     public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
-//anInt++;
-//        LOGGER.info(message.toString());
-//if(anInt<5){
-//    return;
-//}
-//        try {
-//            Thread.sleep(600000L);
-//        } catch (InterruptedException e) {
-//            LOGGER.error("Error occurred...", e);
-//        }
+
+        anInt++;
+
+        if (anInt == 10) {
+            try {
+                Thread.sleep(120000L);
+            } catch (InterruptedException e) {
+
+            }
+        }
+
+        if (message instanceof CurrencyMarket) {
+            CurrencyMarket msg = (CurrencyMarket) message;
+
+            LOGGER.info("----------------------------------: {}", msg.getCreationTimestamp());
+        }
 //        TransportClient providedClient = TransportClient.class.cast(client);
 //        LOGGER.info(message.toString());
         //        if (providedClient == null || providedClient.isOnline() && !providedClient.isTerminated() &&

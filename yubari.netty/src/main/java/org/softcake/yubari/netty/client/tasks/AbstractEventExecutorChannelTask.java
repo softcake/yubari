@@ -22,6 +22,7 @@ import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.util.StrUtils;
 
 import com.dukascopy.dds4.common.orderedExecutor.OrderedThreadPoolExecutor;
+import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
@@ -64,7 +65,7 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
     private Runnable delayedExecutionTask;
     private long procStartTime;
     private long sleepTime = DEFAULT_SLEEP_TIME;
-
+    final int[] attemps = {0};
 
     protected AbstractEventExecutorChannelTask(final ChannelHandlerContext ctx,
                                                final TransportClientSession clientSession,
@@ -97,7 +98,8 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
                                   && this.session.getEventExecutionDelayCheckEveryNTimesWarning() > 0
                                   && messagesCounter[0] % this.session.getEventExecutionDelayCheckEveryNTimesWarning()
                                      == 0;
-
+        attemps[0]++;
+        LOGGER.info("First Attemps in execute : {}", attemps[0]);
         if (checkError) {
             final ListenableFuture<?> future = this.executeInExecutor(executor, true);
             final Runnable runnable = getRunnableForErrorOrWarningCheck(stats,
@@ -130,9 +132,7 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
 
         return () -> {
 
-            if (future.isDone()) {
-                return;
-            }
+
 
             final long nanoTime = System.nanoTime();
             final long lastExecutionWarningOrErrorTime;
@@ -212,6 +212,11 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
         final SettableFuture future = withFuture ? SettableFuture.create() : null;
 
         try {
+
+
+
+
+            LOGGER.info("Second Attemps in execute : {}", attemps[0]);
             if (future != null) {
                 future.setFuture(executor.submit(this));
             } else {
@@ -232,6 +237,17 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
             this.delayedExecutionTask = () -> {
 
                 try {
+
+
+                    if (message instanceof CurrencyMarket) {
+                        CurrencyMarket msg = (CurrencyMarket) message;
+                        attemps[0]++;
+                        LOGGER.info("Attemps in delayedExecutionTask : {} ID: {}", attemps[0], msg.getCreationTimestamp());
+                    }
+
+
+
+
                     if (future != null) {
                         future.setFuture(executor.submit(AbstractEventExecutorChannelTask.this));
                     } else {
