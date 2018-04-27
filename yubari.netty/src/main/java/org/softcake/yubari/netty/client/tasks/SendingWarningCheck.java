@@ -62,27 +62,27 @@ public final class SendingWarningCheck extends AbstractSendingCheck {
 
     ChannelFutureListener getMessageListener(final long executionTime) {
 
-        return future -> {
+        return new ChannelFutureListener() {
+            @Override
+            public void operationComplete(final ChannelFuture future) throws Exception {
 
-            if (future.isSuccess()) {
+                if (future.isSuccess()) {
 
-                if (isError(executionTime)) {
-                    LOGGER.error(
-                        "[{}] Message sending took {}ms, critical timeout time {}ms, possible "
-                        + "network problem",
-                        clientSession.getTransportName(),
-                        executionTime,
-                        clientSession.getSendCompletionErrorDelay());
-                } else {
-                    LOGGER.warn(
-                        "[{}] Message sending took {}ms, timeout time {}ms, possible network "
-                        + "problem",
-                        clientSession.getTransportName(),
-                        executionTime,
-                        clientSession.getSendCompletionWarningDelay());
+                    if (SendingWarningCheck.this.isError(executionTime)) {
+                        LOGGER.error("[{}] Message sending took {}ms, critical timeout time {}ms, possible "
+                                     + "network problem",
+                                     clientSession.getTransportName(),
+                                     executionTime,
+                                     clientSession.getSendCompletionErrorDelay());
+                    } else {
+                        LOGGER.warn("[{}] Message sending took {}ms, timeout time {}ms, possible network " + "problem",
+                                    clientSession.getTransportName(),
+                                    executionTime,
+                                    clientSession.getSendCompletionWarningDelay());
+                    }
                 }
-            }
 
+            }
         };
     }
 

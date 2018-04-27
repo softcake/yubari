@@ -61,14 +61,17 @@ public final class SendingErrorCheck extends AbstractSendingCheck {
     @Override
     ChannelFutureListener getMessageListener(final long executionTime) {
 
-        return future -> {
-            if (future.isSuccess()) {
-                LOGGER.error(
-                    "[{}] Message sending took {}ms, critical timeout time {}ms, possible network"
-                    + " problem",
-                    clientSession.getTransportName(),
-                    executionTime,
-                    clientSession.getSendCompletionErrorDelay());
+        return new ChannelFutureListener() {
+            @Override
+            public void operationComplete(final ChannelFuture future) throws Exception {
+
+                if (future.isSuccess()) {
+                    LOGGER.error("[{}] Message sending took {}ms, critical timeout time {}ms, possible network"
+                                 + " problem",
+                                 clientSession.getTransportName(),
+                                 executionTime,
+                                 clientSession.getSendCompletionErrorDelay());
+                }
             }
         };
     }

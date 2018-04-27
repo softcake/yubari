@@ -24,6 +24,7 @@ import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
 
+import com.dukascopy.api.INewsFilter;
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
@@ -32,6 +33,12 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
+import io.reactivex.Observable;
+import io.reactivex.ObservableEmitter;
+import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.Observer;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.observables.ConnectableObservable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -613,9 +620,30 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
             this.childChannel = setChannelAttributeForSuccessfullyConnection(connectFuture,
                                                                              this.childSessionChannelAttachment);
 
-            final ChannelFuture channelFuture = this.protocolHandler.writeMessage(this.childChannel,
-                                                                                  this.childSocketAuthAcceptorMessage);
-            channelFuture.addListener((GenericFutureListener<Future<Void>>) future -> {
+            final ConnectableObservable<ChannelFuture>
+                observable
+                = this.protocolHandler.writeMessageOb(this.childChannel, this.childSocketAuthAcceptorMessage);
+
+            observable.subscribe(channelFuture -> {
+                try {
+                    channelFuture.get();
+                } catch (final ExecutionException | InterruptedException e) {
+
+                    if (!(e.getCause() instanceof ClosedChannelException) && isOnline()) {
+                        LOGGER.error("[{}] ", clientSession.getTransportName(), e);
+                        disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                              String.format(
+                                                                  "Child session error while writing: %s",
+                                                                  childSocketAuthAcceptorMessage),
+                                                              e));
+                    }
+                }
+            });
+            final Disposable connect = observable.connect();
+            connect.dispose();
+
+
+          /*  channelFuture.addListener((GenericFutureListener<Future<Void>>) future -> {
 
                 try {
                     channelFuture.get();
@@ -631,7 +659,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                     }
                 }
 
-            });
+            });*/
 
             return true;
         }

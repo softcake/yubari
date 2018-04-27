@@ -56,12 +56,19 @@ import com.dukascopy.dds4.transport.msg.system.StreamingStatus;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.util.Attribute;
 import io.reactivex.Observable;
+import io.reactivex.ObservableEmitter;
+import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
+import io.reactivex.observables.ConnectableObservable;
+import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -88,15 +95,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
     private final ThreadLocal<int[]> sentMessagesCounterThreadLocal = ThreadLocal.withInitial(() -> new int[1]);
     private final StreamProcessor streamProcessor;
-
-    public HeartbeatProcessor getHeartbeatProcessor() {
-
-        return heartbeatProcessor;
-    }
-
-    private HeartbeatProcessor heartbeatProcessor;
-
     private final DroppableMessageHandler droppableMessageHandler;
+    private HeartbeatProcessor heartbeatProcessor;
     private ClientConnector clientConnector;
 
     public ClientProtocolHandler(final TransportClientSession session) {
@@ -113,6 +113,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         this.heartbeatProcessor = new HeartbeatProcessor(clientSession);
 
 
+    }
+
+    public HeartbeatProcessor getHeartbeatProcessor() {
+
+        return heartbeatProcessor;
     }
 
     public DroppableMessageHandler getDroppableMessageHandler() {
@@ -216,8 +221,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     protected void channelRead0(final ChannelHandlerContext ctx, final BinaryProtocolMessage msg) throws Exception {
 
 
-        final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel()
-                                                                           .attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+        final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel().attr(
+            CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
         final ChannelAttachment attachment = channelAttachmentAttribute.get();
 
         LOGGER.trace("[{}] Message received {}, primary channel: {}",
@@ -235,8 +240,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
 
         super.channelInactive(ctx);
-        final Attribute<ChannelAttachment> attribute = ctx.channel()
-                                                          .attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+        final Attribute<ChannelAttachment> attribute = ctx.channel().attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
         final ChannelAttachment attachment = attribute.get();
         if (attachment != null && this.clientConnector != null) {
             if (attachment.isPrimaryConnection()) {
@@ -255,7 +259,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
         if (evt instanceof SslHandshakeCompletionEvent && ((SslHandshakeCompletionEvent) evt).isSuccess()) {
             this.clientConnector.sslHandshakeSuccess();
-        } else if (evt instanceof ProtocolVersionNegotiationEvent&& ((ProtocolVersionNegotiationEvent) evt).isSuccess()) {
+        } else if (evt instanceof ProtocolVersionNegotiationEvent
+                   && ((ProtocolVersionNegotiationEvent) evt).isSuccess()) {
             this.clientConnector.protocolVersionHandshakeSuccess();
         }
     }
@@ -384,6 +389,118 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         task.executeInExecutor(this.authEventExecutor);
     }
 
+
+    public ConnectableObservable<ChannelFuture> writeMessageOb(final Channel channel,
+                                                               final BinaryProtocolMessage responseMessage) {
+
+        final int[] messagesCounter = this.sentMessagesCounterThreadLocal.get();
+        ++messagesCounter[0];
+        final boolean notWritable = !channel.isWritable();
+
+        final ChannelFuture future = channel.writeAndFlush(responseMessage);
+        final ConnectableObservable<ChannelFuture>
+            observable
+            = Observable.create((ObservableOnSubscribe<ChannelFuture>) e -> {
+
+            final long procStartTime = System.currentTimeMillis();
+
+            checkSendingWarning(procStartTime, future);
+            checkSendError(procStartTime, future);
+
+            future.addListener((ChannelFutureListener) value -> {
+                e.onNext(value);
+                e.onComplete();
+            });
+        }).doOnNext(channelFuture -> updateChannelAttachement(channel, System.currentTimeMillis())).timeout(
+            clientSession.getPrimaryConnectionPingTimeout(),
+            TimeUnit.MILLISECONDS,
+            Schedulers.from(this.clientSession.getScheduledExecutorService())).publish();
+
+        final Disposable subscribe = observable.subscribe(new Consumer<ChannelFuture>() {
+            @Override
+            public void accept(final ChannelFuture channelFuture) throws Exception {}
+        }, new Consumer<Throwable>() {
+            @Override
+            public void accept(final Throwable throwable) throws Exception {
+
+                if (notWritable && !future.isDone()) {
+                    LOGGER.warn("[{}] Failed to send message in timeout time, disconnecting",
+                                clientSession.getTransportName());
+                    clientSession.terminate();
+                }
+            }
+        });
+
+
+        return observable;
+    }
+
+    private void checkSendError(final long procStartTime, final ChannelFuture future) {
+
+        Observable.just(future)
+                  .delay(clientSession.getSendCompletionErrorDelay(),
+                         TimeUnit.MILLISECONDS,
+                         Schedulers.from(clientSession.getScheduledExecutorService()))
+                  .filter(channelFuture -> !channelFuture.isDone())
+                  .doOnNext(channelFuture -> LOGGER.error("[{}] Message was not sent in timeout time [{}] and is still "
+                                                          + "waiting it's turn, CRITICAL SEND TIME: {}ms, possible "
+                                                          + "network problem",
+                                                          clientSession.getTransportName(),
+                                                          clientSession.getSendCompletionErrorDelay(),
+                                                          System.currentTimeMillis() - procStartTime))
+                  .subscribe(channelFuture -> {
+                      channelFuture.addListener((ChannelFutureListener) future1 -> {
+
+                          if (future1.isSuccess()) {
+                              LOGGER.error(
+                                  "[{}] Message sending took {}ms, critical timeout time {}ms, possible network "
+                                  + "problem",
+                                  clientSession.getTransportName(),
+                                  System.currentTimeMillis() - procStartTime,
+                                  clientSession.getSendCompletionErrorDelay());
+                          }
+                      });
+
+                  });
+    }
+
+    private void checkSendingWarning(final long procStartTime, final ChannelFuture future) {
+
+        Observable.just(future)
+                  .subscribeOn(Schedulers.from(clientSession.getScheduledExecutorService()))
+                  .delay(clientSession.getSendCompletionWarningDelay(),
+                         TimeUnit.MILLISECONDS,
+                         Schedulers.from(clientSession.getScheduledExecutorService()))
+
+                  .filter(channelFuture -> !channelFuture.isDone())
+                  .doOnNext(channelFuture -> LOGGER.warn(
+                      "[{}] Message sending takes too long time to complete: {}ms and is still waiting it's turn"
+                      + ". Timeout time: {}ms, possible network problem",
+                      clientSession.getTransportName(),
+                      System.currentTimeMillis() - procStartTime,
+                      clientSession.getSendCompletionWarningDelay()))
+                  .subscribeOn(Schedulers.from(clientSession.getScheduledExecutorService()))
+                  .subscribe(channelFuture -> {
+
+                      channelFuture.addListener((ChannelFutureListener) future1 -> {
+                          if (future1.isSuccess()) {
+                              LOGGER.warn("[{}] Message sending took {}ms, timeout time {}ms, possible network "
+                                          + "problem",
+                                          clientSession.getTransportName(),
+                                          System.currentTimeMillis() - procStartTime,
+                                          clientSession.getSendCompletionWarningDelay());
+                          }
+                      });
+                  });
+    }
+
+    private void updateChannelAttachement(final Channel channel, final long lastWriteIoTime) {
+
+        final ChannelAttachment ca = channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
+        ca.setLastWriteIoTime(lastWriteIoTime);
+        ca.messageWritten();
+    }
+
     public ChannelFuture writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
 
         final int[] messagesCounter = this.sentMessagesCounterThreadLocal.get();
@@ -391,18 +508,33 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         final boolean notWritable = !channel.isWritable();
 
         final ChannelFuture channelFuture = channel.writeAndFlush(responseMessage);
-        final Observable<Void> observable = Observable.fromFuture(channelFuture);
+
         final ChannelAttachment ca = channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
-    /* observable.flatMap(new Function<Void, ObservableSource<?>>() {
-         @Override
-         public ObservableSource<?> apply(final Void aVoid) throws Exception {
 
-             return Observable.just(ca.getWriteIoListener());
-         }
-     });
-observable.subscribe();*/
+        final ChannelFutureListener listener = new ChannelFutureListener() {
+            @Override
+            public void operationComplete(final ChannelFuture future) throws Exception {
 
-        channelFuture.addListener(ca.getWriteIoListener());
+                Observable.create(new ObservableOnSubscribe<ChannelFuture>() {
+                    @Override
+                    public void subscribe(final ObservableEmitter<ChannelFuture> emitter) throws Exception {
+
+                        emitter.onNext(future);
+                    }
+                }).subscribe(new Consumer<ChannelFuture>() {
+                    @Override
+                    public void accept(final ChannelFuture channelFuture1) throws Exception {
+
+                        LOGGER.info("Hello from RxJava");
+                        ca.setLastWriteIoTime(System.currentTimeMillis());
+                        ca.messageWritten();
+
+                    }
+                });
+            }
+        };
+        channelFuture.addListener(listener);
+        //channelFuture.addListener(ca.getWriteIoListener());
 
         if (notWritable) {
 
@@ -421,24 +553,25 @@ observable.subscribe();*/
                 this.scheduleSendErrorCheck(channelFuture);
             }
 
-        } else if (isError(messagesCounter[0])) {
+        } else if (isTimeToCheckError(messagesCounter[0])) {
             this.scheduleSendErrorCheck(channelFuture);
 
-        } else if (isWarning(messagesCounter[0])) {
+
+        } else if (isTimeToCheckWarning(messagesCounter[0])) {
             this.scheduleSendWarningCheck(channelFuture);
         }
 
         return channelFuture;
     }
 
-    private boolean isWarning(final int i) {
+    private boolean isTimeToCheckWarning(final int i) {
 
         return this.clientSession.getSendCompletionWarningDelay() > 0L
                && this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() > 0
                && i % this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() == 0;
     }
 
-    private boolean isError(final int i) {
+    private boolean isTimeToCheckError(final int i) {
 
         return this.clientSession.getSendCompletionErrorDelay() > 0L
                && this.clientSession.getSendCompletionDelayCheckEveryNTimesError() > 0
@@ -522,6 +655,8 @@ observable.subscribe();*/
                 result = true;
                 synchRequestFuture.setInProcessResponseLastTime(System.currentTimeMillis());
             } else {
+
+
                 this.syncRequestProcessingExecutor.submit(new OrderedRunnable() {
                     public void run() {
 
@@ -556,6 +691,15 @@ observable.subscribe();*/
         if (message instanceof CurrencyMarket) {
             this.clientSession.tickReceived();
         }
+
+
+       /* if ((message instanceof CurrencyMarket)) {
+            final long timeMillis = System.currentTimeMillis();
+            ((CurrencyMarket)  message).setCreationTimestamp(timeMillis);
+            LOGGER.error("Timestamp seted: {}", timeMillis);
+           LOGGER.error("Timestamp in ClientProtocoll: {}", ((CurrencyMarket)  message).getCreationTimestamp());
+        }
+*/
 
 
         final ISessionStats stats = this.clientSession.getSessionStats();

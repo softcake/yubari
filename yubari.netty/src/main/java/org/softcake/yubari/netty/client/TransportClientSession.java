@@ -58,6 +58,10 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslHandler;
+import io.reactivex.Observable;
+import io.reactivex.Observer;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -453,7 +457,60 @@ public class TransportClientSession {
             return false;
         }
     }
+    ProtocolMessage sendRequestRx(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
+        throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
 
+        if (!this.isOnline()) {
+            throw new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
+                                                     this.transportName,
+                                                     message.toString(400)));
+        }
+
+        final Long syncRequestId = this.transportClient.getNextId();
+        message.setSynchRequestId(syncRequestId);
+        final RequestMessageListenableFuture task = new RequestMessageListenableFuture(this.transportName,
+                                                                                       syncRequestId,
+                                                                                       this.syncRequests,
+                                                                                       message);
+        this.syncRequests.put(syncRequestId, task);
+        final ChannelFuture future = this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(),
+                                                                 message);
+
+        final Observable<Void> fromFuture = Observable.fromFuture(future);
+        task.setChannelFuture(future);
+        task.scheduleTimeoutCheck(new SyncMessageTimeoutChecker(this.scheduledExecutorService,
+                                                                task,
+                                                                timeoutUnits.toMillis(timeout),
+                                                                true));
+
+        final ProtocolMessage[] result = {null};
+        Observable<ProtocolMessage> messageObservable = Observable.just(message);
+        messageObservable.subscribe(new Observer<ProtocolMessage>() {
+            @Override
+            public void onSubscribe(final Disposable d) {
+
+            }
+
+            @Override
+            public void onNext(final ProtocolMessage protocolMessage) {
+
+            }
+
+            @Override
+            public void onError(final Throwable e) {
+
+            }
+
+            @Override
+            public void onComplete() {
+
+            }
+        });
+
+        return result[0];
+
+
+    }
     ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
         throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
 

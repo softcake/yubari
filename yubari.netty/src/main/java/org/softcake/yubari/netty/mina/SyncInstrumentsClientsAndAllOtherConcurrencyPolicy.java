@@ -35,6 +35,6 @@ public class SyncInstrumentsClientsAndAllOtherConcurrencyPolicy implements Feedb
 
     public Object getAuthorizedDisconnectedConcurrentKey() {
 
-        return "";
+        return ALL_SYNC_KEY;
     }
 }

@@ -145,25 +145,30 @@ public class RequestMessageListenableFuture extends AbstractFuture<ProtocolMessa
 
         synchronized (this.channelFutureLock) {
             this.channelFuture = cf;
-            cf.addListener((GenericFutureListener<ChannelFuture>) future -> {
+            cf.addListener(new GenericFutureListener<ChannelFuture>() {
+                @Override
+                public void operationComplete(final ChannelFuture future) throws Exception {
 
-                synchronized (channelFutureLock) {
-                    channelFuture = null;
-                }
-
-                if (future.isSuccess()) {return;}
-
-                if (future.isCancelled()) {
-                    if (!isCancelled()) {
-                        cancel(Boolean.FALSE);
+                    synchronized (channelFutureLock) {
+                        channelFuture = null;
                     }
-                } else if (future.isDone() && future.cause() != null) {
-                    setException(future.cause());
-                } else {
-                    setException(new Exception(String.format("[%s] Unexpected future state", transportName)));
+
+                    if (future.isSuccess()) {return;}
+
+                    if (future.isCancelled()) {
+                        if (!RequestMessageListenableFuture.this.isCancelled()) {
+                            RequestMessageListenableFuture.this.cancel(Boolean.FALSE);
+                        }
+                    } else if (future.isDone() && future.cause() != null) {
+                        RequestMessageListenableFuture.this.setException(future.cause());
+                    } else {
+                        RequestMessageListenableFuture.this.setException(new Exception(String.format(
+                            "[%s] Unexpected future state",
+                            transportName)));
+                    }
+
+
                 }
-
-
             });
         }
 

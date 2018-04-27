@@ -865,8 +865,13 @@ public class DClient implements ClientListener {
     }
 public int anInt;
     public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
+       /* if ((message instanceof CurrencyMarket)) {
+            final long end = System.currentTimeMillis();
+           final long start = ((CurrencyMarket)  message).getCreationTimestamp();
 
-        anInt++;
+            LOGGER.error("Timestamp in DCClient: {} Execution Time: {}ms", start , end-start );
+        }*/
+      /*  anInt++;
 
         if (anInt == 10) {
             try {
@@ -880,7 +885,7 @@ public int anInt;
             CurrencyMarket msg = (CurrencyMarket) message;
 
             LOGGER.info("----------------------------------: {}", msg.getCreationTimestamp());
-        }
+        }*/
 //        TransportClient providedClient = TransportClient.class.cast(client);
 //        LOGGER.info(message.toString());
         //        if (providedClient == null || providedClient.isOnline() && !providedClient.isTerminated() &&
