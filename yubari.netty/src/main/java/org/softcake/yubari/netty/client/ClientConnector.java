@@ -24,23 +24,15 @@ import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
 
-import com.dukascopy.api.INewsFilter;
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
-import io.reactivex.Observable;
-import io.reactivex.ObservableEmitter;
-import io.reactivex.ObservableOnSubscribe;
-import io.reactivex.ObservableSource;
-import io.reactivex.Observer;
+import io.reactivex.Single;
+import io.reactivex.SingleObserver;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.BiFunction;
-import io.reactivex.observables.ConnectableObservable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,7 +41,6 @@ import java.nio.channels.ClosedChannelException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -618,15 +609,37 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
 
         final ChannelFuture connectFuture = this.processConnectingAndGetFuture();
 
-        if (connectFuture.isSuccess()) {
-            this.childChannel = setChannelAttributeForSuccessfullyConnection(connectFuture,
-                                                                             this.childSessionChannelAttachment);
+    if (connectFuture.isSuccess()) {
+        this.childChannel = setChannelAttributeForSuccessfullyConnection(connectFuture, this
+            .childSessionChannelAttachment);
+        LOGGER.info("Alles gut1 {}", Thread.currentThread().getName());
+        final Single<Boolean> observable = this.protocolHandler.writeMessage(this.childChannel, this.childSocketAuthAcceptorMessage);
 
-            final Observable<ChannelFuture>
-                observable
-                = this.protocolHandler.writeMessageOb(this.childChannel, this.childSocketAuthAcceptorMessage);
+        observable.subscribe(new SingleObserver<Boolean>() {
+            @Override
+            public void onSubscribe(final Disposable d) {
 
-            observable.subscribe(channelFuture -> {
+            }
+
+            @Override
+            public void onSuccess(final Boolean aBoolean) {
+
+                LOGGER.info("Alles gut {}", Thread.currentThread().getName());
+            }
+
+            @Override
+            public void onError(final Throwable e) {
+
+                if (!(e.getCause() instanceof ClosedChannelException) && isOnline()) {
+                    LOGGER.error("[{}] ", clientSession.getTransportName(), e);
+                    disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                          String.format("Child session error while writing: %s",
+                                                                        childSocketAuthAcceptorMessage),
+                                                          e));
+                }
+            }
+        });
+           /* observable.subscribe(channelFuture -> {
                 try {
                     channelFuture.get();
 
@@ -642,11 +655,11 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                     }
                 }
             });
+*/
 
-
-
-            return true;
-        }
+         Boolean aBoolean = observable.blockingGet();
+        return true;
+    }
 
         if (connectFuture.isDone() && connectFuture.cause() != null) {
 
@@ -693,17 +706,27 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         if (this.primarySocketAuthAcceptorMessageSent || this.primarySocketAuthAcceptorMessage == null) {return;}
 
 
-        final Observable<ChannelFuture> channelFuture = this.protocolHandler.writeMessageOb(this.primaryChannel,
-                                                                                                       this.primarySocketAuthAcceptorMessage);
-        channelFuture.subscribe(cf -> cf.get(), t -> {
-            if (t.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
+        final Single<Boolean> channelFuture = this.protocolHandler.writeMessage(this.primaryChannel,
+                                                                                this.primarySocketAuthAcceptorMessage);
+        channelFuture.subscribe(new io.reactivex.functions.Consumer<Boolean>() {
+            @Override
+            public void accept(final Boolean cf) throws Exception {
+LOGGER.info(" OK?: {}",cf);
 
-            LOGGER.error("[{}] ", clientSession.getTransportName(), t);
-            disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                  String.format("Primary session error "
-                                                                + "while writhing message: %s",
-                                                                primarySocketAuthAcceptorMessage),
-                                                  t));
+            }
+        }, new io.reactivex.functions.Consumer<Throwable>() {
+            @Override
+            public void accept(final Throwable t) throws Exception {
+
+                if (t.getCause() instanceof ClosedChannelException || !ClientConnector.this.isOnline()) {return;}
+
+                LOGGER.error("[{}] ", clientSession.getTransportName(), t);
+                ClientConnector.this.disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                                           String.format("Primary session error "
+                                                                                         + "while writhing message: %s",
+                                                                                         primarySocketAuthAcceptorMessage),
+                                                                           t));
+            }
         });
 
 

@@ -65,6 +65,8 @@ import io.netty.util.Attribute;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.Single;
+import io.reactivex.SingleOnSubscribe;
 import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
@@ -74,6 +76,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -93,7 +96,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private final List<Thread> eventExecutorThreadsForLogging = Collections.synchronizedList(new ArrayList<>());
     private final boolean logSkippedDroppableMessages;
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
-    private static final ThreadLocal<int[]> sentMessagesCounterThreadLocal = ThreadLocal.withInitial(new Supplier<int[]>() {
+    private static final ThreadLocal<int[]>
+        sentMessagesCounterThreadLocal
+        = ThreadLocal.withInitial(new Supplier<int[]>() {
         @Override
         public int[] get() {
 
@@ -103,20 +108,21 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
     private static final AtomicInteger nextId = new AtomicInteger(0);
     // Thread local variable containing each thread's ID
-     private static final ThreadLocal<Integer> threadId =
-         new ThreadLocal<Integer>() {
-           protected Integer initialValue() {
-               return nextId.getAndIncrement();
+    private static final ThreadLocal<Integer> threadId = new ThreadLocal<Integer>() {
+        protected Integer initialValue() {
+
+            return nextId.getAndIncrement();
         }
     };
 
-     // Returns the current thread's unique ID, assigning it if necessary
-     public static int sentMessagesCounterIncrementAndGet() {
+    // Returns the current thread's unique ID, assigning it if necessary
+    public static int sentMessagesCounterIncrementAndGet() {
 
-         final int[] ints = sentMessagesCounterThreadLocal.get();
-         final int i = ++ints[0];
-         return i;
-     }
+        final int[] ints = sentMessagesCounterThreadLocal.get();
+        final int i = ++ints[0];
+        return i;
+    }
+
     private final StreamProcessor streamProcessor;
     private final DroppableMessageHandler droppableMessageHandler;
     private HeartbeatProcessor heartbeatProcessor;
@@ -303,7 +309,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             @Override
             public ChannelFuture write(final Object message) {
 
-                return writeMessage(this.channel, (BinaryProtocolMessage) message);
+                return writeMessageOld(this.channel, (BinaryProtocolMessage) message);
             }
         });
     }
@@ -311,7 +317,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     void handleAuthorization(final Channel session) {
 
         LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
-        this.clientSession.getAuthorizationProvider().authorize(o -> writeMessage(session, (BinaryProtocolMessage) o));
+        this.clientSession.getAuthorizationProvider().authorize(o -> writeMessageOld(session,
+                                                                                     (BinaryProtocolMessage) o));
 
 
        /* this.clientSession.getAuthorizationProvider().authorize(new NettyIoSessionWrapperAdapter(session) {
@@ -333,7 +340,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             @Override
             public ChannelFuture write(final Object message) {
 
-                return writeMessage(this.channel, (BinaryProtocolMessage) message);
+                return writeMessageOld(this.channel, (BinaryProtocolMessage) message);
             }
         }, (ProtocolMessage) requestMessage);
     }
@@ -413,25 +420,45 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     }
 
 
-    public Observable<ChannelFuture> writeMessageOb(final Channel channel,
-                                                    final BinaryProtocolMessage responseMessage) {
+    public Single<Boolean> writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
 
-        final int messagesCounter =sentMessagesCounterIncrementAndGet();
+        final int messagesCounter = sentMessagesCounterIncrementAndGet();
         LOGGER.info(Thread.currentThread().getName() + "  : ID: " + messagesCounter);
 
 
-        return Observable.create((ObservableOnSubscribe<ChannelFuture>) e -> {
+        return Single.create((SingleOnSubscribe<Boolean>) e -> {
             final ChannelFuture future = channel.writeAndFlush(responseMessage);
             final long procStartTime = System.currentTimeMillis();
-            checkSendingErrorOnNotWritableChannel(channel, future).subscribe(TransportClientSession::terminate);
+            checkSendingErrorOnNotWritableChannel(channel, future).subscribe(new Consumer<TransportClientSession>() {
+                @Override
+                public void accept(final TransportClientSession transportClientSession) throws Exception {
+
+                    transportClientSession.terminate();
+                }
+            });
             checkSendingWarning(procStartTime, future);
             checkSendError(procStartTime, future);
 
-            future.addListener((ChannelFutureListener) value -> {
-                e.onNext(value);
-                e.onComplete();
+            future.addListener((ChannelFutureListener) cf -> {
+
+                if (cf.isSuccess()) {
+                    e.onSuccess(true);
+                } else if (cf.isCancelled()) {
+                    e.onError(new CancellationException("cancelled before completed"));
+                } else if (cf.isDone() && cf.cause() != null) {
+                    e.onError(cf.cause());
+                } else {
+                    e.onError(new Exception("Unexpected ChannelFuture state"));
+                }
             });
-        }).doOnNext(channelFuture -> updateChannelAttachement(channel, System.currentTimeMillis()));
+        })
+                         .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachement(channel,
+                                                                                                   System
+                                                                                                       .currentTimeMillis()))
+                         .doOnError(cause -> LOGGER.error("[{}] Message send failed because of {}: {}",
+                                                          clientSession.getTransportName(),
+                                                          cause.getClass().getSimpleName(),
+                                                          cause.getMessage()));
     }
 
     private Observable<TransportClientSession> checkSendingErrorOnNotWritableChannel(final Channel channel,
@@ -517,7 +544,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         ca.messageWritten();
     }
 
-    public ChannelFuture writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
+    public ChannelFuture writeMessageOld(final Channel channel, final BinaryProtocolMessage responseMessage) {
 
         final int messagesCounter = sentMessagesCounterIncrementAndGet();
         LOGGER.info(Thread.currentThread().getName() + "  : ID: " + messagesCounter);
@@ -663,8 +690,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private boolean processSyncResponse(final ProtocolMessage message) {
 
 
-        final SynchRequestProcessor synchRequestProcessor = this.clientSession.getSynchRequestProcessor();
-synchRequestProcessor.processRequest(message);
+//        final SynchRequestProcessor synchRequestProcessor = this.clientSession.getSynchRequestProcessor();
+//        synchRequestProcessor.processRequest(message);
 
         final RequestMessageListenableFuture
             synchRequestFuture

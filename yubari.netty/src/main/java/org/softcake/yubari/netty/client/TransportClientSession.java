@@ -59,10 +59,8 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslHandler;
 import io.reactivex.Observable;
-import io.reactivex.Observer;
-import io.reactivex.disposables.Disposable;
+import io.reactivex.Single;
 import io.reactivex.functions.Consumer;
-import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -169,7 +167,7 @@ public class TransportClientSession {
     private IoSessionWrapper sessionWrapper = new NettyIoSessionWrapperAdapter() {
         public Future<Void> write(final Object message) {
 
-            return protocolHandler.writeMessage(this.channel, (BinaryProtocolMessage) message);
+            return protocolHandler.writeMessageOld(this.channel, (BinaryProtocolMessage) message);
         }
     };
 
@@ -451,7 +449,10 @@ public class TransportClientSession {
     boolean sendMessageNaive(final ProtocolMessage message) {
 
         if (this.isOnline()) {
-            this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
+            Single<Boolean>
+                booleanObservable
+                = this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
+            booleanObservable.subscribe();
             return true;
         } else {
             LOGGER.error("[{}] TransportClient not connected, message: {}", this.transportName, message);
@@ -512,7 +513,7 @@ public class TransportClientSession {
                                                                                        this.syncRequests,
                                                                                        message);
         this.syncRequests.put(syncRequestId, task);
-        final ChannelFuture future = this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(),
+        final ChannelFuture future = this.protocolHandler.writeMessageOld(this.clientConnector.getPrimaryChannel(),
                                                                        message);
         task.setChannelFuture(future);
         task.scheduleTimeoutCheck(new SyncMessageTimeoutChecker(this.scheduledExecutorService,
@@ -529,7 +530,7 @@ public class TransportClientSession {
     <V> ListenableFuture<V> sendMessageAsync(final ProtocolMessage message) {
 
         if (this.isOnline()) {
-            return new MessageListenableFuture<>(this.protocolHandler.writeMessage(this.clientConnector
+            return new MessageListenableFuture<>(this.protocolHandler.writeMessageOld(this.clientConnector
                                                                                        .getPrimaryChannel(),
                                                                                    message));
         } else {
@@ -563,7 +564,7 @@ public class TransportClientSession {
                                                                                            this.syncRequests,
                                                                                            message);
             this.syncRequests.put(syncRequestId, task);
-            final ChannelFuture channelFuture = this.protocolHandler.writeMessage(channel, message);
+            final ChannelFuture channelFuture = this.protocolHandler.writeMessageOld(channel, message);
             if (messageSentListener != null) {
                 channelFuture.addListener(future -> {
 

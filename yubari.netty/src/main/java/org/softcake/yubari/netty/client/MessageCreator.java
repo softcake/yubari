@@ -16,6 +16,8 @@
 
 package org.softcake.yubari.netty.client;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 /**
  * @author René Neubert
  */
@@ -28,7 +30,7 @@ public class MessageCreator implements Runnable {
         this.example = example;
     }
 
-@SuppressWarnings("squid:S2189")
+    @SuppressWarnings("squid:S2189")
     @Override
     public void run() {
 
@@ -43,9 +45,9 @@ public class MessageCreator implements Runnable {
             if (count == Integer.MAX_VALUE) {
                 count = 0;
             }
-
+            final long nextLong = ThreadLocalRandom.current().nextLong(10, 100);
             try {
-               Thread.sleep(100L);
+                Thread.sleep(nextLong);
             } catch (InterruptedException e) {
                 e.printStackTrace();
                 break;

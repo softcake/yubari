@@ -85,7 +85,7 @@ public class StreamProcessor {
                 final StreamingStatus ss = new StreamingStatus();
                 ss.setStreamId(binaryPart.getStreamId());
                 ss.setState(StreamState.STATE_ERROR);
-                clientSession.getProtocolHandler().writeMessage(ctx.channel(), ss);
+                clientSession.getProtocolHandler().writeMessage(ctx.channel(), ss).subscribe();
             } else {
                 boolean terminated = false;
 

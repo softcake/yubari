@@ -35,10 +35,7 @@ import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
-import io.reactivex.Observable;
-import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -106,7 +103,7 @@ public class HeartbeatProcessor {
             }
 
             if (!this.clientSession.isTerminating()) {
-                clientSession.getProtocolHandler().writeMessage(ctx.channel(), okResponseMessage);
+                clientSession.getProtocolHandler().writeMessage(ctx.channel(), okResponseMessage).subscribe();
             }
         } catch (final Exception e) {
             LOGGER.error("[{}] ", clientSession.getTransportName(), e);
@@ -117,7 +114,7 @@ public class HeartbeatProcessor {
                 e.getMessage()));
             errorMessage.setSynchRequestId(requestMessage.getSynchRequestId());
             if (!this.clientSession.isTerminating()) {
-                clientSession.getProtocolHandler().writeMessage(ctx.channel(), errorMessage);
+                clientSession.getProtocolHandler().writeMessage(ctx.channel(), errorMessage).subscribe();
             }
         }
     }

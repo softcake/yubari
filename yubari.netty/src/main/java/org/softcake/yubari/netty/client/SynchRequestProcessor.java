@@ -19,10 +19,10 @@ package org.softcake.yubari.netty.client;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.RequestInProcessMessage;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.Single;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,8 +57,8 @@ public class SynchRequestProcessor {
 
         final Long syncRequestId = this.getNextRequestId();
         message.setSynchRequestId(syncRequestId);
-        final Observable<ChannelFuture> future = this.protocolHandler.writeMessageOb(channel,
-                                                                                     message);
+        final Single<Boolean> future = this.protocolHandler.writeMessage(channel,
+                                                                         message);
 
 
         return Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
