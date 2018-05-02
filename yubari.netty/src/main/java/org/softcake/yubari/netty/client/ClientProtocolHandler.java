@@ -65,9 +65,7 @@ import io.netty.util.Attribute;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
-import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
-import io.reactivex.observables.ConnectableObservable;
 import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,6 +79,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 @Sharable
 public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryProtocolMessage> {
@@ -93,7 +93,30 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private final List<Thread> eventExecutorThreadsForLogging = Collections.synchronizedList(new ArrayList<>());
     private final boolean logSkippedDroppableMessages;
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
-    private final ThreadLocal<int[]> sentMessagesCounterThreadLocal = ThreadLocal.withInitial(() -> new int[1]);
+    private static final ThreadLocal<int[]> sentMessagesCounterThreadLocal = ThreadLocal.withInitial(new Supplier<int[]>() {
+        @Override
+        public int[] get() {
+
+            return new int[1];
+        }
+    });
+
+    private static final AtomicInteger nextId = new AtomicInteger(0);
+    // Thread local variable containing each thread's ID
+     private static final ThreadLocal<Integer> threadId =
+         new ThreadLocal<Integer>() {
+           protected Integer initialValue() {
+               return nextId.getAndIncrement();
+        }
+    };
+
+     // Returns the current thread's unique ID, assigning it if necessary
+     public static int sentMessagesCounterIncrementAndGet() {
+
+         final int[] ints = sentMessagesCounterThreadLocal.get();
+         final int i = ++ints[0];
+         return i;
+     }
     private final StreamProcessor streamProcessor;
     private final DroppableMessageHandler droppableMessageHandler;
     private HeartbeatProcessor heartbeatProcessor;
@@ -390,20 +413,17 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     }
 
 
-    public ConnectableObservable<ChannelFuture> writeMessageOb(final Channel channel,
-                                                               final BinaryProtocolMessage responseMessage) {
+    public Observable<ChannelFuture> writeMessageOb(final Channel channel,
+                                                    final BinaryProtocolMessage responseMessage) {
 
-        final int[] messagesCounter = this.sentMessagesCounterThreadLocal.get();
-        ++messagesCounter[0];
-        final boolean notWritable = !channel.isWritable();
+        final int messagesCounter =sentMessagesCounterIncrementAndGet();
+        LOGGER.info(Thread.currentThread().getName() + "  : ID: " + messagesCounter);
 
-        final ChannelFuture future = channel.writeAndFlush(responseMessage);
-        final ConnectableObservable<ChannelFuture>
-            observable
-            = Observable.create((ObservableOnSubscribe<ChannelFuture>) e -> {
 
+        return Observable.create((ObservableOnSubscribe<ChannelFuture>) e -> {
+            final ChannelFuture future = channel.writeAndFlush(responseMessage);
             final long procStartTime = System.currentTimeMillis();
-
+            checkSendingErrorOnNotWritableChannel(channel, future).subscribe(TransportClientSession::terminate);
             checkSendingWarning(procStartTime, future);
             checkSendError(procStartTime, future);
 
@@ -411,28 +431,24 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                 e.onNext(value);
                 e.onComplete();
             });
-        }).doOnNext(channelFuture -> updateChannelAttachement(channel, System.currentTimeMillis())).timeout(
-            clientSession.getPrimaryConnectionPingTimeout(),
-            TimeUnit.MILLISECONDS,
-            Schedulers.from(this.clientSession.getScheduledExecutorService())).publish();
+        }).doOnNext(channelFuture -> updateChannelAttachement(channel, System.currentTimeMillis()));
+    }
 
-        final Disposable subscribe = observable.subscribe(new Consumer<ChannelFuture>() {
-            @Override
-            public void accept(final ChannelFuture channelFuture) throws Exception {}
-        }, new Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable throwable) throws Exception {
+    private Observable<TransportClientSession> checkSendingErrorOnNotWritableChannel(final Channel channel,
+                                                                                     final ChannelFuture future) {
 
-                if (notWritable && !future.isDone()) {
-                    LOGGER.warn("[{}] Failed to send message in timeout time, disconnecting",
-                                clientSession.getTransportName());
-                    clientSession.terminate();
-                }
-            }
-        });
+        return Observable.just(future)
+                         .filter(channelFuture -> !channel.isWritable())
+                         .delay(clientSession.getPrimaryConnectionPingTimeout(),
+                                TimeUnit.MILLISECONDS,
+                                Schedulers.from(clientSession.getScheduledExecutorService()))
+                         .filter(channelFuture -> !channelFuture.isDone())
+                         .map(channelFuture -> clientSession)
+                         .doOnNext(session -> LOGGER.error(
+                             "[{}] Failed to send message in timeout time {}ms, disconnecting",
+                             session.getTransportName(),
+                             session.getPrimaryConnectionPingTimeout()));
 
-
-        return observable;
     }
 
     private void checkSendError(final long procStartTime, final ChannelFuture future) {
@@ -442,7 +458,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                          TimeUnit.MILLISECONDS,
                          Schedulers.from(clientSession.getScheduledExecutorService()))
                   .filter(channelFuture -> !channelFuture.isDone())
-                  .doOnNext(channelFuture -> LOGGER.error("[{}] Message was not sent in timeout time [{}] and is still "
+                  .doOnNext(channelFuture -> LOGGER.error("[{}] Message was not sent in timeout time {}ms and is still "
                                                           + "waiting it's turn, CRITICAL SEND TIME: {}ms, possible "
                                                           + "network problem",
                                                           clientSession.getTransportName(),
@@ -503,8 +519,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
     public ChannelFuture writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
 
-        final int[] messagesCounter = this.sentMessagesCounterThreadLocal.get();
-        ++messagesCounter[0];
+        final int messagesCounter = sentMessagesCounterIncrementAndGet();
+        LOGGER.info(Thread.currentThread().getName() + "  : ID: " + messagesCounter);
+
         final boolean notWritable = !channel.isWritable();
 
         final ChannelFuture channelFuture = channel.writeAndFlush(responseMessage);
@@ -553,11 +570,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                 this.scheduleSendErrorCheck(channelFuture);
             }
 
-        } else if (isTimeToCheckError(messagesCounter[0])) {
+        } else if (isTimeToCheckError(messagesCounter)) {
             this.scheduleSendErrorCheck(channelFuture);
 
 
-        } else if (isTimeToCheckWarning(messagesCounter[0])) {
+        } else if (isTimeToCheckWarning(messagesCounter)) {
             this.scheduleSendWarningCheck(channelFuture);
         }
 
@@ -644,6 +661,10 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     }
 
     private boolean processSyncResponse(final ProtocolMessage message) {
+
+
+        final SynchRequestProcessor synchRequestProcessor = this.clientSession.getSynchRequestProcessor();
+synchRequestProcessor.processRequest(message);
 
         final RequestMessageListenableFuture
             synchRequestFuture

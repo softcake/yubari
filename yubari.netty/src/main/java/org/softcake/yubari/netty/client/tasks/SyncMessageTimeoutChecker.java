@@ -18,6 +18,12 @@ package org.softcake.yubari.netty.client.tasks;
 
 import org.softcake.yubari.netty.client.RequestMessageListenableFuture;
 
+import io.reactivex.processors.PublishProcessor;
+import io.reactivex.subjects.PublishSubject;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
+
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -66,6 +72,7 @@ public class SyncMessageTimeoutChecker implements Runnable {
     }
 
     public ScheduledFuture<?> scheduleCheck() {
+
 
         return this.syncMessagesTimer.schedule(this, this.timeoutTime, TimeUnit.MILLISECONDS);
     }

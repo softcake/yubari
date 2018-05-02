@@ -36,8 +36,10 @@ import io.netty.util.concurrent.GenericFutureListener;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.ObservableSource;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.BiFunction;
 import io.reactivex.observables.ConnectableObservable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -620,13 +622,14 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
             this.childChannel = setChannelAttributeForSuccessfullyConnection(connectFuture,
                                                                              this.childSessionChannelAttachment);
 
-            final ConnectableObservable<ChannelFuture>
+            final Observable<ChannelFuture>
                 observable
                 = this.protocolHandler.writeMessageOb(this.childChannel, this.childSocketAuthAcceptorMessage);
 
             observable.subscribe(channelFuture -> {
                 try {
                     channelFuture.get();
+
                 } catch (final ExecutionException | InterruptedException e) {
 
                     if (!(e.getCause() instanceof ClosedChannelException) && isOnline()) {
@@ -639,27 +642,8 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                     }
                 }
             });
-            final Disposable connect = observable.connect();
-            connect.dispose();
 
 
-          /*  channelFuture.addListener((GenericFutureListener<Future<Void>>) future -> {
-
-                try {
-                    channelFuture.get();
-                } catch (final ExecutionException | InterruptedException e) {
-
-                    if (!(e.getCause() instanceof ClosedChannelException) && this.isOnline()) {
-                        LOGGER.error("[{}] ", this.clientSession.getTransportName(), e);
-                        this.disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                                   String.format(
-                                                                       "Child session error while writing: %s",
-                                                                       this.childSocketAuthAcceptorMessage),
-                                                                   e));
-                    }
-                }
-
-            });*/
 
             return true;
         }
@@ -709,25 +693,20 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         if (this.primarySocketAuthAcceptorMessageSent || this.primarySocketAuthAcceptorMessage == null) {return;}
 
 
-        final ChannelFuture channelFuture = this.protocolHandler.writeMessage(this.primaryChannel,
-                                                                              this.primarySocketAuthAcceptorMessage);
-        channelFuture.addListener((GenericFutureListener<Future<Void>>) future -> {
+        final Observable<ChannelFuture> channelFuture = this.protocolHandler.writeMessageOb(this.primaryChannel,
+                                                                                                       this.primarySocketAuthAcceptorMessage);
+        channelFuture.subscribe(cf -> cf.get(), t -> {
+            if (t.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
 
-            try {
-                channelFuture.get();
-            } catch (final ExecutionException | InterruptedException e) {
-
-                if (!(e.getCause() instanceof ClosedChannelException) && this.isOnline()) {
-                    LOGGER.error("[{}] ", this.clientSession.getTransportName(), e);
-                    this.disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                               String.format("Primary session error "
-                                                                             + "while writhing message: %s",
-                                                                             this.primarySocketAuthAcceptorMessage),
-                                                               e));
-                }
-            }
-
+            LOGGER.error("[{}] ", clientSession.getTransportName(), t);
+            disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                  String.format("Primary session error "
+                                                                + "while writhing message: %s",
+                                                                primarySocketAuthAcceptorMessage),
+                                                  t));
         });
+
+
         this.primarySocketAuthAcceptorMessageSent = true;
 
     }

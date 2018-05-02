@@ -35,7 +35,10 @@ import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
+import io.reactivex.Observable;
+import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -200,17 +203,18 @@ public class HeartbeatProcessor {
             }
         };
 
-
         final RequestListenableFuture future = this.clientSession.sendRequestAsync(pingRequestMessage,
-                                                                                   channel,
-                                                                                   pingTimeout,
-                                                                                   Boolean.TRUE,
-                                                                                   messageSentListener);
+                                                                                      channel,
+                                                                                      pingTimeout,
+                                                                                      Boolean.TRUE,
+                                                                                      messageSentListener);
 
         LOGGER.debug("[{}] Sending {} connection ping request: {}",
                      this.clientSession.getTransportName(),
                      (isPrimary ? PRIMARY : CHILD).toLowerCase(),
                      pingRequestMessage);
+
+
 
         final Runnable runnable = new Runnable() {
             @Override
@@ -283,7 +287,7 @@ public class HeartbeatProcessor {
             }
         };
 
-        future.addListener(runnable, MoreExecutors.newDirectExecutorService());
+       future.addListener(runnable, MoreExecutors.newDirectExecutorService());
 
     }
 

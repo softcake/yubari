@@ -17,13 +17,16 @@
 package org.softcake.yubari.netty.client;
 
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import com.dukascopy.dds4.transport.msg.system.RequestInProcessMessage;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
-import io.reactivex.functions.Consumer;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -31,29 +34,67 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author René Neubert
  */
 public class SynchRequestProcessor {
-    private final Map<Long,  ObservableEmitter<String>> syncRequests = new ConcurrentHashMap<>();
+    private final Map<Long, ObservableEmitter<ProtocolMessage>> syncRequests = new ConcurrentHashMap<>();
+    private final ClientProtocolHandler protocolHandler;
+    private ScheduledExecutorService scheduledExecutorService;
+    private AtomicLong requestId = new AtomicLong(0L);
+
+    public SynchRequestProcessor(final ClientProtocolHandler protocolHandler,
+                                 final ScheduledExecutorService scheduledExecutorService) {
+
+        this.protocolHandler = protocolHandler;
+        this.scheduledExecutorService = scheduledExecutorService;
+    }
 
     public long getNextRequestId() {
 
-       return this.requestId.incrementAndGet();
+        return this.requestId.incrementAndGet();
     }
 
-    private AtomicLong requestId = new AtomicLong(0L);
+    public Observable<ProtocolMessage> createNewSynchRequest(final Channel channel, final ProtocolMessage message,
+                                                    final long timeout,
+                                                    final TimeUnit timeoutUnits) {
+
+        final Long syncRequestId = this.getNextRequestId();
+        message.setSynchRequestId(syncRequestId);
+        final Observable<ChannelFuture> future = this.protocolHandler.writeMessageOb(channel,
+                                                                                     message);
 
 
+        return Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
+            @Override
+            public void subscribe(final ObservableEmitter<ProtocolMessage> emitter) throws Exception {
 
-     public Observable<String> createNewSynchRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits){
-         final Long syncRequestId = this.getNextRequestId();
-         message.setSynchRequestId(syncRequestId);
-
-         return Observable.create(emitter -> syncRequests.put(syncRequestId, emitter));
+                syncRequests.put(syncRequestId, emitter);
+            }
+        });
     }
 
-    public void processRequest(final ProtocolMessage message){
+    public boolean processRequest(final ProtocolMessage message) {
 
-        final ObservableEmitter<String> emitter = this.syncRequests.get(message.getSynchRequestId());
-        emitter.onNext("");
+        final ObservableEmitter<ProtocolMessage> emitter = this.syncRequests.get(message.getSynchRequestId());
 
+
+
+        final boolean result;
+        if (emitter != null) {
+            emitter.onNext(message);
+            if (message instanceof RequestInProcessMessage) {
+                result = true;
+
+
+               // synchRequestFuture.setInProcessResponseLastTime(System.currentTimeMillis());
+            } else {
+                emitter.onNext(message);
+
+
+                result = true; //!this.clientSession.isDuplicateSyncMessagesToClientListeners();
+            }
+        } else {
+            result = false;
+        }
+
+        return result;
 
     }
 }

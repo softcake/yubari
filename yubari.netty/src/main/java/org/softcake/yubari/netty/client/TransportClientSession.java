@@ -62,6 +62,7 @@ import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
+import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -457,7 +458,17 @@ public class TransportClientSession {
             return false;
         }
     }
-    ProtocolMessage sendRequestRx(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
+
+
+    public SynchRequestProcessor getSynchRequestProcessor() {
+
+        return synchRequestProcessor;
+    }
+
+    SynchRequestProcessor synchRequestProcessor = new SynchRequestProcessor(this.protocolHandler, this.scheduledExecutorService);
+
+
+    ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
         throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
 
         if (!this.isOnline()) {
@@ -466,52 +477,26 @@ public class TransportClientSession {
                                                      message.toString(400)));
         }
 
-        final Long syncRequestId = this.transportClient.getNextId();
-        message.setSynchRequestId(syncRequestId);
-        final RequestMessageListenableFuture task = new RequestMessageListenableFuture(this.transportName,
-                                                                                       syncRequestId,
-                                                                                       this.syncRequests,
-                                                                                       message);
-        this.syncRequests.put(syncRequestId, task);
-        final ChannelFuture future = this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(),
-                                                                 message);
 
-        final Observable<Void> fromFuture = Observable.fromFuture(future);
-        task.setChannelFuture(future);
-        task.scheduleTimeoutCheck(new SyncMessageTimeoutChecker(this.scheduledExecutorService,
-                                                                task,
-                                                                timeoutUnits.toMillis(timeout),
-                                                                true));
-
-        final ProtocolMessage[] result = {null};
-        Observable<ProtocolMessage> messageObservable = Observable.just(message);
-        messageObservable.subscribe(new Observer<ProtocolMessage>() {
+        final Observable<ProtocolMessage>
+            newSynchRequest
+            = synchRequestProcessor.createNewSynchRequest(this.clientConnector.getPrimaryChannel(),
+                                                          message,
+                                                          timeout,
+                                                          timeoutUnits);
+        newSynchRequest.subscribe(new Consumer<ProtocolMessage>() {
             @Override
-            public void onSubscribe(final Disposable d) {
-
-            }
-
-            @Override
-            public void onNext(final ProtocolMessage protocolMessage) {
-
-            }
-
-            @Override
-            public void onError(final Throwable e) {
-
-            }
-
-            @Override
-            public void onComplete() {
+            public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
             }
         });
+        final ProtocolMessage protocolMessage = newSynchRequest.blockingFirst();
 
-        return result[0];
+        return protocolMessage;
 
 
     }
-    ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
+    ProtocolMessage sendRequestOld(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
         throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
 
         if (!this.isOnline()) {
