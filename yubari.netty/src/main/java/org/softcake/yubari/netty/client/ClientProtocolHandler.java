@@ -690,9 +690,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private boolean processSyncResponse(final ProtocolMessage message) {
 
 
-//        final SynchRequestProcessor synchRequestProcessor = this.clientSession.getSynchRequestProcessor();
-//        synchRequestProcessor.processRequest(message);
-
+       final SynchRequestProcessor synchRequestProcessor = this.clientSession.getSynchRequestProcessor();
+        return synchRequestProcessor.processRequest(message);
+/*
         final RequestMessageListenableFuture
             synchRequestFuture
             = this.clientSession.getSyncRequestFuture(message.getSynchRequestId());
@@ -728,7 +728,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             result = false;
         }
 
-        return result;
+        return result;*/
     }
 
 

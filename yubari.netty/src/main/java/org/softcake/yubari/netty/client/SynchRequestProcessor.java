@@ -20,9 +20,10 @@ import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.RequestInProcessMessage;
 import io.netty.channel.Channel;
 import io.reactivex.Observable;
-import io.reactivex.ObservableEmitter;
-import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.Observer;
 import io.reactivex.Single;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,7 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author René Neubert
  */
 public class SynchRequestProcessor {
-    private final Map<Long, ObservableEmitter<ProtocolMessage>> syncRequests = new ConcurrentHashMap<>();
+    private final Map<Long, RequestHandler> syncRequests = new ConcurrentHashMap<>();
     private final ClientProtocolHandler protocolHandler;
     private ScheduledExecutorService scheduledExecutorService;
     private AtomicLong requestId = new AtomicLong(0L);
@@ -51,41 +52,48 @@ public class SynchRequestProcessor {
         return this.requestId.incrementAndGet();
     }
 
-    public Observable<ProtocolMessage> createNewSynchRequest(final Channel channel, final ProtocolMessage message,
-                                                    final long timeout,
-                                                    final TimeUnit timeoutUnits) {
+    public Observable<ProtocolMessage> createNewSynchRequest(final Channel channel,
+                                                             final ProtocolMessage message,
+                                                             final long timeout,
+                                                             final TimeUnit timeoutUnits) {
 
         final Long syncRequestId = this.getNextRequestId();
         message.setSynchRequestId(syncRequestId);
-        final Single<Boolean> future = this.protocolHandler.writeMessage(channel,
-                                                                         message);
+        final Single<Boolean> booleanSingle = protocolHandler.writeMessage(channel, message);
 
-
-        return Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
+        RequestHandler handler = new RequestHandler(syncRequestId);
+        final Observable<ProtocolMessage> messageObservable = handler.sendRequest(booleanSingle,
+                                                                                  false,
+                                                                                  timeout,
+                                                                                  timeoutUnits);
+        messageObservable.doOnSubscribe(new Consumer<Disposable>() {
             @Override
-            public void subscribe(final ObservableEmitter<ProtocolMessage> emitter) throws Exception {
+            public void accept(final Disposable disposable) throws Exception {
 
-                syncRequests.put(syncRequestId, emitter);
+                syncRequests.put(syncRequestId, handler);
             }
         });
+
+
+
+        return messageObservable;
     }
 
     public boolean processRequest(final ProtocolMessage message) {
 
-        final ObservableEmitter<ProtocolMessage> emitter = this.syncRequests.get(message.getSynchRequestId());
-
+        final RequestHandler handler = this.syncRequests.get(message.getSynchRequestId());
 
 
         final boolean result;
-        if (emitter != null) {
-            emitter.onNext(message);
+        if (handler != null) {
+            handler.onResponse(message);
             if (message instanceof RequestInProcessMessage) {
                 result = true;
 
-
-               // synchRequestFuture.setInProcessResponseLastTime(System.currentTimeMillis());
+                handler.onRequestInProcess(System.currentTimeMillis());
+                // synchRequestFuture.setInProcessResponseLastTime(System.currentTimeMillis());
             } else {
-                emitter.onNext(message);
+                handler.onResponse(message);
 
 
                 result = true; //!this.clientSession.isDuplicateSyncMessagesToClientListeners();

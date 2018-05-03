@@ -128,7 +128,7 @@ public class TransportClientSession {
     private final SecurityExceptionHandler securityExceptionHandler;
     private final ChannelHandler protocolEncoderDecoder;
     private final ChannelTrafficBlocker channelTrafficBlocker;
-    private final Map<Long, RequestMessageListenableFuture> syncRequests = new ConcurrentHashMap<>();
+   // private final Map<Long, RequestMessageListenableFuture> syncRequests = new ConcurrentHashMap<>();
     private final ISessionStats sessionStats;
     private final IPingListener pingListener;
     private final long syncMessageTimeout;
@@ -163,6 +163,7 @@ public class TransportClientSession {
     private ClientProtocolHandler protocolHandler;
     private ClientConnector clientConnector;
     private ScheduledExecutorService scheduledExecutorService;
+    SynchRequestProcessor synchRequestProcessor;
     private String serverSessionId;
     private IoSessionWrapper sessionWrapper = new NettyIoSessionWrapperAdapter() {
         public Future<Void> write(final Object message) {
@@ -342,7 +343,8 @@ public class TransportClientSession {
         this.channelBootstrap.group(nettyEventLoopGroup);
         this.channelBootstrap.channel(NioSocketChannel.class);
         this.channelOptions.forEach((key, value) -> this.channelBootstrap.option((ChannelOption) key, value));
-        final ClientSSLContextSubscriber subscriber
+        final ClientSSLContextSubscriber
+            subscriber
             = event -> event.subscribe(e -> clientConnector.securityException(e.getCertificateChain(),
                                                                               e.getAuthenticationType(),
                                                                               e.getException()));
@@ -377,12 +379,11 @@ public class TransportClientSession {
             }
         });
         this.protocolHandler = new ClientProtocolHandler(this);
-        this.clientConnector = new ClientConnector(this.address,
-                                                   this.channelBootstrap,
-                                                   this,
-                                                   this.protocolHandler);
+        this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
         this.protocolHandler.setClientConnector(this.clientConnector);
         this.clientConnector.start();
+       this.synchRequestProcessor = new SynchRequestProcessor(this.protocolHandler,
+                                                                                this.scheduledExecutorService);
     }
 
     private String[] cleanUpCipherSuites(final String[] enabledCipherSuites) {
@@ -396,7 +397,6 @@ public class TransportClientSession {
 
 
     }
-
 
     public void connect() {
 
@@ -443,7 +443,7 @@ public class TransportClientSession {
             this.scheduledExecutorService.shutdownNow();
         }
 
-        this.syncRequests.clear();
+       // this.syncRequests.clear();
     }
 
     boolean sendMessageNaive(final ProtocolMessage message) {
@@ -460,14 +460,10 @@ public class TransportClientSession {
         }
     }
 
-
     public SynchRequestProcessor getSynchRequestProcessor() {
 
         return synchRequestProcessor;
     }
-
-    SynchRequestProcessor synchRequestProcessor = new SynchRequestProcessor(this.protocolHandler, this.scheduledExecutorService);
-
 
     ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
         throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
@@ -489,6 +485,7 @@ public class TransportClientSession {
             @Override
             public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
+                LOGGER.info(protocolMessage.toString());
             }
         });
         final ProtocolMessage protocolMessage = newSynchRequest.blockingFirst();
@@ -497,7 +494,31 @@ public class TransportClientSession {
 
 
     }
-    ProtocolMessage sendRequestOld(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
+    public Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message,
+                                                        final Channel channel,
+                                                        final long timeout,
+                                                        final TimeUnit timeoutUnits) {
+
+        if (!this.isOnline()) {
+          //  throw new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
+//                                                     this.transportName,
+//                                                     message.toString(400)));
+        }
+
+
+        final Observable<ProtocolMessage>
+            newSynchRequest
+            = synchRequestProcessor.createNewSynchRequest(channel,
+                                                          message,
+                                                          timeout,
+                                                          timeoutUnits);
+
+
+        return newSynchRequest;
+
+
+    }
+  /*  ProtocolMessage sendRequestOld(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
         throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
 
         if (!this.isOnline()) {
@@ -514,7 +535,7 @@ public class TransportClientSession {
                                                                                        message);
         this.syncRequests.put(syncRequestId, task);
         final ChannelFuture future = this.protocolHandler.writeMessageOld(this.clientConnector.getPrimaryChannel(),
-                                                                       message);
+                                                                          message);
         task.setChannelFuture(future);
         task.scheduleTimeoutCheck(new SyncMessageTimeoutChecker(this.scheduledExecutorService,
                                                                 task,
@@ -525,14 +546,14 @@ public class TransportClientSession {
         return task.get(timeout, timeoutUnits);
 
 
-    }
+    }*/
 
     <V> ListenableFuture<V> sendMessageAsync(final ProtocolMessage message) {
 
         if (this.isOnline()) {
             return new MessageListenableFuture<>(this.protocolHandler.writeMessageOld(this.clientConnector
-                                                                                       .getPrimaryChannel(),
-                                                                                   message));
+                                                                                          .getPrimaryChannel(),
+                                                                                      message));
         } else {
             return Futures.immediateFailedFuture(new ConnectException(String.format(
                 "[%s] TransportClient not connected, message: %s",
@@ -979,6 +1000,7 @@ public class TransportClientSession {
     }
 
     public IPingListener getPingListener() {
-return this.pingListener;
+
+        return this.pingListener;
     }
 }
