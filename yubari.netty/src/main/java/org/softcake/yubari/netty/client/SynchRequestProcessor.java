@@ -33,15 +33,20 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class SynchRequestProcessor {
     private final Map<Long, RequestHandler> syncRequests = new ConcurrentHashMap<>();
+    private final TransportClientSession session;
     private final ClientProtocolHandler protocolHandler;
     private final ScheduledExecutorService scheduledExecutorService;
     private final AtomicLong requestId = new AtomicLong(0L);
 
-    public SynchRequestProcessor(final ClientProtocolHandler protocolHandler,
+    public SynchRequestProcessor(final TransportClientSession transportClientSession,
+                                 final ClientProtocolHandler protocolHandler,
                                  final ScheduledExecutorService scheduledExecutorService) {
+
+        session = transportClientSession;
 
         this.protocolHandler = protocolHandler;
         this.scheduledExecutorService = scheduledExecutorService;
+
     }
 
     private long getNextRequestId() {
@@ -86,26 +91,24 @@ public class SynchRequestProcessor {
 
     public boolean processRequest(final ProtocolMessage message) {
 
-        final RequestHandler handler = this.syncRequests.get(message.getSynchRequestId());
-
-
-        final boolean result;
-        if (handler != null) {
-            handler.onResponse(message);
-            if (message instanceof RequestInProcessMessage) {
-                result = true;
-                handler.onRequestInProcess(System.currentTimeMillis());
-            } else {
-                handler.onResponse(message);
-
-
-                result = true; //!this.clientSession.isDuplicateSyncMessagesToClientListeners();
-            }
-        } else {
-            result = false;
+        if (message.getSynchRequestId() == null) {
+            return false;
         }
 
-        return result;
+        final RequestHandler handler = this.syncRequests.get(message.getSynchRequestId());
+        final boolean result;
+        if (handler == null) {
+            return false;
+        }
+
+        if (message instanceof RequestInProcessMessage) {
+
+            handler.onRequestInProcess(System.currentTimeMillis());
+            return true;
+        } else {
+            handler.onResponse(message);
+            return !this.session.isDuplicateSyncMessagesToClientListeners();
+        }
 
     }
 }

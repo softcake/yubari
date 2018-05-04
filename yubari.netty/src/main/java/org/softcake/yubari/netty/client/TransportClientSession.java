@@ -372,7 +372,7 @@ public class TransportClientSession {
         this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
         this.protocolHandler.setClientConnector(this.clientConnector);
         this.clientConnector.start();
-        this.synchRequestProcessor = new SynchRequestProcessor(this.protocolHandler, this.scheduledExecutorService);
+        this.synchRequestProcessor = new SynchRequestProcessor(this, this.protocolHandler, this.scheduledExecutorService);
     }
 
     private String[] cleanUpCipherSuites(final String[] enabledCipherSuites) {

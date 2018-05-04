@@ -546,7 +546,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         }
 
         final ProtocolMessage requestMessage = (ProtocolMessage) msg;
-        if (requestMessage.getSynchRequestId() != null && this.processSyncResponse(requestMessage)) {
+        if (this.processSyncResponse(requestMessage)) {
             return;
         }
 
