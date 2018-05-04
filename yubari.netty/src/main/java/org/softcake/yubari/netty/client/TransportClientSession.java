@@ -161,6 +161,7 @@ public class TransportClientSession {
             return protocolHandler.writeMessage(this.channel, (BinaryProtocolMessage) message);
         }
     };
+    private ClientSateConnector clientstateConnector;
 
     protected TransportClientSession(final TransportClient transportClient,
                                      final InetSocketAddress address,
@@ -308,6 +309,11 @@ public class TransportClientSession {
         this.enabledSslProtocols = enabledSslProtocols;
     }
 
+    public ClientSateConnector getClientstateConnector() {
+
+        return clientstateConnector;
+    }
+
     void init() {
 
         this.protocolVersionClientNegotiatorHandler = new ProtocolVersionClientNegotiatorHandler(this.transportName);
@@ -370,8 +376,10 @@ public class TransportClientSession {
         });
         this.protocolHandler = new ClientProtocolHandler(this);
         this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
+        this.clientstateConnector = new ClientSateConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
+        clientstateConnector.connect();
         this.protocolHandler.setClientConnector(this.clientConnector);
-        this.clientConnector.start();
+       // this.clientConnector.start();
         this.synchRequestProcessor = new SynchRequestProcessor(this, this.protocolHandler, this.scheduledExecutorService);
     }
 
@@ -389,7 +397,7 @@ public class TransportClientSession {
 
     public void connect() {
 
-        this.clientConnector.connect();
+       // this.clientConnector.connect();
     }
 
     void disconnect() {

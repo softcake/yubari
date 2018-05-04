@@ -265,10 +265,13 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         super.userEventTriggered(ctx, evt);
 
         if (evt instanceof SslHandshakeCompletionEvent && ((SslHandshakeCompletionEvent) evt).isSuccess()) {
-            this.clientConnector.sslHandshakeSuccess();
+
+            //TODO
+            this.clientSession.getClientstateConnector().sslHandshakeSuccess();
+           // this.clientConnector.sslHandshakeSuccess();
         } else if (evt instanceof ProtocolVersionNegotiationEvent
                    && ((ProtocolVersionNegotiationEvent) evt).isSuccess()) {
-            this.clientConnector.protocolVersionHandshakeSuccess();
+          //  this.clientConnector.protocolVersionHandshakeSuccess();
         }
     }
 
