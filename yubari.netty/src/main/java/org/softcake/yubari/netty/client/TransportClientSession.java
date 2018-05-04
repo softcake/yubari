@@ -27,7 +27,6 @@ import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.IoSessionWrapper;
-import org.softcake.yubari.netty.mina.MessageSentListener;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.ssl.ClientSSLContextSubscriber;
 import org.softcake.yubari.netty.ssl.SSLContextFactory;
@@ -509,7 +508,7 @@ public class TransportClientSession {
                                                         final Channel channel,
                                                         final long timeout,
                                                         final boolean doNotRestartTimerOnInProcessResponse,
-                                                        final MessageSentListener messageSentListener) {
+                                                        final Consumer<Boolean> messageSentListener) {
 
         if (this.isOnline()) {
             final Long syncRequestId = this.transportClient.getNextId();
@@ -520,7 +519,7 @@ public class TransportClientSession {
                                                               message,
                                                               timeout,
                                                               TimeUnit.MILLISECONDS,
-                                                              doNotRestartTimerOnInProcessResponse);
+                                                              doNotRestartTimerOnInProcessResponse,messageSentListener);
 
 
         } else {

@@ -23,6 +23,7 @@ import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableSource;
 import io.reactivex.Single;
+import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
@@ -50,7 +51,7 @@ public class RequestHandler {
 
         this.syncRequestId = PreCheck.parameterNotNull(syncRequestId, "syncRequestId");
         this.scheduledExecutorService = PreCheck.parameterNotNull(scheduledExecutorService, "scheduledExecutorService");
-        PreCheck.expression(this.syncRequestId >= 0L,"syncRequestId must be >= 0L");
+        PreCheck.expression(this.syncRequestId >= 0L, "syncRequestId must be >= 0L");
     }
 
     public Long getSyncRequestId() {
@@ -68,21 +69,39 @@ public class RequestHandler {
                                                    final long timeout,
                                                    final TimeUnit timeoutUnits) {
 
+        return sendRequest(requestMessage, doNotRestartTimerOnInProcessResponse, timeout, timeoutUnits, aBoolean -> {});
+
+
+    }
+
+    public Observable<ProtocolMessage> sendRequest(final Single<Boolean> requestMessage,
+                                                   final boolean doNotRestartTimerOnInProcessResponse,
+                                                   final long timeout,
+                                                   final TimeUnit timeoutUnits,
+                                                   final Consumer<Boolean> requestSent) {
+
         PreCheck.parameterNotNull(requestMessage, "requestMessage");
         PreCheck.parameterNotNull(timeoutUnits, "timeoutUnits");
         return Observable.defer(() -> Observable.create(e -> {
             emitter = e;
-            requestMessage.subscribe(aBoolean -> observeTimeout(Math.max(timeout, 0L),
-                                                               timeoutUnits,
-                                                               doNotRestartTimerOnInProcessResponse).subscribe());
+            requestMessage.subscribe(new Consumer<Boolean>() {
+                @Override
+                public void accept(final Boolean aBoolean) throws Exception {
+
+                    requestSent.accept(aBoolean);
+                    RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
+                                                       timeoutUnits,
+                                                       doNotRestartTimerOnInProcessResponse).subscribe();
+                }
+            });
         }));
 
 
     }
 
     private Observable<Long> observeTimeout(final long timeout,
-                                           final TimeUnit timeoutUnits,
-                                           final boolean doNotRestartTimerOnInProcessResponse) {
+                                            final TimeUnit timeoutUnits,
+                                            final boolean doNotRestartTimerOnInProcessResponse) {
 
         return Observable.timer(timeout, timeoutUnits, Schedulers.from(scheduledExecutorService)).repeatWhen(
             objectObservable -> {

@@ -66,7 +66,23 @@ public class SynchRequestProcessor {
                                                                                   timeoutUnits);
         return request.doOnSubscribe(disposable -> syncRequests.put(syncRequestId, handler));
     }
+    public Observable<ProtocolMessage> createNewSyncRequest(final Channel channel,
+                                                            final ProtocolMessage message,
+                                                            final long timeout,
+                                                            final TimeUnit timeoutUnits,
+                                                            final boolean doNotRestartTimerOnInProcessResponse, final io.reactivex.functions.Consumer<Boolean> listener) {
 
+        final Long syncRequestId = this.getNextRequestId();
+        message.setSynchRequestId(syncRequestId);
+        final Single<Boolean> booleanSingle = protocolHandler.writeMessage(channel, message);
+
+        final RequestHandler handler = new RequestHandler(syncRequestId, scheduledExecutorService);
+        final Observable<ProtocolMessage> request = handler.sendRequest(booleanSingle,
+                                                                        doNotRestartTimerOnInProcessResponse,
+                                                                        timeout,
+                                                                        timeoutUnits, listener);
+        return request.doOnSubscribe(disposable -> syncRequests.put(syncRequestId, handler));
+    }
     public boolean processRequest(final ProtocolMessage message) {
 
         final RequestHandler handler = this.syncRequests.get(message.getSynchRequestId());

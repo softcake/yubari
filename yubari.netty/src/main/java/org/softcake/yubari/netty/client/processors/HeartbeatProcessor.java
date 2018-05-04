@@ -21,7 +21,6 @@ import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMEN
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
-import org.softcake.yubari.netty.mina.MessageSentListener;
 import org.softcake.yubari.netty.stream.BlockingBinaryStream;
 
 import com.dukascopy.dds4.ping.IPingListener;
@@ -43,6 +42,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -57,6 +57,10 @@ public class HeartbeatProcessor {
     private final boolean sendCpuInfoToServer;
     private final long maxSubsequentPingFailedCount;
     private IPingListener pingListener;
+    private boolean primaryPingStarted = false;
+    private boolean childPingStarted = false;
+    private Disposable primaryPing;
+    private Disposable childPing;
 
     public HeartbeatProcessor(final TransportClientSession clientSession) {
 
@@ -138,6 +142,65 @@ public class HeartbeatProcessor {
         }
     }
 
+    public void stopPrimaryPing() {
+
+        if (!this.primaryPing.isDisposed()) {
+            this.primaryPing.dispose();
+        }
+    }
+    public void stopChildPing() {
+
+        if (!this.childPing.isDisposed()) {
+            this.childPing.dispose();
+        }
+    }
+    public void startSendPingPrimary() {
+
+        if (this.primaryPing == null || this.primaryPing.isDisposed()) {
+            this.primaryPing = Observable.interval(3333L, this.clientSession.getPrimaryConnectionPingInterval(), TimeUnit.MILLISECONDS)
+                                         .doOnError(new Consumer<Throwable>() {
+                                             @Override
+                                             public void accept(final Throwable throwable) throws Exception {
+
+                                             }
+                                         }).subscribe(new Consumer<Long>() {
+                    @Override
+                    public void accept(final Long aLong) throws Exception {
+
+                        sendPingIfRequired(Boolean.TRUE);
+                    }
+                });
+        }
+
+
+
+
+
+    }
+    public void startSendPingChild() {
+
+        if (this.childPing == null || this.childPing.isDisposed()) {
+            this.childPing = Observable.interval(this.clientSession.getChildConnectionPingInterval(), TimeUnit.MILLISECONDS)
+                                         .doOnError(new Consumer<Throwable>() {
+                                             @Override
+                                             public void accept(final Throwable throwable) throws Exception {
+
+                                             }
+                                         }).subscribe(new Consumer<Long>() {
+                    @Override
+                    public void accept(final Long aLong) throws Exception {
+
+                        sendPingIfRequired(Boolean.FALSE);
+                    }
+                });
+        }
+
+
+
+
+
+    }
+
     public void sendPing(final Boolean isPrimary) {
 
         sendPingIfRequired(isPrimary);
@@ -155,6 +218,13 @@ public class HeartbeatProcessor {
                                            ? this.clientSession.getPrimaryConnectionPingTimeout()
                                            : this.clientSession.getChildConnectionPingTimeout();
         if (channel == null || !channel.isActive()) {
+
+            if (isPrimary) {
+                stopPrimaryPing();
+            } else {
+                stopChildPing();
+            }
+
             return;
         }
 
@@ -200,7 +270,7 @@ public class HeartbeatProcessor {
         final PingManager pingManager = this.clientSession.getPingManager(isPrimary);
         final AtomicLong pingSocketWriteInterval = new AtomicLong(Long.MAX_VALUE);
 
-        final MessageSentListener messageSentListener = new MessageSentListener() {
+       /* final MessageSentListener messageSentListener = new MessageSentListener() {
             @Override
             public void messageSent(final ProtocolMessage message) {
 
@@ -209,7 +279,18 @@ public class HeartbeatProcessor {
                              (isPrimary ? PRIMARY : CHILD).toUpperCase());
                 pingSocketWriteInterval.set(System.currentTimeMillis() - startTime);
             }
+        };*/
+
+        Consumer<Boolean> messageSentListener = new Consumer<>() {
+            @Override
+            public void accept(final Boolean aBoolean) throws Exception {
+                LOGGER.debug("[{}] Ping sent in {} channel.",
+                             clientSession.getTransportName(),
+                             (isPrimary ? PRIMARY : CHILD).toUpperCase());
+                pingSocketWriteInterval.set(System.currentTimeMillis() - startTime);
+            }
         };
+
 
         Observable<ProtocolMessage> future = this.clientSession.sendRequestAsync(pingRequestMessage,
                                                                                  channel,
@@ -225,130 +306,21 @@ public class HeartbeatProcessor {
             @Override
             public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
-                messageSentListener.messageSent(protocolMessage);
+               // messageSentListener.messageSent(protocolMessage);
             }
         }).subscribe(new Observer<ProtocolMessage>() {
-                  @Override
-                  public void onSubscribe(final Disposable d) {
-
-                  }
-
-                  @Override
-                  public void onNext(final ProtocolMessage protocolMessage) {
-                      LOGGER.info("HeartbeatProcessor Thread1: {}", Thread.currentThread().getName());
-                      final long now = System.currentTimeMillis();
-
-                      try {
-
-                          if (protocolMessage instanceof HeartbeatOkResponseMessage) {
-                              final HeartbeatOkResponseMessage message = (HeartbeatOkResponseMessage) protocolMessage;
-                              final long turnOverTime = now - startTime;
-
-                              attachment.pingSuccessfull();
-
-                              final Double systemCpuLoad = sendCpuInfoToServer ? pingManager.getSystemCpuLoad() : null;
-                              final Double processCpuLoad = sendCpuInfoToServer
-                                                            ? pingManager.getProcessCpuLoad()
-                                                            : null;
-                              pingManager.addPing(turnOverTime,
-                                                  pingSocketWriteInterval.get(),
-                                                  systemCpuLoad,
-                                                  processCpuLoad,
-                                                  message.getSocketWriteInterval(),
-                                                  message.getSystemCpuLoad(),
-                                                  message.getProcessCpuLoad());
-
-
-                              if (pingListener != null) {
-                                  pingListener.pingSucceded(turnOverTime,
-                                                            pingSocketWriteInterval.get(),
-                                                            systemCpuLoad,
-                                                            processCpuLoad,
-                                                            message.getSocketWriteInterval(),
-                                                            message.getSystemCpuLoad(),
-                                                            message.getProcessCpuLoad());
-                              }
-
-
-                              LOGGER.debug("{} synchronization ping response received. time: {}ms message {}, ",
-                                           isPrimary ? PRIMARY : CHILD,
-                                           turnOverTime,
-                                           protocolMessage);
-
-                          } else {
-                              attachment.pingFailed();
-                              pingManager.pingFailed();
-                              safeNotifyPingFailed();
-
-                              LOGGER.debug("Server has returned unknown response type for ping request! Time - {}ms",
-                                           (now - startTime));
-
-                          }
-                      } finally {
-                          checkPingFailed(isPrimary, attachment, pingTimeout, now);
-                      }
-
-                  }
-
-                  @Override
-                  public void onError(final Throwable e) {
-
-                  }
-
-                  @Override
-                  public void onComplete() {
-
-                  }
-              });
-
-
-    }
-
-  /*  private void sendPingRequestOld(final Channel channel,
-                                    final ChannelAttachment attachment,
-                                    final long pingTimeout,
-                                    final boolean isPrimary) {
-
-        final HeartbeatRequestMessage pingRequestMessage = new HeartbeatRequestMessage();
-        final long startTime = System.currentTimeMillis();
-        attachment.setLastPingRequestTime(startTime);
-        pingRequestMessage.setRequestTime(startTime);
-        final PingManager pingManager = this.clientSession.getPingManager(isPrimary);
-        final AtomicLong pingSocketWriteInterval = new AtomicLong(Long.MAX_VALUE);
-
-        final MessageSentListener messageSentListener = new MessageSentListener() {
             @Override
-            public void messageSent(final ProtocolMessage message) {
+            public void onSubscribe(final Disposable d) {
 
-                LOGGER.debug("[{}] Ping sent in {} channel.",
-                             clientSession.getTransportName(),
-                             (isPrimary ? PRIMARY : CHILD).toUpperCase());
-                pingSocketWriteInterval.set(System.currentTimeMillis() - startTime);
             }
-        };
 
-        final RequestListenableFuture future = this.clientSession.sendRequestAsync(pingRequestMessage,
-                                                                                   channel,
-                                                                                   pingTimeout,
-                                                                                   Boolean.TRUE,
-                                                                                   messageSentListener);
-
-        LOGGER.debug("[{}] Sending {} connection ping request: {}",
-                     this.clientSession.getTransportName(),
-                     (isPrimary ? PRIMARY : CHILD).toLowerCase(),
-                     pingRequestMessage);
-
-
-        final Runnable runnable = new Runnable() {
             @Override
-            public void run() {
+            public void onNext(final ProtocolMessage protocolMessage) {
 
-
+                LOGGER.info("HeartbeatProcessor Thread1: {}", Thread.currentThread().getName());
                 final long now = System.currentTimeMillis();
 
                 try {
-
-                    final ProtocolMessage protocolMessage = future.get();
 
                     if (protocolMessage instanceof HeartbeatOkResponseMessage) {
                         final HeartbeatOkResponseMessage message = (HeartbeatOkResponseMessage) protocolMessage;
@@ -392,29 +364,137 @@ public class HeartbeatProcessor {
                                      (now - startTime));
 
                     }
-                } catch (final InterruptedException | ExecutionException e) {
-
-                    if (isOnline()) {
-                        attachment.pingFailed();
-                        pingManager.pingFailed();
-                        safeNotifyPingFailed();
-                        LOGGER.error("{} session ping failed: {}, timeout: {}ms, syncRequestId: {}",
-                                     isPrimary ? PRIMARY : CHILD,
-                                     e.getMessage(),
-                                     pingTimeout,
-                                     pingRequestMessage.getSynchRequestId());
-                    }
                 } finally {
                     checkPingFailed(isPrimary, attachment, pingTimeout, now);
                 }
 
             }
-        };
 
-        future.addListener(runnable, MoreExecutors.newDirectExecutorService());
+            @Override
+            public void onError(final Throwable e) {
+
+            }
+
+            @Override
+            public void onComplete() {
+
+            }
+        });
+
 
     }
-*/
+
+    /*  private void sendPingRequestOld(final Channel channel,
+                                      final ChannelAttachment attachment,
+                                      final long pingTimeout,
+                                      final boolean isPrimary) {
+
+          final HeartbeatRequestMessage pingRequestMessage = new HeartbeatRequestMessage();
+          final long startTime = System.currentTimeMillis();
+          attachment.setLastPingRequestTime(startTime);
+          pingRequestMessage.setRequestTime(startTime);
+          final PingManager pingManager = this.clientSession.getPingManager(isPrimary);
+          final AtomicLong pingSocketWriteInterval = new AtomicLong(Long.MAX_VALUE);
+
+          final MessageSentListener messageSentListener = new MessageSentListener() {
+              @Override
+              public void messageSent(final ProtocolMessage message) {
+
+                  LOGGER.debug("[{}] Ping sent in {} channel.",
+                               clientSession.getTransportName(),
+                               (isPrimary ? PRIMARY : CHILD).toUpperCase());
+                  pingSocketWriteInterval.set(System.currentTimeMillis() - startTime);
+              }
+          };
+
+          final RequestListenableFuture future = this.clientSession.sendRequestAsync(pingRequestMessage,
+                                                                                     channel,
+                                                                                     pingTimeout,
+                                                                                     Boolean.TRUE,
+                                                                                     messageSentListener);
+
+          LOGGER.debug("[{}] Sending {} connection ping request: {}",
+                       this.clientSession.getTransportName(),
+                       (isPrimary ? PRIMARY : CHILD).toLowerCase(),
+                       pingRequestMessage);
+
+
+          final Runnable runnable = new Runnable() {
+              @Override
+              public void run() {
+
+
+                  final long now = System.currentTimeMillis();
+
+                  try {
+
+                      final ProtocolMessage protocolMessage = future.get();
+
+                      if (protocolMessage instanceof HeartbeatOkResponseMessage) {
+                          final HeartbeatOkResponseMessage message = (HeartbeatOkResponseMessage) protocolMessage;
+                          final long turnOverTime = now - startTime;
+
+                          attachment.pingSuccessfull();
+
+                          final Double systemCpuLoad = sendCpuInfoToServer ? pingManager.getSystemCpuLoad() : null;
+                          final Double processCpuLoad = sendCpuInfoToServer ? pingManager.getProcessCpuLoad() : null;
+                          pingManager.addPing(turnOverTime,
+                                              pingSocketWriteInterval.get(),
+                                              systemCpuLoad,
+                                              processCpuLoad,
+                                              message.getSocketWriteInterval(),
+                                              message.getSystemCpuLoad(),
+                                              message.getProcessCpuLoad());
+
+
+                          if (pingListener != null) {
+                              pingListener.pingSucceded(turnOverTime,
+                                                        pingSocketWriteInterval.get(),
+                                                        systemCpuLoad,
+                                                        processCpuLoad,
+                                                        message.getSocketWriteInterval(),
+                                                        message.getSystemCpuLoad(),
+                                                        message.getProcessCpuLoad());
+                          }
+
+
+                          LOGGER.debug("{} synchronization ping response received. time: {}ms message {}, ",
+                                       isPrimary ? PRIMARY : CHILD,
+                                       turnOverTime,
+                                       protocolMessage);
+
+                      } else {
+                          attachment.pingFailed();
+                          pingManager.pingFailed();
+                          safeNotifyPingFailed();
+
+                          LOGGER.debug("Server has returned unknown response type for ping request! Time - {}ms",
+                                       (now - startTime));
+
+                      }
+                  } catch (final InterruptedException | ExecutionException e) {
+
+                      if (isOnline()) {
+                          attachment.pingFailed();
+                          pingManager.pingFailed();
+                          safeNotifyPingFailed();
+                          LOGGER.error("{} session ping failed: {}, timeout: {}ms, syncRequestId: {}",
+                                       isPrimary ? PRIMARY : CHILD,
+                                       e.getMessage(),
+                                       pingTimeout,
+                                       pingRequestMessage.getSynchRequestId());
+                      }
+                  } finally {
+                      checkPingFailed(isPrimary, attachment, pingTimeout, now);
+                  }
+
+              }
+          };
+
+          future.addListener(runnable, MoreExecutors.newDirectExecutorService());
+
+      }
+  */
     private void checkPingFailed(final boolean isPrimary,
                                  final ChannelAttachment attachment,
                                  final long pingTimeout,

@@ -32,6 +32,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ConnectTimeoutException;
+import io.netty.util.Attribute;
 import io.reactivex.Single;
 import io.reactivex.SingleOnSubscribe;
 import org.slf4j.Logger;
@@ -160,6 +161,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         this.disconnect(new ClientDisconnectReason(DisconnectReason.CLIENT_APP_REQUEST, "Client application request"));
     }
 
+    //TODO Event Channel inactive
     void primaryChannelDisconnected() {
 
         this.disconnect(getDisconnectReason());
@@ -194,7 +196,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
             }
         }
     }
-
+//TODO Event Child Channel disconnect
     void childChannelDisconnected() {
 
 
@@ -465,6 +467,9 @@ this.isProcessConnecting = true;
         Channel channel = channelSingle.blockingGet();
         primaryChannel = channel;
         channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(primarySessionChannelAttachment);
+        final Attribute<ChannelAttachment> attribute = channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+        final ChannelAttachment attachment = attribute.get();
+
         processConnectOverSSLIfNecessary();
     }
 
@@ -612,14 +617,14 @@ this.isProcessConnecting = true;
         }
 
         this.processPrimarySocketAuthAcceptorMessage();
-        clientSession.getProtocolHandler().getHeartbeatProcessor().sendPing(Boolean.TRUE);
-
+        //clientSession.getProtocolHandler().getHeartbeatProcessor().sendPing(Boolean.TRUE);
+        clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingPrimary();
 
         if (!this.clientSession.isUseFeederSocket() || this.childSocketAuthAcceptorMessage == null) {return true;}
 
         if (this.childChannel != null && this.childChannel.isActive()) {
-            clientSession.getProtocolHandler().getHeartbeatProcessor().sendPing(Boolean.FALSE);
-
+            //clientSession.getProtocolHandler().getHeartbeatProcessor().sendPing(Boolean.FALSE);
+            clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingChild();
             if (this.canResetChildChannelReconnectAttempts()) {
 
                 this.childSessionChannelAttachment.setReconnectAttempt(0);
@@ -722,6 +727,8 @@ this.isProcessConnecting = true;
             }
         });
         booleanSingle.subscribe();
+        final Attribute<ChannelAttachment> attribute =channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+        final ChannelAttachment attachment = attribute.get();
        // booleanSingle.blockingGet();
 
         //TODO

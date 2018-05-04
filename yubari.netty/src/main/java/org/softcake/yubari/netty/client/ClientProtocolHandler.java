@@ -230,7 +230,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel().attr(
             CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
         final ChannelAttachment attachment = channelAttachmentAttribute.get();
-
+        if (attachment == null) {
+            LOGGER.trace("Attchement null");
+        }
         LOGGER.trace("[{}] Message received {}, primary channel: {}",
                      this.clientSession.getTransportName(),
                      msg,
