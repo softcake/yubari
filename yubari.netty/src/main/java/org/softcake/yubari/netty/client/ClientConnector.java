@@ -81,6 +81,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
     private PrimarySocketAuthAcceptorMessage primarySocketAuthAcceptorMessage;
     private boolean primarySocketAuthAcceptorMessageSent;
     private ChildSocketAuthAcceptorMessage childSocketAuthAcceptorMessage;
+    private boolean isProcessConnecting = false;
 
     public ClientConnector(final InetSocketAddress address,
                            final Bootstrap channelBootstrap,
@@ -255,6 +256,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                             continue;
                         }
 
+                        isProcessConnecting = false;
                         timeToWait = this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout()
                                      - System.currentTimeMillis();
 
@@ -388,6 +390,9 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
 
     private boolean isProcessSSLHandshakeTimeout() {
 
+        if (this.sslHandshakeStartTime == null) {
+            return false;
+        }
         if (this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout() < System.currentTimeMillis()) {
 
             LOGGER.info("[{}] SSL handshake timeout", this.clientSession.getTransportName());
@@ -424,11 +429,17 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
             this.processConnectingInvalidServerAddress();
             return;
         }
+        if (this.isProcessConnecting) {
+            return;
+        }
 
+
+this.isProcessConnecting = true;
         final Single<Channel> connectFuture = this.processConnectingAndGetFuture(this.address);
-        connectFuture.doOnSuccess(channel -> LOGGER.debug("[{}] primaryChannel = {}",
-                                                          clientSession.getTransportName(),
-                                                          channel)).doOnError(cause -> {
+        Single<Channel> channelSingle = connectFuture.doOnSuccess(channel -> LOGGER.debug("[{}] primaryChannel = {}",
+                                                                                          clientSession
+                                                                                              .getTransportName(),
+                                                                                          channel)).doOnError(cause -> {
             DisconnectReason reason = cause instanceof CertificateException
                                       ? DisconnectReason.CERTIFICATE_EXCEPTION
                                       : DisconnectReason.CONNECTION_PROBLEM;
@@ -444,12 +455,17 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                                                                    cause.getMessage()),
                                                      cause),
                           Boolean.TRUE);
-        }).subscribe(channel -> {
-            primaryChannel = channel;
-            channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(primarySessionChannelAttachment);
-            processConnectOverSSLIfNecessary();
+            isProcessConnecting = false;
         });
 
+                     channelSingle.subscribe(channel -> {
+
+
+        });
+        Channel channel = channelSingle.blockingGet();
+        primaryChannel = channel;
+        channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(primarySessionChannelAttachment);
+        processConnectOverSSLIfNecessary();
     }
 
     private void processConnectingPreConditions() {
@@ -500,10 +516,13 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         if (this.clientSession.isUseSSL()) {
             if (this.tryToSetState(ClientState.CONNECTING, ClientState.SSL_HANDSHAKE_WAITING)) {
                 this.sslHandshakeStartTime = System.currentTimeMillis();
+
             }
         } else if (this.tryToSetState(ClientState.CONNECTING, ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING)) {
             this.protocolVersionNegotiationStartTime = System.currentTimeMillis();
+
         }
+
     }
 
   /*  private ChannelFuture processConnectingAndGetFuture() throws InterruptedException {
@@ -653,9 +672,10 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         final Single<Channel> connectFuture = this.processConnectingAndGetFuture(this.address);
 
 
-        connectFuture.doOnSuccess(channel -> LOGGER.debug("[{}] childChannel = {}",
-                                                          clientSession.getTransportName(),
-                                                          channel)).doOnError(cause -> {
+        Single<Channel> channelSingle = connectFuture.doOnSuccess(channel -> LOGGER.debug("[{}] childChannel = {}",
+                                                                                          clientSession
+                                                                                              .getTransportName(),
+                                                                                          channel)).doOnError(cause -> {
             DisconnectReason reason = cause instanceof CertificateException
                                       ? DisconnectReason.CERTIFICATE_EXCEPTION
                                       : DisconnectReason.CONNECTION_PROBLEM;
@@ -671,29 +691,39 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                                                                    cause.getMessage()),
                                                      cause),
                           Boolean.TRUE);
-        }).subscribe(new io.reactivex.functions.Consumer<Channel>() {
+        });
+
+
+
+                     channelSingle.subscribe(new io.reactivex.functions.Consumer<Channel>() {
             @Override
             public void accept(final Channel channel) throws Exception {
 
-                childChannel = channel;
-                channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(childSessionChannelAttachment);
-                final Single<Boolean> observable = protocolHandler.writeMessage(childChannel,
-                                                                                childSocketAuthAcceptorMessage);
-                observable.doOnError(new io.reactivex.functions.Consumer<Throwable>() {
-                    @Override
-                    public void accept(final Throwable e) throws Exception {
 
-                        if (e.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
 
-                        LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                        disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                              String.format("Child session error while writing: %s",
-                                                                            childSocketAuthAcceptorMessage),
-                                                              e));
-                    }
-                }).subscribe();
             }
         });
+        Channel channel = channelSingle.blockingGet();
+        childChannel = channel;
+        channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(childSessionChannelAttachment);
+        final Single<Boolean> observable = protocolHandler.writeMessage(childChannel,
+                                                                        childSocketAuthAcceptorMessage);
+        Single<Boolean> booleanSingle = observable.doOnError(new io.reactivex.functions.Consumer<Throwable>() {
+            @Override
+            public void accept(final Throwable e) throws Exception {
+
+                if (e.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
+
+                LOGGER.error("[{}] ", clientSession.getTransportName(), e);
+                disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                      String.format("Child session error while writing: %s",
+                                                                    childSocketAuthAcceptorMessage),
+                                                      e));
+            }
+        });
+        booleanSingle.subscribe();
+       // booleanSingle.blockingGet();
+
         //TODO
         return true;
 
