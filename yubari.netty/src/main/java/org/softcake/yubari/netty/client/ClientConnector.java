@@ -30,9 +30,10 @@ import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ConnectTimeoutException;
 import io.reactivex.Single;
-import io.reactivex.SingleObserver;
-import io.reactivex.disposables.Disposable;
+import io.reactivex.SingleOnSubscribe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +41,7 @@ import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -105,10 +107,9 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         return this.disconnectReason;
     }
 
-    private static Channel setChannelAttributeForSuccessfullyConnection(final ChannelFuture connectFuture,
+    private static Channel setChannelAttributeForSuccessfullyConnection(final Channel channel,
                                                                         final ChannelAttachment attachment) {
 
-        final Channel channel = connectFuture.channel();
         channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(attachment);
 
         return channel;
@@ -424,25 +425,30 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
             return;
         }
 
-        final ChannelFuture connectFuture = this.processConnectingAndGetFuture();
+        final Single<Channel> connectFuture = this.processConnectingAndGetFuture(this.address);
+        connectFuture.doOnSuccess(channel -> LOGGER.debug("[{}] primaryChannel = {}",
+                                                          clientSession.getTransportName(),
+                                                          channel)).doOnError(cause -> {
+            DisconnectReason reason = cause instanceof CertificateException
+                                      ? DisconnectReason.CERTIFICATE_EXCEPTION
+                                      : DisconnectReason.CONNECTION_PROBLEM;
 
-        if (connectFuture.isSuccess()) {
 
-            LOGGER.debug("[{}] Successfully connected to [{}]", this.clientSession.getTransportName(), this.address);
-            this.primaryChannel = setChannelAttributeForSuccessfullyConnection(connectFuture,
-                                                                               this.primarySessionChannelAttachment);
-            LOGGER.debug("[{}] primaryChannel = {}", this.clientSession.getTransportName(), this.primaryChannel);
-            this.processConnectOverSSLIfNecessary();
-
-        } else if (connectFuture.isDone() && connectFuture.cause() != null) {
-            this.handleConnectingError(connectFuture);
-
-        } else {
-
-            this.handleUnexpectedConnectingError();
-
-        }
-
+            tryToSetState(ClientState.CONNECTING,
+                          ClientState.DISCONNECTING,
+                          new ClientDisconnectReason(reason,
+                                                     String.format("%s exception %s",
+                                                                   cause instanceof CertificateException
+                                                                   ? "Certificate"
+                                                                   : "Unexpected",
+                                                                   cause.getMessage()),
+                                                     cause),
+                          Boolean.TRUE);
+        }).subscribe(channel -> {
+            primaryChannel = channel;
+            channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(primarySessionChannelAttachment);
+            processConnectOverSSLIfNecessary();
+        });
 
     }
 
@@ -500,7 +506,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         }
     }
 
-    private ChannelFuture processConnectingAndGetFuture() throws InterruptedException {
+  /*  private ChannelFuture processConnectingAndGetFuture() throws InterruptedException {
 
         LOGGER.debug("[{}] Connecting to [{}]", this.clientSession.getTransportName(), this.address);
 
@@ -508,6 +514,45 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         final ChannelFuture connectFuture = this.channelBootstrap.connect(this.address);
         connectFuture.await(this.clientSession.getConnectionTimeout());
         return connectFuture;
+    }*/
+
+    private Single<Channel> processConnectingAndGetFuture(final InetSocketAddress address) throws InterruptedException {
+
+
+        return Single.create((SingleOnSubscribe<Channel>) e -> {
+
+            final ChannelFuture future = channelBootstrap.connect(address);
+            future.addListener((ChannelFutureListener) cf -> {
+
+                if (cf.isSuccess() && cf.isDone()) {
+                    // Completed successfully
+                    e.onSuccess(cf.channel());
+                } else if (cf.isCancelled() && cf.isDone()) {
+                    // Completed by cancellation
+                    e.onError(new CancellationException("cancelled before completed"));
+                } else if (cf.isDone() && cf.cause() != null) {
+                    // Completed with failure
+                    e.onError(cf.cause());
+                } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
+                    // Uncompleted
+                    e.onError(new ConnectTimeoutException());
+                } else {
+                    e.onError(new Exception("Unexpected ChannelFuture state"));
+                }
+            });
+        })
+                     .doOnSubscribe(disposable -> LOGGER.debug("[{}] Connecting to [{}]",
+                                                               clientSession.getTransportName(),
+                                                               address))
+                     .doOnSuccess(aBoolean -> LOGGER.debug("[{}] Successfully connected to [{}]",
+                                                           clientSession.getTransportName(),
+                                                           address))
+                     .timeout(this.clientSession.getConnectionTimeout(), TimeUnit.MILLISECONDS)
+                     .doOnError(cause -> LOGGER.error("[{}] Connect failed because of {}: {}",
+                                                      clientSession.getTransportName(),
+                                                      cause.getClass().getSimpleName(),
+                                                      cause.getMessage()));
+
     }
 
     private void processConnectingInvalidServerAddress() {
@@ -567,16 +612,15 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
                             this.clientSession.getTransportName());
 
                 setDisconnectReason(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                               "Child session max connection attempts"
-                                                               + " reached"));
+                                                               "Child session max connection attempts" + " reached"));
                 this.tryToSetState(ClientState.ONLINE, ClientState.DISCONNECTING, Boolean.TRUE);
 
                 return false;
             }
 
 
-            if (this.childSessionChannelAttachment.getLastConnectAttemptTime()
-                + this.clientSession.getReconnectDelay() < System.currentTimeMillis()) {
+            if (this.childSessionChannelAttachment.getLastConnectAttemptTime() + this.clientSession.getReconnectDelay()
+                < System.currentTimeMillis()) {
 
                 return this.connectChildSession();
             }
@@ -598,92 +642,61 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
 
         this.childSessionChannelAttachment.setLastConnectAttemptTime(System.currentTimeMillis());
         this.childSessionChannelAttachment.resetTimes();
-        this.childSessionChannelAttachment.setReconnectAttempt(this.childSessionChannelAttachment
-                                                                       .getReconnectAttempt()
-                                                                   + 1);
+        this.childSessionChannelAttachment.setReconnectAttempt(this.childSessionChannelAttachment.getReconnectAttempt()
+                                                               + 1);
 
         LOGGER.debug("[{}] Trying to connect child session. Attempt {}",
                      this.clientSession.getTransportName(),
                      this.childSessionChannelAttachment.getReconnectAttempt() + 1);
 
 
-        final ChannelFuture connectFuture = this.processConnectingAndGetFuture();
+        final Single<Channel> connectFuture = this.processConnectingAndGetFuture(this.address);
 
-    if (connectFuture.isSuccess()) {
-        this.childChannel = setChannelAttributeForSuccessfullyConnection(connectFuture, this
-            .childSessionChannelAttachment);
-        LOGGER.info("Alles gut1 {}", Thread.currentThread().getName());
-        final Single<Boolean> observable = this.protocolHandler.writeMessage(this.childChannel, this.childSocketAuthAcceptorMessage);
 
-        observable.subscribe(new SingleObserver<Boolean>() {
+        connectFuture.doOnSuccess(channel -> LOGGER.debug("[{}] childChannel = {}",
+                                                          clientSession.getTransportName(),
+                                                          channel)).doOnError(cause -> {
+            DisconnectReason reason = cause instanceof CertificateException
+                                      ? DisconnectReason.CERTIFICATE_EXCEPTION
+                                      : DisconnectReason.CONNECTION_PROBLEM;
+
+
+            tryToSetState(ClientState.CONNECTING,
+                          ClientState.DISCONNECTING,
+                          new ClientDisconnectReason(reason,
+                                                     String.format("%s Child connection exception %s",
+                                                                   cause instanceof CertificateException
+                                                                   ? "Certificate"
+                                                                   : "Unexpected",
+                                                                   cause.getMessage()),
+                                                     cause),
+                          Boolean.TRUE);
+        }).subscribe(new io.reactivex.functions.Consumer<Channel>() {
             @Override
-            public void onSubscribe(final Disposable d) {
+            public void accept(final Channel channel) throws Exception {
 
-            }
+                childChannel = channel;
+                channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(childSessionChannelAttachment);
+                final Single<Boolean> observable = protocolHandler.writeMessage(childChannel,
+                                                                                childSocketAuthAcceptorMessage);
+                observable.doOnError(new io.reactivex.functions.Consumer<Throwable>() {
+                    @Override
+                    public void accept(final Throwable e) throws Exception {
 
-            @Override
-            public void onSuccess(final Boolean aBoolean) {
+                        if (e.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
 
-                LOGGER.info("Alles gut {}", Thread.currentThread().getName());
-            }
-
-            @Override
-            public void onError(final Throwable e) {
-
-                if (!(e.getCause() instanceof ClosedChannelException) && isOnline()) {
-                    LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                    disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                          String.format("Child session error while writing: %s",
-                                                                        childSocketAuthAcceptorMessage),
-                                                          e));
-                }
-            }
-        });
-           /* observable.subscribe(channelFuture -> {
-                try {
-                    channelFuture.get();
-
-                } catch (final ExecutionException | InterruptedException e) {
-
-                    if (!(e.getCause() instanceof ClosedChannelException) && isOnline()) {
                         LOGGER.error("[{}] ", clientSession.getTransportName(), e);
                         disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                              String.format(
-                                                                  "Child session error while writing: %s",
-                                                                  childSocketAuthAcceptorMessage),
+                                                              String.format("Child session error while writing: %s",
+                                                                            childSocketAuthAcceptorMessage),
                                                               e));
                     }
-                }
-            });
-*/
-
-         Boolean aBoolean = observable.blockingGet();
-        return true;
-    }
-
-        if (connectFuture.isDone() && connectFuture.cause() != null) {
-
-
-            final Throwable cause = connectFuture.cause();
-
-            LOGGER.debug("[{}] Child connection connect call failed because of {}: {}",
-                         this.clientSession.getTransportName(),
-                         cause.getClass().getSimpleName(),
-                         cause.getMessage());
-
-
-            if (cause instanceof CertificateException) {
-
-
-                setDisconnectReason(new ClientDisconnectReason(DisconnectReason.CERTIFICATE_EXCEPTION,
-                                                               "Child connection certificate exception.",
-                                                               cause));
+                }).subscribe();
             }
-        } else {
-            LOGGER.debug("[{}] Child connection connect call failed", this.clientSession.getTransportName());
-        }
+        });
+        //TODO
+        return true;
 
-        return false;
     }
 
     private boolean isMaxChildChannelReconnectAttemptsReached() {
@@ -711,7 +724,7 @@ public class ClientConnector extends Thread implements AuthorizationProviderList
         channelFuture.subscribe(new io.reactivex.functions.Consumer<Boolean>() {
             @Override
             public void accept(final Boolean cf) throws Exception {
-LOGGER.info(" OK?: {}",cf);
+
 
             }
         }, new io.reactivex.functions.Consumer<Throwable>() {

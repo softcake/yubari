@@ -16,21 +16,19 @@
 
 package org.softcake.yubari.netty.client;
 
+import org.softcake.cherry.core.base.PreCheck;
+
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
-import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.ObservableSource;
-import io.reactivex.Observer;
 import io.reactivex.Single;
-import io.reactivex.SingleObserver;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
-import io.reactivex.functions.Predicate;
+import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -41,129 +39,101 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class RequestHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(RequestHandler.class);
-    private final long syncRequestId;
+    private final Long syncRequestId;
+    private final AtomicBoolean isResponse = new AtomicBoolean(false);
+    private final ScheduledExecutorService scheduledExecutorService;
     private ObservableEmitter<ProtocolMessage> emitter;
     private ProtocolMessage responseMessage = null;
-    private AtomicBoolean isResponse = new AtomicBoolean(false);
     private long inProcessResponseLastTime = Long.MIN_VALUE;
 
+    RequestHandler(final Long syncRequestId, final ScheduledExecutorService scheduledExecutorService) {
 
-    RequestHandler(final Long syncRequestId) {
-
-        this.syncRequestId = syncRequestId;
-
+        this.syncRequestId = PreCheck.parameterNotNull(syncRequestId, "syncRequestId");
+        this.scheduledExecutorService = PreCheck.parameterNotNull(scheduledExecutorService, "scheduledExecutorService");
+        PreCheck.expression(this.syncRequestId >= 0L,"syncRequestId must be >= 0L");
     }
 
+    public Long getSyncRequestId() {
+
+        return syncRequestId;
+    }
 
     public ProtocolMessage getResponseMessage() {
 
         return responseMessage;
     }
 
-    Observable<ProtocolMessage> sendRequest(final Single<Boolean> requestMessage,
-                                            final boolean doNotRestartTimerOnInProcessResponse,
-                                            final long timeout,
-                                            final TimeUnit timeoutUnits) {
+    public Observable<ProtocolMessage> sendRequest(final Single<Boolean> requestMessage,
+                                                   final boolean doNotRestartTimerOnInProcessResponse,
+                                                   final long timeout,
+                                                   final TimeUnit timeoutUnits) {
 
-
-        return Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
-            @Override
-            public void subscribe(final ObservableEmitter<ProtocolMessage> e) throws Exception {
-
-                emitter = e;
-                LOGGER.info("subscribing : ");
-
-                Observable.timer(timeout, timeoutUnits)
-                          .repeatWhen(new Function<Observable<Object>, ObservableSource<?>>() {
-                              @Override
-                              public ObservableSource<?> apply(final Observable<Object> objectObservable)
-                                  throws Exception {
-
-                                  AtomicLong scheduledTime = new AtomicLong(Long.MIN_VALUE);
-
-
-                                  return objectObservable.takeWhile(new Predicate<Object>() {
-                                      @Override
-                                      public boolean test(final Object o) throws Exception {
-
-                                          if (isResponse.get()) {
-
-                                          } else if (doNotRestartTimerOnInProcessResponse) {
-                                              emitter.onError(new TimeoutException("Timeout while waiting for "
-                                                                                   + "response"));
-
-                                          } else if (inProcessResponseLastTime + timeout
-                                                     <= System.currentTimeMillis()) {
-                                              emitter.onError(new TimeoutException(
-                                                  "Timeout while waiting for response with retry timeout"));
-
-                                          } else {
-
-
-                                              scheduledTime.set(inProcessResponseLastTime + timeout
-                                                                - System.currentTimeMillis());
-                                              if (scheduledTime.get() > 0L) {
-                                                  LOGGER.info("Retrying {}", scheduledTime.get());
-                                                  return true;
-
-                                              } else {
-                                                  emitter.onError(new TimeoutException("Unexpecte timeout"));
-
-                                              }
-                                          }
-                                          return false;
-                                      }
-                                  }).flatMap((Function<Object, ObservableSource<?>>) o -> Observable.timer(scheduledTime
-                                                                                                               .get(),
-                                                                                                           TimeUnit
-                                                                                                               .MILLISECONDS));
-                              }
-                          })
-                          .subscribe();
-
-
-            }
-        }).doOnSubscribe(new Consumer<Disposable>() {
-            @Override
-            public void accept(final Disposable disposable) throws Exception {
-
-                requestMessage.subscribe(new SingleObserver<Boolean>() {
-                    @Override
-                    public void onSubscribe(final Disposable d) {
-
-                    }
-
-                    @Override
-                    public void onSuccess(final Boolean aBoolean) {
-
-                        LOGGER.info("Message send");
-                    }
-
-                    @Override
-                    public void onError(final Throwable e) {
-
-                    }
-                });
-            }
-        });
+        PreCheck.parameterNotNull(requestMessage, "requestMessage");
+        PreCheck.parameterNotNull(timeoutUnits, "timeoutUnits");
+        return Observable.defer(() -> Observable.create(e -> {
+            emitter = e;
+            requestMessage.subscribe(aBoolean -> observeTimeout(Math.max(timeout, 0L),
+                                                               timeoutUnits,
+                                                               doNotRestartTimerOnInProcessResponse).subscribe());
+        }));
 
 
     }
 
-    void onResponse(final ProtocolMessage message) {
+    private Observable<Long> observeTimeout(final long timeout,
+                                           final TimeUnit timeoutUnits,
+                                           final boolean doNotRestartTimerOnInProcessResponse) {
 
-        final Long synchRequestId = message.getSynchRequestId();
-        if (synchRequestId != null && synchRequestId.equals(this.syncRequestId)) {
+        return Observable.timer(timeout, timeoutUnits, Schedulers.from(scheduledExecutorService)).repeatWhen(
+            objectObservable -> {
+
+                final AtomicLong scheduledTime = new AtomicLong(Long.MIN_VALUE);
+
+
+                return objectObservable.takeWhile(o -> {
+
+                    if (isResponse.get()) {
+                        return false;
+                    } else if (doNotRestartTimerOnInProcessResponse) {
+                        emitter.onError(new TimeoutException("Timeout while waiting for " + "response"));
+
+                    } else if (inProcessResponseLastTime + timeout <= System.currentTimeMillis()) {
+                        emitter.onError(new TimeoutException("Timeout while waiting for response with retry timeout"));
+
+                    } else {
+
+
+                        scheduledTime.set(inProcessResponseLastTime + timeout - System.currentTimeMillis());
+                        if (scheduledTime.get() > 0L) {
+                            LOGGER.info("Retrying {}", scheduledTime.get());
+                            return true;
+
+                        }
+
+                        emitter.onError(new TimeoutException("Unexpecte timeout"));
+
+
+                    }
+                    return false;
+                }).flatMap((Function<Object, ObservableSource<?>>) o -> Observable.timer(scheduledTime.get(),
+                                                                                         TimeUnit.MILLISECONDS,
+                                                                                         Schedulers.from(
+                                                                                             scheduledExecutorService)));
+            });
+    }
+
+    public void onResponse(final ProtocolMessage message) {
+
+        PreCheck.parameterNotNull(message, "message");
+        if (this.syncRequestId.equals(message.getSynchRequestId())) {
             isResponse.set(true);
             emitter.onNext(message);
             emitter.onComplete();
             this.responseMessage = message;
         } else {
             emitter.onError(new IllegalStateException(String.format("SynchRequestId is not valid: %s",
-                                                                    synchRequestId)));
+                                                                    message.getSynchRequestId())));
         }
-
-
     }
 
     void onRequestInProcess(final long currentTimeMillis) {

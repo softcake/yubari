@@ -18,16 +18,14 @@ package org.softcake.yubari.netty.client;
 
 
 import org.softcake.yubari.netty.mina.ClientListener;
-import org.softcake.yubari.netty.mina.RequestListenableFuture;
 
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.ListenableFuture;
+import io.reactivex.Observable;
+import io.reactivex.Single;
 
 import java.net.ConnectException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -36,17 +34,17 @@ public interface ITransportClient  {
 
     boolean sendMessageNaive(ProtocolMessage var1);
 
-    <V> ListenableFuture<V> sendMessageAsync(ProtocolMessage var1);
+   Single<Boolean> sendMessageAsync(ProtocolMessage var1);
 
-    <V> void sendMessageAsync(ProtocolMessage var1, FutureCallback<V> var2);
+  //  <V> void sendMessageAsync(ProtocolMessage var1, FutureCallback<V> var2);
 
-    <V> void sendMessageAsync(ProtocolMessage var1, FutureCallback<V> var2, Executor var3);
+ //   <V> void sendMessageAsync(ProtocolMessage var1, FutureCallback<V> var2, Executor var3);
 
     ProtocolMessage sendRequest(ProtocolMessage var1, long var2, TimeUnit var4)
         throws InterruptedException, TimeoutException, ConnectException, ExecutionException;
 
-    RequestListenableFuture sendRequestAsync(ProtocolMessage var1);
-
+    //RequestListenableFuture sendRequestAsync(ProtocolMessage var1);
+    Observable<ProtocolMessage> sendRequestAsync(ProtocolMessage var1);
 
 
 

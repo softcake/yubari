@@ -24,6 +24,8 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_AU
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTIONS;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHILD_CONNECTION_RECONNECTS_RESET_DELAY;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHILD_CONNECTION_RECONNECT_ATTEMPTS;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CONNECTION_TIMEOUT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CRITICAL_AUTH_EVENT_QUEUE_SIZE;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CRITICAL_EVENT_QUEUE_SIZE;
@@ -49,8 +51,6 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_PI
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_PING_TIMEOUT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_PROTOCOL_VERSION_NEGOTIATION_TIMEOUT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_RECONNECT_DELAY;
-import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHILD_CONNECTION_RECONNECTS_RESET_DELAY;
-import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHILD_CONNECTION_RECONNECT_ATTEMPTS;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SEND_COMPLETION_ERROR_DELAY;
@@ -82,7 +82,6 @@ import org.softcake.yubari.netty.mbean.TransportClientMBean;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
-import org.softcake.yubari.netty.mina.RequestListenableFuture;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.mina.ServerAddress;
 import org.softcake.yubari.netty.mina.SyncInstrumentsAndAllOtherConcurrencyPolicy;
@@ -93,10 +92,9 @@ import com.dukascopy.dds4.ping.PingManager;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import io.netty.channel.ChannelOption;
+import io.reactivex.Observable;
+import io.reactivex.Single;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -178,9 +176,9 @@ public class TransportClient implements ITransportClient {
     private int transportPoolSize;
     private int eventPoolSize;
     private long eventPoolAutoCleanupInterval;
-    private int authEventPoolSize;
-    private long authEventPoolAutoCleanupInterval;
-    private int criticalAuthEventQueueSize;
+    private final int authEventPoolSize;
+    private final long authEventPoolAutoCleanupInterval;
+    private final int criticalAuthEventQueueSize;
     private long primaryConnectionPingInterval;
     private long childConnectionPingInterval;
     private long primaryConnectionPingTimeout;
@@ -188,7 +186,7 @@ public class TransportClient implements ITransportClient {
     private int childConnectionReconnectAttempts;
     private long childConnectionReconnectsResetDelay;
     private long droppableMessageServerTTL;
-    private long droppableMessageClientTTL;
+    private final long droppableMessageClientTTL;
     private boolean skipDroppableMessages;
     private Map<ChannelOption<?>, Object> channelOptions;
     private String userAgent;
@@ -209,8 +207,8 @@ public class TransportClient implements ITransportClient {
     private boolean debugMode;
 
     private volatile TransportClientSession transportClientSession;
-    private AtomicLong requestId = new AtomicLong(0L);
-    private AtomicInteger ticksCounter = new AtomicInteger();
+    private final AtomicLong requestId = new AtomicLong(0L);
+    private final AtomicInteger ticksCounter = new AtomicInteger();
     private AbstractStaticSessionDictionary staticSessionDictionary;
     private ISessionStats sessionStats;
     private IPingListener pingListener;
@@ -976,7 +974,8 @@ public class TransportClient implements ITransportClient {
         }
 
         if (this.staticSessionDictionary == null) {
-            throw new NullPointerException(String.format("[%s] staticSessionDictionary is not set", this.transportName));
+            throw new NullPointerException(String.format("[%s] staticSessionDictionary is not set",
+                                                         this.transportName));
         }
 
         if (this.maxSubsequentPingFailedCount <= 0L) {
@@ -1148,7 +1147,16 @@ public class TransportClient implements ITransportClient {
         }
     }
 
-    public <V> ListenableFuture<V> sendMessageAsync(final ProtocolMessage message) {
+    @Override
+    public Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message) {
+
+        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        return transportClientSessionLocal != null
+               ? transportClientSessionLocal.sendRequestAsync(message)
+               : this.createFailedResponse(message);
+    }
+
+    public Single<Boolean> sendMessageAsync(final ProtocolMessage message) {
 
         final TransportClientSession transportClientSessionLocal = this.transportClientSession;
         if (transportClientSessionLocal != null) {
@@ -1157,42 +1165,51 @@ public class TransportClient implements ITransportClient {
             final String exMessage = String.format("[%s] TransportClient not connected, message: %s",
                                                    this.transportName,
                                                    message.toString(PROTOCOL_MESSAGE_EXCEPTION_LENGTH));
-            return Futures.immediateFailedFuture(new ConnectException(exMessage));
+
+            return Single.error(new ConnectException(exMessage));
         }
     }
+   /* public <V> ListenableFuture<V> sendMessageAsyncOld(final ProtocolMessage message) {
 
-    public <V> void sendMessageAsync(final ProtocolMessage message, final FutureCallback<V> callback) {
+        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        if (transportClientSessionLocal != null) {
+            return transportClientSessionLocal.sendMessageAsyncOld(message);
+        } else {
+            final String exMessage = String.format("[%s] TransportClient not connected, message: %s",
+                                                   this.transportName,
+                                                   message.toString(PROTOCOL_MESSAGE_EXCEPTION_LENGTH));
+            return Futures.immediateFailedFuture(new ConnectException(exMessage));
+        }
+    }*/
+    /*public <V> void sendMessageAsync(final ProtocolMessage message, final FutureCallback<V> callback) {
 
-        this.sendMessageAsync(message, callback, this.asyncRequestFutureExecutor);
+        this.sendMessageAsyncOld(message, callback, this.asyncRequestFutureExecutor);
     }
 
-    public <V> void sendMessageAsync(final ProtocolMessage message,
+    public <V> void sendMessageAsyncOld(final ProtocolMessage message,
                                      final FutureCallback<V> callback,
                                      final Executor executor) {
 
-        final ListenableFuture<V> future = this.sendMessageAsync(message);
+        final ListenableFuture<V> future = this.sendMessageAsyncOld(message);
         Futures.addCallback(future, callback, executor);
     }
-
-    public RequestListenableFuture sendRequestAsync(final ProtocolMessage message) {
+*/
+  /*  public RequestListenableFuture sendRequestAsyncOld(final ProtocolMessage message) {
 
         final TransportClientSession transportClientSessionLocal = this.transportClientSession;
         return transportClientSessionLocal != null
-               ? transportClientSessionLocal.sendRequestAsync(message)
+               ? transportClientSessionLocal.sendRequestAsyncOld(message)
                : this.createFailedFuture(message);
-    }
+    }*/
 
-    RequestListenableFuture createFailedFuture(final ProtocolMessage message) {
+    Observable<ProtocolMessage> createFailedResponse(final ProtocolMessage message) {
+
         final String exMessage = String.format("[%s] TransportClient not connected, message: %s",
                                                this.transportName,
                                                message.toString(PROTOCOL_MESSAGE_EXCEPTION_LENGTH));
-        final RequestMessageListenableFuture
-            task
-            = new RequestMessageListenableFuture(this.transportName, this.getNextId(), null, message);
-        task.setException(new ConnectException(exMessage));
-        return task;
-    }
 
+        return Observable.error(new ConnectException(exMessage));
+    }
 
 
     long getNextId() {

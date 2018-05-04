@@ -39,7 +39,7 @@ import com.dukascopy.dds4.transport.common.mina.ITransportClient;
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.google.common.util.concurrent.ListenableFuture;
+import io.reactivex.Single;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -435,8 +435,8 @@ public class DCClientImpl implements ClientListener {
 
     private void sendSynchronizedQuitMessage() {
         try {
-            ListenableFuture<Object> listenableFuture = this.transportClient.sendMessageAsync(new QuitRequestMessage());
-            listenableFuture.get();
+            Single<Boolean> listenableFuture = this.transportClient.sendMessageAsync(new QuitRequestMessage());
+            listenableFuture.subscribe();
         } catch (Throwable var2) {
             LOGGER.error(var2.getMessage(), var2);
         }

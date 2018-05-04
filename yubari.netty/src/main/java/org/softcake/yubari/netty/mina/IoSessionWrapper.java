@@ -16,8 +16,9 @@
 
 package org.softcake.yubari.netty.mina;
 
+import io.reactivex.Single;
+
 import java.net.SocketAddress;
-import java.util.concurrent.Future;
 
 public interface IoSessionWrapper {
     SocketAddress getRemoteAddress();
@@ -28,7 +29,7 @@ public interface IoSessionWrapper {
 
     boolean isClosing();
 
-    Future<Void> write(Object var1);
+    Single<Boolean> write(Object var1);
 
     long getLastIoTime();
 

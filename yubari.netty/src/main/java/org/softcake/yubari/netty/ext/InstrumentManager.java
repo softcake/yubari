@@ -20,17 +20,17 @@ import org.softcake.yubari.netty.client.ITransportClient;
 import org.softcake.yubari.netty.client.TransportClient;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
-import org.softcake.yubari.netty.mina.RequestListenableFuture;
 
 import com.dukascopy.api.Instrument;
 import com.dukascopy.dds3.transport.msg.api.InstrumentPeriodTimeWrapper;
-
 import com.dukascopy.dds3.transport.msg.ddsApi.SubscribeResult;
 import com.dukascopy.dds3.transport.msg.feeder.QuoteSubscribeRequestMessage;
 import com.dukascopy.dds3.transport.msg.feeder.QuoteSubscriptionResponseMessage;
 import com.dukascopy.dds3.transport.msg.feeder.QuoteUnsubscribeRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.google.common.util.concurrent.MoreExecutors;
+import io.reactivex.Observable;
+import io.reactivex.Observer;
+import io.reactivex.disposables.Disposable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,9 +40,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class InstrumentManager implements ClientListener {
@@ -163,51 +160,59 @@ public class InstrumentManager implements ClientListener {
 
         if (instruments == null || (!toFullDepth && instruments.isEmpty())) {return;}
 
-        RequestListenableFuture future = this.performSubscribe(instruments, toFullDepth, add);
+        Observable<ProtocolMessage> future = this.performSubscribe(instruments, toFullDepth, add);
 
         if (future == null) {return;}
 
-        future.addListener(() -> {
-            String log = "Instrument subscribe request listener fired";
-            LOGGER.debug(log);
+
+        future.subscribe(new Observer<ProtocolMessage>() {
+            @Override
+            public void onSubscribe(final Disposable d) {
+
+            }
+
+            @Override
+            public void onNext(final ProtocolMessage response) {
+                String log = "Instrument subscribe request listener fired";
+                LOGGER.debug(log);
 
 
-            ProtocolMessage response;
-            try {
-                response = future.get(20L, TimeUnit.SECONDS);
 
-                if (response instanceof QuoteSubscriptionResponseMessage) {
-                    QuoteSubscriptionResponseMessage
-                        quoteSubscriptionResponseMessage
-                        = (QuoteSubscriptionResponseMessage) response;
-                    this.handleQuoteSubscriptionResponse(quoteSubscriptionResponseMessage,
-                                                         toFullDepth,
-                                                         waitForTicks,
-                                                         add);
-                } else {
-                    LOGGER.error("QuoteSubscribeRequestMessage asynch request failed. Response: {}", response);
-                }
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+
+
+                    if (response instanceof QuoteSubscriptionResponseMessage) {
+                        QuoteSubscriptionResponseMessage
+                            quoteSubscriptionResponseMessage
+                            = (QuoteSubscriptionResponseMessage) response;
+                        handleQuoteSubscriptionResponse(quoteSubscriptionResponseMessage,
+                                                        toFullDepth,
+                                                        waitForTicks,
+                                                        add);
+                    } else {
+                        LOGGER.error("QuoteSubscribeRequestMessage asynch request failed. Response: {}", response);
+                    }
+            }
+
+            @Override
+            public void onError(final Throwable e) {
                 LOGGER.error("Instruments subscribe request to server failed: {}",
-                             future.getRequestMessage(),
+                             e.getMessage(),
                              e);
             }
 
+            @Override
+            public void onComplete() {
 
-        }, MoreExecutors.newDirectExecutorService());
-        if (waitForTicks) {
-            try {
-                future.get(20L, TimeUnit.SECONDS);
-            } catch (Exception var7) {
-                LOGGER.error(var7.getLocalizedMessage(), var7);
             }
-        }
+        });
+
+
 
     }
 
-    private RequestListenableFuture performSubscribe(Set<Instrument> instrumentsToSubscribe,
-                                                     boolean subscribeToFullDepth,
-                                                     boolean add) {
+    private Observable<ProtocolMessage> performSubscribe(Set<Instrument> instrumentsToSubscribe,
+                                                         boolean subscribeToFullDepth,
+                                                         boolean add) {
 
         Set<Instrument> instruments = new HashSet(instrumentsToSubscribe);
         Set<String> quotes;
@@ -283,7 +288,7 @@ public class InstrumentManager implements ClientListener {
         }
     }
 
-    private RequestListenableFuture performUnsubscribe(Set<Instrument> instrumentsToUnsubscribe) {
+    private Observable<ProtocolMessage> performUnsubscribe(Set<Instrument> instrumentsToUnsubscribe) {
 
         Set<Instrument> instrmuentsToUnsubscribe = new HashSet();
         Set<Instrument> subscribedInstruments = this.getSubscribedInstruments();

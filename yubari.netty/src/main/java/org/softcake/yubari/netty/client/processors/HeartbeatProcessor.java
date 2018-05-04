@@ -22,7 +22,6 @@ import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.MessageSentListener;
-import org.softcake.yubari.netty.mina.RequestListenableFuture;
 import org.softcake.yubari.netty.stream.BlockingBinaryStream;
 
 import com.dukascopy.dds4.ping.IPingListener;
@@ -33,21 +32,17 @@ import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.google.common.util.concurrent.MoreExecutors;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
-import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -219,8 +214,9 @@ public class HeartbeatProcessor {
         Observable<ProtocolMessage> future = this.clientSession.sendRequestAsync(pingRequestMessage,
                                                                                  channel,
                                                                                  pingTimeout,
-                                                                                 TimeUnit.MILLISECONDS);
-
+                                                                                 Boolean.TRUE,
+                                                                                 messageSentListener);
+        LOGGER.info("HeartbeatProcessor Thread1: {}", Thread.currentThread().getName());
         LOGGER.debug("[{}] Sending {} connection ping request: {}",
                      this.clientSession.getTransportName(),
                      (isPrimary ? PRIMARY : CHILD).toLowerCase(),
@@ -231,11 +227,7 @@ public class HeartbeatProcessor {
 
                 messageSentListener.messageSent(protocolMessage);
             }
-        });
-
-
-        future.observeOn(Schedulers.from(MoreExecutors.newDirectExecutorService()))
-              .subscribe(new Observer<ProtocolMessage>() {
+        }).subscribe(new Observer<ProtocolMessage>() {
                   @Override
                   public void onSubscribe(final Disposable d) {
 
@@ -243,7 +235,7 @@ public class HeartbeatProcessor {
 
                   @Override
                   public void onNext(final ProtocolMessage protocolMessage) {
-
+                      LOGGER.info("HeartbeatProcessor Thread1: {}", Thread.currentThread().getName());
                       final long now = System.currentTimeMillis();
 
                       try {

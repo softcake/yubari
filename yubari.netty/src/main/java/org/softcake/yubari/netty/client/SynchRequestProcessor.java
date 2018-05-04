@@ -20,10 +20,7 @@ import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.RequestInProcessMessage;
 import io.netty.channel.Channel;
 import io.reactivex.Observable;
-import io.reactivex.Observer;
 import io.reactivex.Single;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -52,31 +49,22 @@ public class SynchRequestProcessor {
         return this.requestId.incrementAndGet();
     }
 
-    public Observable<ProtocolMessage> createNewSynchRequest(final Channel channel,
-                                                             final ProtocolMessage message,
-                                                             final long timeout,
-                                                             final TimeUnit timeoutUnits) {
+    public Observable<ProtocolMessage> createNewSyncRequest(final Channel channel,
+                                                            final ProtocolMessage message,
+                                                            final long timeout,
+                                                            final TimeUnit timeoutUnits,
+                                                            final boolean doNotRestartTimerOnInProcessResponse) {
 
         final Long syncRequestId = this.getNextRequestId();
         message.setSynchRequestId(syncRequestId);
         final Single<Boolean> booleanSingle = protocolHandler.writeMessage(channel, message);
 
-        RequestHandler handler = new RequestHandler(syncRequestId);
-        final Observable<ProtocolMessage> messageObservable = handler.sendRequest(booleanSingle,
-                                                                                  false,
+        final RequestHandler handler = new RequestHandler(syncRequestId, scheduledExecutorService);
+        final Observable<ProtocolMessage> request = handler.sendRequest(booleanSingle,
+                                                                                  doNotRestartTimerOnInProcessResponse,
                                                                                   timeout,
                                                                                   timeoutUnits);
-        messageObservable.doOnSubscribe(new Consumer<Disposable>() {
-            @Override
-            public void accept(final Disposable disposable) throws Exception {
-
-                syncRequests.put(syncRequestId, handler);
-            }
-        });
-
-
-
-        return messageObservable;
+        return request.doOnSubscribe(disposable -> syncRequests.put(syncRequestId, handler));
     }
 
     public boolean processRequest(final ProtocolMessage message) {

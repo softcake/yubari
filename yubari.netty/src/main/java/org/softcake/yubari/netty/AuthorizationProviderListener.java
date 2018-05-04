@@ -16,8 +16,6 @@
 
 package org.softcake.yubari.netty;
 
-import org.softcake.yubari.netty.mina.IoSessionWrapper;
-
 public interface AuthorizationProviderListener {
     void authorized(String var1, String var3);
 

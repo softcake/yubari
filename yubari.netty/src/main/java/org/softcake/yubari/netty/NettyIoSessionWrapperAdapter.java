@@ -27,45 +27,56 @@ public abstract class NettyIoSessionWrapperAdapter implements IoSessionWrapper {
     protected volatile Channel channel;
 
     public NettyIoSessionWrapperAdapter() {
+
     }
 
     public NettyIoSessionWrapperAdapter(Channel channel) {
+
         this.channel = channel;
     }
 
     public Channel getChannel() {
+
         return this.channel;
     }
 
     public void setChannel(Channel channel) {
+
         this.channel = channel;
     }
 
     public SocketAddress getRemoteAddress() {
+
         return this.channel.remoteAddress();
     }
 
     public void close() {
+
         this.channel.close();
     }
 
     public boolean isConnected() {
+
         return this.channel.isActive();
     }
 
     public boolean isClosing() {
+
         return !this.channel.isOpen();
     }
 
     public long getLastIoTime() {
+
         throw new UnsupportedOperationException("Do you really need this?");
     }
 
     public long getLastReadTime() {
+
         throw new UnsupportedOperationException("Do you really need this?");
     }
 
     public long getLastWriteTime() {
+
         throw new UnsupportedOperationException("Do you really need this?");
     }
 }

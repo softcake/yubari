@@ -103,7 +103,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
             loginRequestMessage.setUsername(this.login);
             loginRequestMessage.setTicket(this.ticket);
             loginRequestMessage.setSessionId(this.sessionId);
-            ioSession.write(loginRequestMessage);
+            ioSession.write(loginRequestMessage).subscribe();
         }
 
     }

@@ -23,14 +23,11 @@ import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
 import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.channel.ChannelTrafficBlocker;
-import org.softcake.yubari.netty.client.tasks.MessageListenableFuture;
-import org.softcake.yubari.netty.client.tasks.SyncMessageTimeoutChecker;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.IoSessionWrapper;
 import org.softcake.yubari.netty.mina.MessageSentListener;
-import org.softcake.yubari.netty.mina.RequestListenableFuture;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.ssl.ClientSSLContextSubscriber;
 import org.softcake.yubari.netty.ssl.SSLContextFactory;
@@ -41,12 +38,9 @@ import com.dukascopy.dds4.ping.PingManager;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
@@ -69,11 +63,9 @@ import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -128,7 +120,6 @@ public class TransportClientSession {
     private final SecurityExceptionHandler securityExceptionHandler;
     private final ChannelHandler protocolEncoderDecoder;
     private final ChannelTrafficBlocker channelTrafficBlocker;
-   // private final Map<Long, RequestMessageListenableFuture> syncRequests = new ConcurrentHashMap<>();
     private final ISessionStats sessionStats;
     private final IPingListener pingListener;
     private final long syncMessageTimeout;
@@ -157,18 +148,18 @@ public class TransportClientSession {
     private final long syncRequestProcessingPoolTerminationTimeUnitCount;
     private final TimeUnit syncRequestProcessingPoolTerminationTimeUnit;
     private final Set<String> enabledSslProtocols;
+    SynchRequestProcessor synchRequestProcessor;
     private boolean skipDroppableMessages;
     private Bootstrap channelBootstrap;
     private ProtocolVersionClientNegotiatorHandler protocolVersionClientNegotiatorHandler;
     private ClientProtocolHandler protocolHandler;
     private ClientConnector clientConnector;
     private ScheduledExecutorService scheduledExecutorService;
-    SynchRequestProcessor synchRequestProcessor;
     private String serverSessionId;
     private IoSessionWrapper sessionWrapper = new NettyIoSessionWrapperAdapter() {
-        public Future<Void> write(final Object message) {
+        public Single<Boolean> write(final Object message) {
 
-            return protocolHandler.writeMessageOld(this.channel, (BinaryProtocolMessage) message);
+            return protocolHandler.writeMessage(this.channel, (BinaryProtocolMessage) message);
         }
     };
 
@@ -382,8 +373,7 @@ public class TransportClientSession {
         this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
         this.protocolHandler.setClientConnector(this.clientConnector);
         this.clientConnector.start();
-       this.synchRequestProcessor = new SynchRequestProcessor(this.protocolHandler,
-                                                                                this.scheduledExecutorService);
+        this.synchRequestProcessor = new SynchRequestProcessor(this.protocolHandler, this.scheduledExecutorService);
     }
 
     private String[] cleanUpCipherSuites(final String[] enabledCipherSuites) {
@@ -443,7 +433,7 @@ public class TransportClientSession {
             this.scheduledExecutorService.shutdownNow();
         }
 
-       // this.syncRequests.clear();
+        // this.syncRequests.clear();
     }
 
     boolean sendMessageNaive(final ProtocolMessage message) {
@@ -477,10 +467,11 @@ public class TransportClientSession {
 
         final Observable<ProtocolMessage>
             newSynchRequest
-            = synchRequestProcessor.createNewSynchRequest(this.clientConnector.getPrimaryChannel(),
-                                                          message,
-                                                          timeout,
-                                                          timeoutUnits);
+            = synchRequestProcessor.createNewSyncRequest(this.clientConnector.getPrimaryChannel(),
+                                                         message,
+                                                         timeout,
+                                                         timeoutUnits,
+                                                         Boolean.TRUE);
         newSynchRequest.subscribe(new Consumer<ProtocolMessage>() {
             @Override
             public void accept(final ProtocolMessage protocolMessage) throws Exception {
@@ -494,138 +485,53 @@ public class TransportClientSession {
 
 
     }
-    public Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message,
-                                                        final Channel channel,
-                                                        final long timeout,
-                                                        final TimeUnit timeoutUnits) {
-
-        if (!this.isOnline()) {
-          //  throw new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
-//                                                     this.transportName,
-//                                                     message.toString(400)));
-        }
 
 
-        final Observable<ProtocolMessage>
-            newSynchRequest
-            = synchRequestProcessor.createNewSynchRequest(channel,
-                                                          message,
-                                                          timeout,
-                                                          timeoutUnits);
-
-
-        return newSynchRequest;
-
-
-    }
-  /*  ProtocolMessage sendRequestOld(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
-        throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
-
-        if (!this.isOnline()) {
-            throw new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
-                                                     this.transportName,
-                                                     message.toString(400)));
-        }
-
-        final Long syncRequestId = this.transportClient.getNextId();
-        message.setSynchRequestId(syncRequestId);
-        final RequestMessageListenableFuture task = new RequestMessageListenableFuture(this.transportName,
-                                                                                       syncRequestId,
-                                                                                       this.syncRequests,
-                                                                                       message);
-        this.syncRequests.put(syncRequestId, task);
-        final ChannelFuture future = this.protocolHandler.writeMessageOld(this.clientConnector.getPrimaryChannel(),
-                                                                          message);
-        task.setChannelFuture(future);
-        task.scheduleTimeoutCheck(new SyncMessageTimeoutChecker(this.scheduledExecutorService,
-                                                                task,
-                                                                timeoutUnits.toMillis(timeout),
-                                                                true));
-
-
-        return task.get(timeout, timeoutUnits);
-
-
-    }*/
-
-    <V> ListenableFuture<V> sendMessageAsync(final ProtocolMessage message) {
+    Single<Boolean> sendMessageAsync(final ProtocolMessage message) {
 
         if (this.isOnline()) {
-            return new MessageListenableFuture<>(this.protocolHandler.writeMessageOld(this.clientConnector
-                                                                                          .getPrimaryChannel(),
-                                                                                      message));
+            return this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
         } else {
-            return Futures.immediateFailedFuture(new ConnectException(String.format(
-                "[%s] TransportClient not connected, message: %s",
-                this.transportName,
-                message.toString(400))));
+            return Single.error(new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
+                                                                   this.transportName,
+                                                                   message.toString(400))));
         }
     }
 
-    RequestListenableFuture sendRequestAsync(final ProtocolMessage message) {
+    Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message) {
 
-        return this.sendRequestAsync(message,
-                                     this.clientConnector.getPrimaryChannel(),
-                                     this.syncMessageTimeout,
-                                     false,
+        return this.sendRequestAsync(message, this.clientConnector.getPrimaryChannel(), this.syncMessageTimeout, false,
+
                                      null);
     }
 
-    public RequestListenableFuture sendRequestAsync(final ProtocolMessage message,
-                                                    final Channel channel,
-                                                    final long timeout,
-                                                    final boolean doNotRestartTimerOnInProcessResponse,
-                                                    final MessageSentListener messageSentListener) {
+    public Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message,
+                                                        final Channel channel,
+                                                        final long timeout,
+                                                        final boolean doNotRestartTimerOnInProcessResponse,
+                                                        final MessageSentListener messageSentListener) {
 
         if (this.isOnline()) {
             final Long syncRequestId = this.transportClient.getNextId();
             message.setSynchRequestId(syncRequestId);
-            final RequestMessageListenableFuture task = new RequestMessageListenableFuture(this.transportName,
-                                                                                           syncRequestId,
-                                                                                           this.syncRequests,
-                                                                                           message);
-            this.syncRequests.put(syncRequestId, task);
-            final ChannelFuture channelFuture = this.protocolHandler.writeMessageOld(channel, message);
-            if (messageSentListener != null) {
-                channelFuture.addListener(future -> {
 
-                    if (channelFuture.isSuccess()) {
-                        messageSentListener.messageSent(message);
-                    } else if (channelFuture.isDone() && channelFuture.cause() != null) {
-                        final Throwable cause = channelFuture.cause();
-                        LOGGER.error("[{}] Request send failed because of {}: {}",
-                                     this.getTransportName(),
-                                     cause.getClass().getSimpleName(),
-                                     cause.getMessage());
-                    } else {
-                        LOGGER.error("[{}] Request send failed", this.getTransportName());
-                    }
 
-                });
-            }
+            return synchRequestProcessor.createNewSyncRequest(channel,
+                                                              message,
+                                                              timeout,
+                                                              TimeUnit.MILLISECONDS,
+                                                              doNotRestartTimerOnInProcessResponse);
 
-            task.setChannelFuture(channelFuture);
-            task.scheduleTimeoutCheck(new SyncMessageTimeoutChecker(this.scheduledExecutorService,
-                                                                    task,
-                                                                    timeout,
-                                                                    doNotRestartTimerOnInProcessResponse));
-            return task;
+
         } else {
-            return this.transportClient.createFailedFuture(message);
+            return this.transportClient.createFailedResponse(message);
         }
     }
-
 
     public IoSessionWrapper getIoSessionWrapper() {
 
         ((NettyIoSessionWrapperAdapter) this.sessionWrapper).setChannel(this.clientConnector.getPrimaryChannel());
         return this.sessionWrapper;
-    }
-
-
-    RequestMessageListenableFuture getSyncRequestFuture(final Long syncId) {
-
-        return this.syncRequests.get(syncId);
     }
 
     boolean isOnline() {

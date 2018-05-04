@@ -56,14 +56,13 @@ import com.dukascopy.dds3.transport.msg.ddsApi.QuitRequestMessage;
 import com.dukascopy.dds3.transport.msg.news.CalendarType;
 import com.dukascopy.dds3.transport.msg.news.NewsSubscribeRequest;
 import com.dukascopy.dds3.transport.msg.news.SubscribeRequestType;
-import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.types.EventCategory;
 import com.dukascopy.dds4.transport.msg.types.GeoRegion;
 import com.dukascopy.dds4.transport.msg.types.MarketSector;
 import com.dukascopy.dds4.transport.msg.types.StockIndex;
 import com.google.common.base.Strings;
-import com.google.common.util.concurrent.ListenableFuture;
+import io.reactivex.Single;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -699,8 +698,8 @@ public class DClient implements ClientListener {
     private void sendSynchronizedQuitMessage() {
 
         try {
-            ListenableFuture<Object> listenableFuture = this.transportClient.sendMessageAsync(new QuitRequestMessage());
-            listenableFuture.get();
+            Single<Boolean> listenableFuture = this.transportClient.sendMessageAsync(new QuitRequestMessage());
+            listenableFuture.subscribe();
         } catch (Throwable var2) {
             LOGGER.error(var2.getMessage(), var2);
         }

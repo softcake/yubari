@@ -27,6 +27,7 @@ import com.dukascopy.dds4.transport.msg.system.OkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.GenericFutureListener;
+import io.reactivex.Single;
 import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,8 +50,9 @@ public class AnonymousClientAuthorizationProvider extends AbstractClientAuthoriz
         haloRequestMessage.setSecondaryConnectionDisabled(this.isChildConnectionDisabled());
         haloRequestMessage.setSecondaryConnectionMessagesTTL(this.getDroppableMessageServerTTL());
         haloRequestMessage.setSessionName(this.getSessionName());
-        final ChannelFuture future = (ChannelFuture) session.write(haloRequestMessage);
-        future.addListener(getChannelFutureGenericFutureListener());
+        final Single<Boolean> future = session.write(haloRequestMessage);
+        future.subscribe();
+        //future.addListener(getChannelFutureGenericFutureListener());
     }
 
     @Override
@@ -67,8 +69,8 @@ public class AnonymousClientAuthorizationProvider extends AbstractClientAuthoriz
             loginRequestMessage.setTicket(this.haloResponseMessage.getChallenge());
             loginRequestMessage.setSessionId(this.haloResponseMessage.getSessionId());
             loginRequestMessage.setMode(-2147483648);
-            final ChannelFuture future = (ChannelFuture) session.write(loginRequestMessage);
-            future.addListener(getChannelFutureGenericFutureListener());
+            final Single<Boolean> future = session.write(loginRequestMessage);
+            future.subscribe();
         } else if (message instanceof OkResponseMessage && this.haloResponseMessage != null) {
             this.getListener().authorized(this.haloResponseMessage.getSessionId(), "anonymous");
         } else if (message instanceof ErrorResponseMessage) {
@@ -81,15 +83,18 @@ public class AnonymousClientAuthorizationProvider extends AbstractClientAuthoriz
 
     public GenericFutureListener<ChannelFuture> getChannelFutureGenericFutureListener() {
 
-        return channelFuture -> {
+        return new GenericFutureListener<ChannelFuture>() {
+            @Override
+            public void operationComplete(final ChannelFuture channelFuture) throws Exception {
 
-            try {
-                channelFuture.get();
-            } catch (InterruptedException | ExecutionException e) {
-                LOGGER.error("Error occurred...", e);
-                getListener().authorizationError( e.getLocalizedMessage());
+                try {
+                    channelFuture.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    LOGGER.error("Error occurred...", e);
+                    AnonymousClientAuthorizationProvider.this.getListener().authorizationError(e.getLocalizedMessage());
+                }
+
             }
-
         };
     }
 
