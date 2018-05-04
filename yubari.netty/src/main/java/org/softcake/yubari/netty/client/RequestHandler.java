@@ -82,18 +82,13 @@ public class RequestHandler {
 
         PreCheck.parameterNotNull(requestMessage, "requestMessage");
         PreCheck.parameterNotNull(timeoutUnits, "timeoutUnits");
+
         return Observable.defer(() -> Observable.create(e -> {
             emitter = e;
-            requestMessage.subscribe(new Consumer<Boolean>() {
-                @Override
-                public void accept(final Boolean aBoolean) throws Exception {
-
-                    requestSent.accept(aBoolean);
-                    RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
-                                                       timeoutUnits,
-                                                       doNotRestartTimerOnInProcessResponse).subscribe();
-                }
-            });
+            requestMessage.doOnSuccess(aBoolean -> RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
+                                                                                      timeoutUnits,
+                                                                                      doNotRestartTimerOnInProcessResponse)
+                                                                      .subscribe()).subscribe(requestSent::accept);
         }));
 
 

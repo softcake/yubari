@@ -34,8 +34,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class SynchRequestProcessor {
     private final Map<Long, RequestHandler> syncRequests = new ConcurrentHashMap<>();
     private final ClientProtocolHandler protocolHandler;
-    private ScheduledExecutorService scheduledExecutorService;
-    private AtomicLong requestId = new AtomicLong(0L);
+    private final ScheduledExecutorService scheduledExecutorService;
+    private final AtomicLong requestId = new AtomicLong(0L);
 
     public SynchRequestProcessor(final ClientProtocolHandler protocolHandler,
                                  final ScheduledExecutorService scheduledExecutorService) {
@@ -44,7 +44,7 @@ public class SynchRequestProcessor {
         this.scheduledExecutorService = scheduledExecutorService;
     }
 
-    public long getNextRequestId() {
+    private long getNextRequestId() {
 
         return this.requestId.incrementAndGet();
     }
@@ -55,22 +55,21 @@ public class SynchRequestProcessor {
                                                             final TimeUnit timeoutUnits,
                                                             final boolean doNotRestartTimerOnInProcessResponse) {
 
-        final Long syncRequestId = this.getNextRequestId();
-        message.setSynchRequestId(syncRequestId);
-        final Single<Boolean> booleanSingle = protocolHandler.writeMessage(channel, message);
+        return createNewSyncRequest(channel,
+                                    message,
+                                    timeout,
+                                    timeoutUnits,
+                                    doNotRestartTimerOnInProcessResponse,
+                                    aBoolean -> {});
 
-        final RequestHandler handler = new RequestHandler(syncRequestId, scheduledExecutorService);
-        final Observable<ProtocolMessage> request = handler.sendRequest(booleanSingle,
-                                                                                  doNotRestartTimerOnInProcessResponse,
-                                                                                  timeout,
-                                                                                  timeoutUnits);
-        return request.doOnSubscribe(disposable -> syncRequests.put(syncRequestId, handler));
     }
+
     public Observable<ProtocolMessage> createNewSyncRequest(final Channel channel,
                                                             final ProtocolMessage message,
                                                             final long timeout,
                                                             final TimeUnit timeoutUnits,
-                                                            final boolean doNotRestartTimerOnInProcessResponse, final io.reactivex.functions.Consumer<Boolean> listener) {
+                                                            final boolean doNotRestartTimerOnInProcessResponse,
+                                                            final io.reactivex.functions.Consumer<Boolean> listener) {
 
         final Long syncRequestId = this.getNextRequestId();
         message.setSynchRequestId(syncRequestId);
@@ -80,9 +79,11 @@ public class SynchRequestProcessor {
         final Observable<ProtocolMessage> request = handler.sendRequest(booleanSingle,
                                                                         doNotRestartTimerOnInProcessResponse,
                                                                         timeout,
-                                                                        timeoutUnits, listener);
+                                                                        timeoutUnits,
+                                                                        listener);
         return request.doOnSubscribe(disposable -> syncRequests.put(syncRequestId, handler));
     }
+
     public boolean processRequest(final ProtocolMessage message) {
 
         final RequestHandler handler = this.syncRequests.get(message.getSynchRequestId());
@@ -93,9 +94,7 @@ public class SynchRequestProcessor {
             handler.onResponse(message);
             if (message instanceof RequestInProcessMessage) {
                 result = true;
-
                 handler.onRequestInProcess(System.currentTimeMillis());
-                // synchRequestFuture.setInProcessResponseLastTime(System.currentTimeMillis());
             } else {
                 handler.onResponse(message);
 
