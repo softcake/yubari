@@ -37,6 +37,12 @@ public interface ClientAuthorizationProvider {
     void setDroppableMessageServerTTL(long var1);
 
     void setSessionName(String var1);
-
+    String getSessionName();
     void setListener(AuthorizationProviderListener var1);
+
+    String getLogin();
+
+    String getTicket();
+
+    String getSessionId();
 }

@@ -1014,6 +1014,7 @@ public class TransportClient implements ITransportClient {
                                                    this.skipDroppableMessages,
                                                    this.logSkippedDroppableMessages,
                                                    this.channelOptions,
+                                                   this.userAgent,
                                                    this.transportName,
                                                    this.reconnectDelay,
                                                    this.maxMessageSizeBytes,

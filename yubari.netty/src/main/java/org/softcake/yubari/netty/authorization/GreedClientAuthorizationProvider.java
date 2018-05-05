@@ -184,7 +184,7 @@ public class GreedClientAuthorizationProvider implements ClientAuthorizationProv
         this.listener = null;
     }
 
-    private String getSessionName() {
+    public String getSessionName() {
 
         return this.sessionName;
     }

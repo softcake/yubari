@@ -103,6 +103,7 @@ public class TransportClientSession {
     private final long droppableMessagesClientTTL;
     private final boolean logSkippedDroppableMessages;
     private final Map<ChannelOption<?>, Object> channelOptions;
+    private final String userAgent;
     private final String transportName;
     private final long reconnectDelay;
     private final int maxMessageSizeBytes;
@@ -190,6 +191,7 @@ public class TransportClientSession {
                                      final boolean skipDroppableMessages,
                                      final boolean logSkippedDroppableMessages,
                                      final Map<ChannelOption<?>, Object> channelOptions,
+                                     final String userAgent,
                                      final String transportName,
                                      final long reconnectDelay,
                                      final int maxMessageSizeBytes,
@@ -261,6 +263,7 @@ public class TransportClientSession {
         this.skipDroppableMessages = skipDroppableMessages;
         this.logSkippedDroppableMessages = logSkippedDroppableMessages;
         this.channelOptions = channelOptions;
+        this.userAgent = userAgent;
         this.transportName = transportName;
         this.reconnectDelay = reconnectDelay;
         this.maxMessageSizeBytes = maxMessageSizeBytes;
@@ -379,6 +382,7 @@ public class TransportClientSession {
         this.clientstateConnector = new ClientSateConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
         clientstateConnector.connect();
         this.protocolHandler.setClientConnector(this.clientConnector);
+        this.protocolHandler.clientStateConnector( this.clientstateConnector );
        // this.clientConnector.start();
         this.synchRequestProcessor = new SynchRequestProcessor(this, this.protocolHandler, this.scheduledExecutorService);
     }
@@ -448,7 +452,7 @@ public class TransportClientSession {
         if (this.isOnline()) {
             Single<Boolean>
                 booleanObservable
-                = this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
+                = this.protocolHandler.writeMessage(this.clientstateConnector.getPrimaryChannel(), message);
             booleanObservable.subscribe();
             return true;
         } else {
@@ -543,7 +547,7 @@ public class TransportClientSession {
 
     boolean isOnline() {
 
-        return this.clientConnector.isOnline();
+        return this.clientstateConnector.isOnline();
     }
 
     public boolean isTerminating() {
@@ -646,7 +650,10 @@ public class TransportClientSession {
 
         return this.droppableMessagesServerTTL;
     }
+    public String getUserAgent() {
 
+        return this.userAgent;
+    }
     public String getTransportName() {
 
         return this.transportName;

@@ -37,9 +37,10 @@ import java.util.concurrent.ExecutionException;
 public class AnonymousClientAuthorizationProvider extends AbstractClientAuthorizationProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(AnonymousClientAuthorizationProvider.class);
     private HaloResponseMessage haloResponseMessage;
+    private String login;
 
     public AnonymousClientAuthorizationProvider() {
-
+this.login = "anonymous";
     }
 
     public void authorize(final IoSessionWrapper session) {
@@ -65,7 +66,7 @@ public class AnonymousClientAuthorizationProvider extends AbstractClientAuthoriz
         if (message instanceof HaloResponseMessage) {
             this.haloResponseMessage = (HaloResponseMessage) message;
             final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
-            loginRequestMessage.setUsername("anonymous");
+            loginRequestMessage.setUsername(getLogin());
             loginRequestMessage.setTicket(this.haloResponseMessage.getChallenge());
             loginRequestMessage.setSessionId(this.haloResponseMessage.getSessionId());
             loginRequestMessage.setMode(-2147483648);
@@ -102,5 +103,23 @@ public class AnonymousClientAuthorizationProvider extends AbstractClientAuthoriz
 
         this.haloResponseMessage = null;
         super.cleanUp();
+    }
+
+    @Override
+    public String getLogin() {
+
+        return login;
+    }
+
+    @Override
+    public String getTicket() {
+
+        return this.haloResponseMessage.getChallenge();
+    }
+
+    @Override
+    public String getSessionId() {
+
+        return this.haloResponseMessage.getSessionId();
     }
 }
