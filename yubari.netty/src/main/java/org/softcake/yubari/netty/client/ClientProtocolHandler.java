@@ -278,10 +278,16 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             //TODO
             this.clientSession.getClientstateConnector().sslHandshakeSuccess();
             // this.clientConnector.sslHandshakeSuccess();
-        } else if (evt instanceof ProtocolVersionNegotiationEvent
-                   && ((ProtocolVersionNegotiationEvent) evt).isSuccess()) {
-            this.clientSession.getClientstateConnector().protocolVersionHandshakeSuccess();
-            //  this.clientConnector.protocolVersionHandshakeSuccess();
+        } else if (evt instanceof ProtocolVersionNegotiationEvent) {
+            ProtocolVersionNegotiationEvent event = (ProtocolVersionNegotiationEvent) evt;
+            if (event.isSuccess()) {
+                this.clientSession.getClientstateConnector().protocolVersionHandshakeSuccess();
+            } else {
+                this.clientstateConnector.disConnect(new ClientDisconnectReason(DisconnectReason
+                                                                                    .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
+                                                                                "wrong protocol version",
+                                                                                event.cause()));
+            }
         }
     }
 
@@ -355,16 +361,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         if (protocolMessage instanceof OkResponseMessage) {
 
 
-            this.clientstateConnector.authorizingSuccess(this.clientSession
-                                                                                .getAuthorizationProvider()
-                                                                                .getSessionId(),
-                                                                            this.clientSession
-                                                                                .getAuthorizationProvider()
-                                                                                .getLogin());
+            this.clientstateConnector.authorizingSuccess(this.clientSession.getAuthorizationProvider().getSessionId(),
+                                                         this.clientSession.getAuthorizationProvider().getLogin());
         } else if (protocolMessage instanceof ErrorResponseMessage) {
-            this.clientSession
-                .getClientstateConnector()
-                .authorizationError(((ErrorResponseMessage) protocolMessage).getReason());
+            this.clientSession.getClientstateConnector()
+                              .authorizationError(((ErrorResponseMessage) protocolMessage).getReason());
         } else if (protocolMessage instanceof HaloResponseMessage) {
             final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
             loginRequestMessage.setUsername(this.clientSession.getAuthorizationProvider().getLogin());
@@ -451,122 +452,122 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
         final int messagesCounter = sentMessagesCounterIncrementAndGet();
 
-        return Single
-            .create((SingleOnSubscribe<Boolean>) e -> {
-                final ChannelFuture future = channel.writeAndFlush(responseMessage);
-                final long procStartTime = System.currentTimeMillis();
-                checkSendingErrorOnNotWritableChannel(channel,
-                                                      future,
-                                                      procStartTime).subscribe(TransportClientSession::terminate);
+        return Single.create((SingleOnSubscribe<Boolean>) e -> {
+            final ChannelFuture future = channel.writeAndFlush(responseMessage);
+            final long procStartTime = System.currentTimeMillis();
+            checkSendingErrorOnNotWritableChannel(channel,
+                                                  future,
+                                                  procStartTime).subscribe(TransportClientSession::terminate);
 
-                if (isTimeToCheckError(messagesCounter)) {
-                    checkSendError(procStartTime, future);
-                } else if (isTimeToCheckWarning(messagesCounter)) {
-                    checkSendingWarning(procStartTime, future);
+            if (isTimeToCheckError(messagesCounter)) {
+                checkSendError(procStartTime, future);
+            } else if (isTimeToCheckWarning(messagesCounter)) {
+                checkSendingWarning(procStartTime, future);
+            }
+
+            future.addListener((ChannelFutureListener) cf -> {
+
+                if (cf.isSuccess()) {
+                    e.onSuccess(true);
+                } else if (cf.isCancelled()) {
+                    e.onError(new CancellationException("cancelled before completed"));
+                } else if (cf.isDone() && cf.cause() != null) {
+                    e.onError(cf.cause());
+                } else {
+                    e.onError(new Exception("Unexpected ChannelFuture state"));
                 }
-
-                future.addListener((ChannelFutureListener) cf -> {
-
-                    if (cf.isSuccess()) {
-                        e.onSuccess(true);
-                    } else if (cf.isCancelled()) {
-                        e.onError(new CancellationException("cancelled before completed"));
-                    } else if (cf.isDone() && cf.cause() != null) {
-                        e.onError(cf.cause());
-                    } else {
-                        e.onError(new Exception("Unexpected ChannelFuture state"));
-                    }
-                });
-            })
-            .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachement(channel,
-                                                                                         System.currentTimeMillis()))
-            .doOnError(cause -> LOGGER.error("[{}] Message send failed because of {}: {}",
-                                             clientSession.getTransportName(),
-                                             cause.getClass().getSimpleName(),
-                                             cause.getMessage()));
+            });
+        })
+                     .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachement(channel,
+                                                                                                  System
+                                                                                                      .currentTimeMillis()))
+                     .doOnError(cause -> LOGGER.error("[{}] Message send failed because of {}: {}",
+                                                      clientSession.getTransportName(),
+                                                      cause.getClass().getSimpleName(),
+                                                      cause.getMessage()));
     }
 
     private Observable<TransportClientSession> checkSendingErrorOnNotWritableChannel(final Channel channel,
                                                                                      final ChannelFuture future,
                                                                                      final long procStartTime) {
 
-        return Observable
-            .just(future)
-            .filter(channelFuture -> !channel.isWritable())
-            .doOnNext(channelFuture -> {
+        return Observable.just(future)
+                         .filter(channelFuture -> !channel.isWritable())
+                         .doOnNext(channelFuture -> {
 
-                if (clientSession.getSendCompletionErrorDelay() > 0L) {
-                    checkSendError(procStartTime, future);
-                }
-            })
-            .delay(clientSession.getPrimaryConnectionPingTimeout(),
-                   TimeUnit.MILLISECONDS,
-                   Schedulers.from(clientSession.getScheduledExecutorService()))
-            .filter(channelFuture -> !channelFuture.isDone())
-            .map(channelFuture -> clientSession)
-            .doOnNext(session -> LOGGER.error("[{}] Failed to send message in timeout time {}ms, disconnecting",
-                                              session.getTransportName(),
-                                              session.getPrimaryConnectionPingTimeout()));
+                             if (clientSession.getSendCompletionErrorDelay() > 0L) {
+                                 checkSendError(procStartTime, future);
+                             }
+                         })
+                         .delay(clientSession.getPrimaryConnectionPingTimeout(),
+                                TimeUnit.MILLISECONDS,
+                                Schedulers.from(clientSession.getScheduledExecutorService()))
+                         .filter(channelFuture -> !channelFuture.isDone())
+                         .map(channelFuture -> clientSession)
+                         .doOnNext(session -> LOGGER.error(
+                             "[{}] Failed to send message in timeout time {}ms, disconnecting",
+                             session.getTransportName(),
+                             session.getPrimaryConnectionPingTimeout()));
 
     }
 
     private void checkSendError(final long procStartTime, final ChannelFuture future) {
 
-        Observable
-            .just(future)
-            .delay(clientSession.getSendCompletionErrorDelay(),
-                   TimeUnit.MILLISECONDS,
-                   Schedulers.from(clientSession.getScheduledExecutorService()))
-            .filter(channelFuture -> !channelFuture.isDone())
-            .doOnNext(channelFuture -> LOGGER.error("[{}] Message was not sent in timeout time {}ms and is still "
-                                                    + "waiting it's turn, CRITICAL SEND TIME: {}ms, possible "
-                                                    + "network problem",
-                                                    clientSession.getTransportName(),
-                                                    clientSession.getSendCompletionErrorDelay(),
-                                                    System.currentTimeMillis() - procStartTime))
-            .subscribe(channelFuture -> {
-                channelFuture.addListener((ChannelFutureListener) future1 -> {
+        Observable.just(future)
+                  .delay(clientSession.getSendCompletionErrorDelay(),
+                         TimeUnit.MILLISECONDS,
+                         Schedulers.from(clientSession.getScheduledExecutorService()))
+                  .filter(channelFuture -> !channelFuture.isDone())
+                  .doOnNext(channelFuture -> LOGGER.error("[{}] Message was not sent in timeout time {}ms and is still "
+                                                          + "waiting it's turn, CRITICAL SEND TIME: {}ms, possible "
+                                                          + "network problem",
+                                                          clientSession.getTransportName(),
+                                                          clientSession.getSendCompletionErrorDelay(),
+                                                          System.currentTimeMillis() - procStartTime))
+                  .subscribe(channelFuture -> {
+                      channelFuture.addListener((ChannelFutureListener) future1 -> {
 
-                    if (future1.isSuccess()) {
-                        LOGGER.error("[{}] Message sending took {}ms, critical timeout time {}ms, possible network "
-                                     + "problem",
-                                     clientSession.getTransportName(),
-                                     System.currentTimeMillis() - procStartTime,
-                                     clientSession.getSendCompletionErrorDelay());
-                    }
-                });
+                          if (future1.isSuccess()) {
+                              LOGGER.error(
+                                  "[{}] Message sending took {}ms, critical timeout time {}ms, possible network "
+                                  + "problem",
+                                  clientSession.getTransportName(),
+                                  System.currentTimeMillis() - procStartTime,
+                                  clientSession.getSendCompletionErrorDelay());
+                          }
+                      });
 
-            });
+                  });
     }
 
     private void checkSendingWarning(final long procStartTime, final ChannelFuture future) {
 
-        Observable
-            .just(future)
-            .subscribeOn(Schedulers.from(clientSession.getScheduledExecutorService()))
-            .delay(clientSession.getSendCompletionWarningDelay(),
-                   TimeUnit.MILLISECONDS,
-                   Schedulers.from(clientSession.getScheduledExecutorService()))
+        Observable.just(future)
+                  .subscribeOn(Schedulers.from(clientSession.getScheduledExecutorService()))
+                  .delay(clientSession.getSendCompletionWarningDelay(),
+                         TimeUnit.MILLISECONDS,
+                         Schedulers.from(clientSession.getScheduledExecutorService()))
 
-            .filter(channelFuture -> !channelFuture.isDone())
-            .doOnNext(channelFuture -> LOGGER.warn(
-                "[{}] Message sending takes too long time to complete: {}ms and is still waiting it's turn"
-                + ". Timeout time: {}ms, possible network problem",
-                clientSession.getTransportName(),
-                System.currentTimeMillis() - procStartTime,
-                clientSession.getSendCompletionWarningDelay()))
-            .subscribeOn(Schedulers.from(clientSession.getScheduledExecutorService()))
-            .subscribe(channelFuture -> {
+                  .filter(channelFuture -> !channelFuture.isDone())
+                  .doOnNext(channelFuture -> LOGGER.warn(
+                      "[{}] Message sending takes too long time to complete: {}ms and is still waiting it's turn"
+                      + ". Timeout time: {}ms, possible network problem",
+                      clientSession.getTransportName(),
+                      System.currentTimeMillis() - procStartTime,
+                      clientSession.getSendCompletionWarningDelay()))
+                  .subscribeOn(Schedulers.from(clientSession.getScheduledExecutorService()))
+                  .subscribe(channelFuture -> {
 
-                channelFuture.addListener((ChannelFutureListener) future1 -> {
-                    if (future1.isSuccess()) {
-                        LOGGER.warn("[{}] Message sending took {}ms, timeout time {}ms, possible network " + "problem",
-                                    clientSession.getTransportName(),
-                                    System.currentTimeMillis() - procStartTime,
-                                    clientSession.getSendCompletionWarningDelay());
-                    }
-                });
-            });
+                      channelFuture.addListener((ChannelFutureListener) future1 -> {
+                          if (future1.isSuccess()) {
+                              LOGGER.warn("[{}] Message sending took {}ms, timeout time {}ms, possible network "
+                                          + "problem",
+                                          clientSession.getTransportName(),
+                                          System.currentTimeMillis() - procStartTime,
+                                          clientSession.getSendCompletionWarningDelay());
+                          }
+                      });
+                  });
     }
 
     private void updateChannelAttachement(final Channel channel, final long lastWriteIoTime) {
@@ -624,8 +625,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                    || msg instanceof StreamingStatus) {
             this.streamProcessor.process(ctx, msg);
             throw new UnsupportedOperationException("Do you really need this?");
-        } else if (this.clientstateConnector.getClientState()
-                   == ClientSateConnector.ClientState.AUTHORIZING_WAITING) {
+        } else if (this.clientstateConnector.getClientState() == ClientSateConnector.ClientState.AUTHORIZING_WAITING) {
             this.processAuthorizationMessageRx(ctx, msg);
         } else {
             this.fireFeedbackMessageReceived(ctx, requestMessage);
@@ -819,8 +819,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
                 if (ClientSateConnector.ClientState.AUTHORIZING_WAITING == clientState) {
                     handleAuthorizationRx(clientSession.getClientstateConnector().getPrimaryChannel());
-                }else if(ClientSateConnector.ClientState.AUTHORIZING__SUCCESSFUL == clientState){
-                   fireAuthorized();
+                } else if (ClientSateConnector.ClientState.AUTHORIZING__SUCCESSFUL == clientState) {
+                    fireAuthorized();
                 }
 
             }

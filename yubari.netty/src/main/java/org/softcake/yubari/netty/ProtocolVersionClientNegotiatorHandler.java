@@ -221,7 +221,12 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
                         ctx.fireUserEventTriggered(ProtocolVersionNegotiationEvent.SUCCESS);
 
                     } else {
+                        IllegalArgumentException exception = new IllegalArgumentException(String.format(
+                            "Not supported protocol version: [%d]",
+                            acceptedVersion));
+                        ctx.fireUserEventTriggered(new ProtocolVersionNegotiationEvent(exception));
                         logErrorMessage(acceptedVersion);
+                        //TODO really?
                         ctx.close();
                     }
                 }

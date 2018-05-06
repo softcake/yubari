@@ -44,7 +44,14 @@ class DukasTrustManager implements X509TrustManager {
 
         this.sunX509TrustManager = PreCheck.parameterNotNull(manager, "manager");
         this.hostName = PreCheck.parameterNotNullOrEmpty(hostName, "hostName");
-        this.observable = Observable.create((ObservableOnSubscribe<SecurityExceptionEvent>) s -> subscriber = s)
+        this.observable = Observable.create(new ObservableOnSubscribe
+            <SecurityExceptionEvent>() {
+            @Override
+            public void subscribe(final ObservableEmitter<SecurityExceptionEvent> s) throws Exception {
+
+                subscriber = s;
+            }
+        })
                                     .publish();
         PreCheck.parameterNotNull(listener, "listener").subscribe(this.observable);
         this.observable.connect();
