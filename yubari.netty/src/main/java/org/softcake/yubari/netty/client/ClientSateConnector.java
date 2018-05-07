@@ -211,6 +211,53 @@ public class ClientSateConnector {
 
     }
 
+
+    private void onStateChange(final ClientState clientState) {
+
+
+        LOGGER.info(clientState.name());
+
+        switch (clientState) {
+            case CONNECTING:
+                processConnecting(clientState);
+                break;
+            case SSL_HANDSHAKE_WAITING:
+                processSslHandShakeWaiting(clientState);
+                break;
+
+            case SSL_HANDSHAKE_SUCCESSFUL:
+                processSslHandShakeSuccessful(clientState);
+                break;
+
+            case PROTOCOL_VERSION_NEGOTIATION_WAITING:
+                processProtocolVersionNegotiationWaiting(clientState);
+                break;
+
+            case PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL:
+                processProtocolVersionNegotiationSuccessful(clientState);
+                break;
+            case AUTHORIZING_WAITING:
+                processAuthorizingWaiting(clientState);
+                break;
+            case AUTHORIZING__SUCCESSFUL:
+                processAuthorizingSuccessful(clientState);
+                break;
+            case ONLINE:
+                processOnline(clientState);
+                break;
+            case DISCONNECTING:
+                processDisconnecting(clientState);
+                break;
+            case DISCONNECTED:
+                processDisconnect(clientState);
+                break;
+            default:
+                throw new IllegalStateException("Unsupported state " + clientState);
+        }
+    }
+
+
+
     private void processConnecting(final ClientState clientState) {
 
 
@@ -324,16 +371,19 @@ public class ClientSateConnector {
 
                            @Override
                            public void onSubscribe(final Disposable d) {
+
                                disposable = d;
                            }
 
                            @Override
                            public void onNext(final ClientState clientState) {
+
                                disposable.dispose();
                            }
 
                            @Override
                            public void onError(final Throwable e) {
+
                                disConnect(new ClientDisconnectReason(DisconnectReason.SSL_HANDSHAKE_TIMEOUT,
                                                                      "SSL handshake timeout",
                                                                      e));
@@ -341,12 +391,14 @@ public class ClientSateConnector {
 
                            @Override
                            public void onComplete() {
+
                            }
                        });
 
     }
 
     void sslHandshakeSuccess() {
+
         stateChangeEvent(ClientState.SSL_HANDSHAKE_SUCCESSFUL).subscribe();
        /* Single.just(ClientState.SSL_HANDSHAKE_SUCCESSFUL)
               .observeOn(Schedulers.from(executor))
@@ -393,22 +445,28 @@ public class ClientSateConnector {
 
                            @Override
                            public void onSubscribe(final Disposable d) {
+
                                disposable = d;
                            }
 
                            @Override
                            public void onNext(final ClientState clientState) {
+
                                disposable.dispose();
                            }
 
                            @Override
                            public void onError(final Throwable e) {
-                               disConnect(new ClientDisconnectReason(DisconnectReason.PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
-                                                                     "Protocol version negotiation timeout",e));
+
+                               disConnect(new ClientDisconnectReason(DisconnectReason
+                                                                         .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
+                                                                     "Protocol version negotiation timeout",
+                                                                     e));
                            }
 
                            @Override
                            public void onComplete() {
+
                            }
                        });
     }
@@ -427,35 +485,38 @@ public class ClientSateConnector {
                      this.clientSession.getTransportName(),
                      errorReason);
         Single.just(errorReason)
-            .observeOn(Schedulers.from(executor))
-            .subscribe(errorReason1 -> disConnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_FAILED,
-                                                                     String.format("Authorization failed, "
-                                                                + "reason [%s]", errorReason1))));
-
+              .observeOn(Schedulers.from(executor))
+              .subscribe(errorReason1 -> disConnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_FAILED,
+                                                                               String.format("Authorization failed, "
+                                                                                             + "reason [%s]",
+                                                                                             errorReason1))));
 
 
     }
 
     public void authorizingSuccess(final String sessionId, final String userName) {
+
         LOGGER.debug(
             "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",
             this.clientSession.getTransportName(),
             sessionId,
             userName);
-        stateChangeEvent(ClientState.AUTHORIZING__SUCCESSFUL).doOnSuccess(clientState -> clientSession.setServerSessionId(sessionId)).subscribe();
+        stateChangeEvent(ClientState.AUTHORIZING__SUCCESSFUL).doOnSuccess(clientState -> clientSession
+            .setServerSessionId(
+            sessionId)).subscribe();
        /* Single.just(ClientState.AUTHORIZING__SUCCESSFUL)
             .observeOn(Schedulers.from(executor))
             .doOnSuccess(clientState -> clientSession.setServerSessionId(sessionId))
             .subscribe(state -> stateChangeEvent(state));*/
 
 
-
-
     }
+
     public Channel getPrimaryChannel() {
 
         return this.primaryChannel;
     }
+
     public boolean isOnline() {
 
         return this.clientState.get() == ClientState.ONLINE;
@@ -465,44 +526,52 @@ public class ClientSateConnector {
 
         return this.childChannel;
     }
+
     private void processAuthorizingWaiting(final ClientState clientState) {
 
         tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL, clientState);
-        stateObservable.filter(c -> ClientState.AUTHORIZING__SUCCESSFUL== c)
-            .timeout(this.clientSession.getAuthorizationTimeout(),
-                     TimeUnit.MILLISECONDS,
-                     Schedulers.from(executor))
-            .subscribe(new Observer<ClientState>() {
+        stateObservable.filter(c -> ClientState.AUTHORIZING__SUCCESSFUL == c)
+                       .timeout(this.clientSession.getAuthorizationTimeout(),
+                                TimeUnit.MILLISECONDS,
+                                Schedulers.from(executor))
+                       .subscribe(new Observer<ClientState>() {
 
-                private Disposable disposable;
+                           private Disposable disposable;
 
-                @Override
-                public void onSubscribe(final Disposable d) {
-                    disposable = d;
-                }
+                           @Override
+                           public void onSubscribe(final Disposable d) {
 
-                @Override
-                public void onNext(final ClientState clientState) {
-                    disposable.dispose();
-                }
+                               disposable = d;
+                           }
 
-                @Override
-                public void onError(final Throwable e) {
-                    disConnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_TIMEOUT,
-                        "Authorization timeout",e));
-                }
+                           @Override
+                           public void onNext(final ClientState clientState) {
 
-                @Override
-                public void onComplete() {
-                }
-            });
+                               disposable.dispose();
+                           }
+
+                           @Override
+                           public void onError(final Throwable e) {
+
+                               disConnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_TIMEOUT,
+                                                                     "Authorization timeout",
+                                                                     e));
+                           }
+
+                           @Override
+                           public void onComplete() {
+
+                           }
+                       });
 
     }
+
     private void processAuthorizingSuccessful(final ClientState clientState) {
 
         tryToSetState(ClientState.AUTHORIZING_WAITING, clientState);
         stateChangeEvent(ClientState.ONLINE).subscribe();
     }
+
     private void processOnline(final ClientState clientState) {
 
         tryToSetState(ClientState.AUTHORIZING__SUCCESSFUL, clientState);
@@ -594,11 +663,7 @@ public class ClientSateConnector {
     public Single<ClientState> stateChangeEvent(final ClientState state) {
 
 
-
-
-       return Single.just(state)
-              .subscribeOn(Schedulers.from(executor))
-              .doOnSuccess(s ->  emitter.onNext(s));
+        return Single.just(state).subscribeOn(Schedulers.from(executor)).doOnSuccess(s -> emitter.onNext(s));
       /*        .subscribe(state -> stateChangeEvent(state));
         emitter.onNext(state);*/
     }
@@ -637,22 +702,22 @@ public class ClientSateConnector {
 
     }
 
-    public enum ClientState {
-        CONNECTING,
-        SSL_HANDSHAKE_WAITING,
-        SSL_HANDSHAKE_SUCCESSFUL,
-        PROTOCOL_VERSION_NEGOTIATION_WAITING,
-        PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL,
-        AUTHORIZING_WAITING,
-        AUTHORIZING__SUCCESSFUL,
-        ONLINE,
-        DISCONNECTING,
-        DISCONNECTED;
+public enum ClientState {
+    CONNECTING,
+    SSL_HANDSHAKE_WAITING,
+    SSL_HANDSHAKE_SUCCESSFUL,
+    PROTOCOL_VERSION_NEGOTIATION_WAITING,
+    PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL,
+    AUTHORIZING_WAITING,
+    AUTHORIZING__SUCCESSFUL,
+    ONLINE,
+    DISCONNECTING,
+    DISCONNECTED;
 
-        ClientState() {
+    ClientState() {
 
-        }
     }
+}
 
 
 }
