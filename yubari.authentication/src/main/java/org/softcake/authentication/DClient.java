@@ -832,7 +832,7 @@ public class DClient implements ClientListener {
         initRequestMessage.setSendPacked(true);
         this.transportClient.sendMessageNaive(initRequestMessage);
         this.setSubscribedInstruments(this.instruments);
-        Iterator var2 = this.newsFilters.values().iterator();
+       /* Iterator var2 = this.newsFilters.values().iterator();
 
         while (var2.hasNext()) {
             INewsFilter newsFilter = (INewsFilter) var2.next();
@@ -859,7 +859,7 @@ public class DClient implements ClientListener {
                                                                                       CalendarType.class));
             LOGGER.debug("Subscribing : " + newsSubscribeRequest);
             this.transportClient.sendMessageNaive(newsSubscribeRequest);
-        }
+        }*/
 
     }
 public int anInt;
@@ -1184,14 +1184,14 @@ public int anInt;
             InstrumentManager instrumentManager = new InstrumentManager(client);
             Set<Instrument> instruments = new HashSet<>();
             instruments.add(Instrument.EURUSD);
-            instrumentManager.addToFullDepthSubscribed(instruments);
-
+          //  instrumentManager.addToFullDepthSubscribed(instruments);
+/*
             NewsSubscribeRequest newsUnsubscribeRequest = new NewsSubscribeRequest();
                         newsUnsubscribeRequest.setRequestType(SubscribeRequestType.SUBSCRIBE);
                         newsUnsubscribeRequest.setSources(Collections.singleton(com.dukascopy.dds3.transport.msg
              .news.NewsSource.valueOf(INewsFilter.NewsSource.FXSPIDER_NEWS.name())));
                         LOGGER.debug("Unsubscribing : " + newsUnsubscribeRequest);
-                        this.transportClient.sendMessageNaive(newsUnsubscribeRequest);
+                        this.transportClient.sendMessageNaive(newsUnsubscribeRequest);*/
         }
 
 

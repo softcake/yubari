@@ -520,7 +520,7 @@ public class HeartbeatProcessor {
 
         if (isPrimary) {
             this.clientSession.getClientConnector()
-                              .disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                              .disConnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
                                                                      "Primary session ping timeout"));
         }
 

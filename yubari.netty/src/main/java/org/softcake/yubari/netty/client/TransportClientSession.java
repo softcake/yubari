@@ -153,7 +153,7 @@ public class TransportClientSession {
     private Bootstrap channelBootstrap;
     private ProtocolVersionClientNegotiatorHandler protocolVersionClientNegotiatorHandler;
     private ClientProtocolHandler protocolHandler;
-    private ClientConnector clientConnector;
+    private ClientSateConnector2 clientConnector;
     private ScheduledExecutorService scheduledExecutorService;
     private String serverSessionId;
     private IoSessionWrapper sessionWrapper = new NettyIoSessionWrapperAdapter() {
@@ -162,7 +162,7 @@ public class TransportClientSession {
             return protocolHandler.writeMessage(this.channel, (BinaryProtocolMessage) message);
         }
     };
-    private ClientSateConnector clientstateConnector;
+
 
     protected TransportClientSession(final TransportClient transportClient,
                                      final InetSocketAddress address,
@@ -312,10 +312,6 @@ public class TransportClientSession {
         this.enabledSslProtocols = enabledSslProtocols;
     }
 
-    public ClientSateConnector getClientstateConnector() {
-
-        return clientstateConnector;
-    }
 
     void init() {
 
@@ -378,11 +374,11 @@ public class TransportClientSession {
             }
         });
         this.protocolHandler = new ClientProtocolHandler(this);
-        this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
-        this.clientstateConnector = new ClientSateConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
-        clientstateConnector.connect();
+       // this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
+        this.clientConnector = new ClientSateConnector2(this.address, this.channelBootstrap, this, this.protocolHandler);
+        clientConnector.connect();
         this.protocolHandler.setClientConnector(this.clientConnector);
-        this.protocolHandler.clientStateConnector( this.clientstateConnector );
+      //  this.protocolHandler.clientStateConnector((this.clientConnector);
        // this.clientConnector.start();
         this.synchRequestProcessor = new SynchRequestProcessor(this, this.protocolHandler, this.scheduledExecutorService);
     }
@@ -401,12 +397,12 @@ public class TransportClientSession {
 
     public void connect() {
 
-       // this.clientConnector.connect();
+        this.clientConnector.connect();
     }
 
     void disconnect() {
 
-        this.clientConnector.disconnect();
+        this.clientConnector.disConnect();
     }
 
     public void disconnected() {
@@ -426,7 +422,7 @@ public class TransportClientSession {
 
         LOGGER.debug("[{}] Terminating client session", this.transportName);
         if (this.clientConnector != null) {
-            this.clientConnector.setTerminating(this.terminationAwaitMaxTimeoutInMillis);
+           // this.clientConnector.setTerminating(this.terminationAwaitMaxTimeoutInMillis);
         }
 
         if (this.channelBootstrap != null) {
@@ -452,7 +448,7 @@ public class TransportClientSession {
         if (this.isOnline()) {
             Single<Boolean>
                 booleanObservable
-                = this.protocolHandler.writeMessage(this.clientstateConnector.getPrimaryChannel(), message);
+                = this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
             booleanObservable.subscribe();
             return true;
         } else {
@@ -547,12 +543,12 @@ public class TransportClientSession {
 
     boolean isOnline() {
 
-        return this.clientstateConnector.isOnline();
+        return this.clientConnector.isOnline();
     }
 
     public boolean isTerminating() {
 
-        return this.clientConnector.isTerminating();
+        return false;//this.clientConnector.isTerminating();
     }
 
     boolean isConnecting() {
@@ -734,7 +730,7 @@ public class TransportClientSession {
         return this.protocolHandler;
     }
 
-    public ClientConnector getClientConnector() {
+    public ClientSateConnector2 getClientConnector() {
 
         return this.clientConnector;
     }

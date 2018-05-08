@@ -16,11 +16,14 @@
 
 package org.softcake.yubari.netty.client;
 
+import com.google.common.util.concurrent.MoreExecutors;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.Single;
 import io.reactivex.functions.BiConsumer;
 import io.reactivex.functions.Consumer;
+import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,15 +31,21 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Executor;
 
 public class RXStateMachine<T, E extends Enum, C extends Enum> implements Consumer<E> {
     private static final Logger LOGGER = LoggerFactory.getLogger(RXStateMachine.class);
     private final T context;
+    private final Executor executor;
     private final PublishSubject<E> events = PublishSubject.create();
     private volatile State<T, E, C> state;
     protected RXStateMachine(T context, State<T, E, C> initial) {
+        this(context, initial, MoreExecutors.directExecutor());
+    }
+    protected RXStateMachine(T context, State<T, E, C> initial, final Executor executor) {
         this.state = initial;
         this.context = context;
+        this.executor = executor;
     }
     public enum ClientState {
         IDLE,
@@ -177,6 +186,9 @@ public class RXStateMachine<T, E extends Enum, C extends Enum> implements Consum
 
     }
     public Observable<Void> connect() {
+
+
+
         return Observable.create(new ObservableOnSubscribe<Void>() {
             @Override
             public void subscribe(final ObservableEmitter<Void> sub) throws Exception {
@@ -199,17 +211,17 @@ public class RXStateMachine<T, E extends Enum, C extends Enum> implements Consum
                             state = next;
                             next.enter(context);
                         } else {
-                            LOGGER.info("Invalid event : " + event);
+                            LOGGER.info("Invalid event : {} state: {}", event, state);
                         }
                     }
-                }).subscribe());
+                }).subscribeOn(Schedulers.from(executor)).subscribe());
             }
         });
     }
 
     @Override
     public void accept(E event) {
-        events.onNext(event);
+        events.toSerialized().onNext(event);
     }
 
     public State<T, E, C> getState() {
@@ -264,10 +276,7 @@ public class RXStateMachine<T, E extends Enum, C extends Enum> implements Consum
             transitions.put(event, state);
             return this;
         }
-        public State<T, E, C> transitiontimeout(E event, State<T, E, C> state) {
-            transitions.put(event, state);
-            return this;
-        }
+
         private State<T, E, C> next(E event) {
             return transitions.get(event);
         }
