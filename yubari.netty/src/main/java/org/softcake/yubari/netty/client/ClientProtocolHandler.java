@@ -281,7 +281,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         } else if (evt instanceof ProtocolVersionNegotiationEvent) {
             ProtocolVersionNegotiationEvent event = (ProtocolVersionNegotiationEvent) evt;
             if (event.isSuccess()) {
-                this.clientSession.getClientstateConnector().protocolVersionHandshakeSuccess();
+                this.clientSession.getClientstateConnector().protocolVersionNegotitationSuccess();
             } else {
                 this.clientstateConnector.disConnect(new ClientDisconnectReason(DisconnectReason
                                                                                     .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
