@@ -21,6 +21,7 @@ import org.softcake.cherry.core.base.PreCheck;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
+import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.ObservableSource;
 import io.reactivex.Single;
 import io.reactivex.functions.Consumer;
@@ -83,12 +84,15 @@ public class RequestHandler {
         PreCheck.parameterNotNull(requestMessage, "requestMessage");
         PreCheck.parameterNotNull(timeoutUnits, "timeoutUnits");
 
-        return Observable.defer(() -> Observable.create(e -> {
-            emitter = e;
-            requestMessage.doOnSuccess(aBoolean -> RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
-                                                                                      timeoutUnits,
-                                                                                      doNotRestartTimerOnInProcessResponse)
-                                                                      .subscribe()).subscribe(requestSent::accept);
+        return Observable.defer(() -> Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
+            @Override
+            public void subscribe(final ObservableEmitter<ProtocolMessage> e) throws Exception {
+
+                emitter = e;
+                requestMessage.doOnSuccess(aBoolean -> RequestHandler.this
+                    .observeTimeout(Math.max(timeout, 0L), timeoutUnits, doNotRestartTimerOnInProcessResponse)
+                    .subscribe()).subscribe(requestSent::accept);
+            }
         }));
 
 

@@ -197,7 +197,7 @@ public class ClientSateConnector2 {
         clientState.set(state);
         stateObservable.toSerialized().onNext(state);
        onlineThread = Observable
-            .interval(100L, TimeUnit.MILLISECONDS, Schedulers.from(executor))
+            .interval(100, 100, TimeUnit.MILLISECONDS, Schedulers.from(executor))
             .subscribe(new Consumer<Long>() {
                 @Override
                 public void accept(final Long aLong) throws Exception {
@@ -327,26 +327,27 @@ public class ClientSateConnector2 {
                                                      cause));
         });
 
-        final Single<Boolean> observable = protocolHandler.writeMessage(childChannel,
-                                                                        childSocketAuthAcceptorMessage);
-        Single<Boolean> booleanSingle = observable.doOnError(new io.reactivex.functions.Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable e) throws Exception {
 
-                if (e.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
-
-                LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                disConnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                      String.format("Child session error while writing: %s",
-                                                                    childSocketAuthAcceptorMessage),
-                                                      e));
-            }
-        });
         channelSingle.subscribe(new io.reactivex.functions.Consumer<Channel>() {
             @Override
             public void accept(final Channel channel) throws Exception {
                 childChannel = channel;
                 channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(childSessionChannelAttachment);
+                final Single<Boolean> observable = protocolHandler.writeMessage2(childChannel,
+                                                                                 childSocketAuthAcceptorMessage);
+                Single<Boolean> booleanSingle = observable.doOnError(new io.reactivex.functions.Consumer<Throwable>() {
+                    @Override
+                    public void accept(final Throwable e) throws Exception {
+
+                        if (e.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
+
+                        LOGGER.error("[{}] ", clientSession.getTransportName(), e);
+                        disConnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                              String.format("Child session error while writing: %s",
+                                                                            childSocketAuthAcceptorMessage),
+                                                              e));
+                    }
+                });
                 booleanSingle.subscribe();
 
             }

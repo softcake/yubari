@@ -64,6 +64,7 @@ import io.netty.util.Attribute;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.Single;
+import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
@@ -470,37 +471,83 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         };
         task.executeInExecutor(this.authEventExecutor);
     }
+    public Single<Boolean> writeMessage2(final Channel channel, final BinaryProtocolMessage responseMessage) {
+
+        final int messagesCounter = sentMessagesCounterIncrementAndGet();
+
+        return Single.create(new SingleOnSubscribe<Boolean>() {
+            @Override
+            public void subscribe(final SingleEmitter<Boolean> e) throws Exception {
+
+                final ChannelFuture future = channel.writeAndFlush(responseMessage);
+                final long procStartTime = System.currentTimeMillis();
+                ClientProtocolHandler.this
+                    .checkSendingErrorOnNotWritableChannel(channel, future, procStartTime)
+                    .subscribe(TransportClientSession::terminate);
+
+                if (ClientProtocolHandler.this.isTimeToCheckError(messagesCounter)) {
+                    ClientProtocolHandler.this.checkSendError(procStartTime, future);
+                } else if (ClientProtocolHandler.this.isTimeToCheckWarning(messagesCounter)) {
+                    ClientProtocolHandler.this.checkSendingWarning(procStartTime, future);
+                }
+
+                future.addListener((ChannelFutureListener) cf -> {
+
+                    if (cf.isSuccess()) {
+                        e.onSuccess(true);
+                    } else if (cf.isCancelled()) {
+                        e.onError(new CancellationException("cancelled before completed"));
+                    } else if (cf.isDone() && cf.cause() != null) {
+                        e.onError(cf.cause());
+                    } else {
+                        e.onError(new Exception("Unexpected ChannelFuture state"));
+                    }
+                });
+            }
+        })
+            .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachement(channel,
+                                                                                         System
+                                                                                             .currentTimeMillis()))
+            .doOnError(cause -> LOGGER.error("[{}] Message send failed because of {}: {}",
+                                             clientSession.getTransportName(),
+                                             cause.getClass().getSimpleName(),
+                                             cause.getMessage()));
+    }
 
 
     public Single<Boolean> writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
 
         final int messagesCounter = sentMessagesCounterIncrementAndGet();
 
-        return Single.create((SingleOnSubscribe<Boolean>) e -> {
-            final ChannelFuture future = channel.writeAndFlush(responseMessage);
-            final long procStartTime = System.currentTimeMillis();
-            checkSendingErrorOnNotWritableChannel(channel,
-                                                  future,
-                                                  procStartTime).subscribe(TransportClientSession::terminate);
+        return Single.create(new SingleOnSubscribe<Boolean>() {
+            @Override
+            public void subscribe(final SingleEmitter<Boolean> e) throws Exception {
 
-            if (isTimeToCheckError(messagesCounter)) {
-                checkSendError(procStartTime, future);
-            } else if (isTimeToCheckWarning(messagesCounter)) {
-                checkSendingWarning(procStartTime, future);
-            }
+                final ChannelFuture future = channel.writeAndFlush(responseMessage);
+                final long procStartTime = System.currentTimeMillis();
+                ClientProtocolHandler.this
+                    .checkSendingErrorOnNotWritableChannel(channel, future, procStartTime)
+                    .subscribe(TransportClientSession::terminate);
 
-            future.addListener((ChannelFutureListener) cf -> {
-
-                if (cf.isSuccess()) {
-                    e.onSuccess(true);
-                } else if (cf.isCancelled()) {
-                    e.onError(new CancellationException("cancelled before completed"));
-                } else if (cf.isDone() && cf.cause() != null) {
-                    e.onError(cf.cause());
-                } else {
-                    e.onError(new Exception("Unexpected ChannelFuture state"));
+                if (ClientProtocolHandler.this.isTimeToCheckError(messagesCounter)) {
+                    ClientProtocolHandler.this.checkSendError(procStartTime, future);
+                } else if (ClientProtocolHandler.this.isTimeToCheckWarning(messagesCounter)) {
+                    ClientProtocolHandler.this.checkSendingWarning(procStartTime, future);
                 }
-            });
+
+                future.addListener((ChannelFutureListener) cf -> {
+
+                    if (cf.isSuccess()) {
+                        e.onSuccess(true);
+                    } else if (cf.isCancelled()) {
+                        e.onError(new CancellationException("cancelled before completed"));
+                    } else if (cf.isDone() && cf.cause() != null) {
+                        e.onError(cf.cause());
+                    } else {
+                        e.onError(new Exception("Unexpected ChannelFuture state"));
+                    }
+                });
+            }
         })
                      .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachement(channel,
                                                                                                   System

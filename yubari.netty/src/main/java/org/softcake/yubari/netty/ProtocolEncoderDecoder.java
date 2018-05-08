@@ -207,7 +207,18 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         final Object firstMessage = firstMessageAttribute.get();
         final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
             PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+
+        if (messageQueueAttribute == null) {
+            return;
+        }
+
+
         final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
+
+        if (messageQueue == null) {
+            return;
+        }
+
 
         if (firstMessage == null) {
 
