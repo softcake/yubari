@@ -96,6 +96,9 @@ public class SRP6Test {
         if (useDemo) {
             DClient client = new DClient();
             client.connect(urlDemo,usernameD,passwordD);
+
+            Thread.sleep(10000L);
+            client.disconnect();
             //wait for it to connect
 //            int i = 10; //wait max ten seconds
 //            while (i > 0 && !client.isConnected()) {

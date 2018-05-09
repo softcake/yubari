@@ -33,7 +33,6 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ConnectTimeoutException;
-import io.netty.util.Attribute;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.Observer;
@@ -73,7 +72,6 @@ public class ClientSateConnector2 {
     private static final List<Thread> eventExecutorThreadsForLogging = Collections.synchronizedList(new ArrayList<>());
     private final PublishSubject<ClientState> stateObservable;
     private final AtomicReference<ClientState> clientState;
-    private boolean primarySocketAuthAcceptorMessageSent = false;
     private final ListeningExecutorService executor = TransportHelper.createExecutor(DEFAULT_EVENT_POOL_SIZE,
                                                                                      DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL,
                                                                                      DEFAULT_CRITICAL_EVENT_QUEUE_SIZE,
@@ -88,6 +86,7 @@ public class ClientSateConnector2 {
     private final ClientProtocolHandler protocolHandler;
     ObservableEmitter<ClientState> emitter;
     ClientStateConnector3 sm;
+    private boolean primarySocketAuthAcceptorMessageSent = false;
     private Disposable disposable;
     private Observer<ClientState> observer;
     private volatile Channel primaryChannel;
@@ -175,6 +174,7 @@ public class ClientSateConnector2 {
         clientState.set(state);
         processAuthorizingWaiting();
         stateObservable.toSerialized().onNext(state);
+        sm.accept(Event.AUTHORIZING);
     }
 
     public void onProtocolVersionNegotiationExit(ClientState state) {
@@ -184,7 +184,7 @@ public class ClientSateConnector2 {
     public void onAuthorizingEnter(ClientState state) {
 
         clientState.set(state);
-       // sm.accept(Event.ONLINE);
+        // sm.accept(Event.ONLINE);
         stateObservable.toSerialized().onNext(state);
     }
 
@@ -194,23 +194,23 @@ public class ClientSateConnector2 {
 
     public void onOnlineEnter(ClientState state) {
 
-        clientState.set(state);
-        stateObservable.toSerialized().onNext(state);
+
        onlineThread = Observable
-            .interval(100, 100, TimeUnit.MILLISECONDS, Schedulers.from(executor))
+            .interval(100, 500, TimeUnit.MILLISECONDS, Schedulers.from(executor))
             .subscribe(new Consumer<Long>() {
                 @Override
                 public void accept(final Long aLong) throws Exception {
-
                     processOnline();
+
                 }
             });
-
+        clientState.set(state);
+        stateObservable.toSerialized().onNext(state);
 
     }
 
     public void onOnlineExit(ClientState state) {
-
+this.onlineThread.dispose();
     }
 
     public void onDisconnectingEnter(ClientState state) {
@@ -252,14 +252,16 @@ public class ClientSateConnector2 {
 
         }
 
-        this.processPrimarySocketAuthAcceptorMessage();
+        if (this.processPrimarySocketAuthAcceptorMessage().blockingGet()) {
 
+        }
         protocolHandler.getHeartbeatProcessor().startSendPingPrimary();
+
         if (!this.clientSession.isUseFeederSocket() || this.childSocketAuthAcceptorMessage == null) {return true;}
 
         if (this.childChannel != null && this.childChannel.isActive()) {
             //clientSession.getProtocolHandler().getHeartbeatProcessor().sendPing(Boolean.FALSE);
-            clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingChild();
+
             if (this.canResetChildChannelReconnectAttempts()) {
 
                 this.childSessionChannelAttachment.setReconnectAttempt(0);
@@ -279,7 +281,7 @@ public class ClientSateConnector2 {
             if (this.childSessionChannelAttachment.getLastConnectAttemptTime() + this.clientSession.getReconnectDelay()
                 < System.currentTimeMillis()) {
 
-                return this.connectChildSession();
+                return this.connectChildSession().blockingGet();
             }
         }
 
@@ -287,7 +289,7 @@ public class ClientSateConnector2 {
 
     }
 
-    private boolean connectChildSession()  {
+    private Single<Boolean> connectChildSession() {
 
         if (this.childChannel != null) {
             this.childChannel.disconnect();
@@ -319,48 +321,39 @@ public class ClientSateConnector2 {
 
 
             disConnect(new ClientDisconnectReason(reason,
-                                                     String.format("%s Child connection exception %s",
-                                                                   cause instanceof CertificateException
-                                                                   ? "Certificate"
-                                                                   : "Unexpected",
-                                                                   cause.getMessage()),
-                                                     cause));
+                                                  String.format("%s Child connection exception %s",
+                                                                cause instanceof CertificateException
+                                                                ? "Certificate"
+                                                                : "Unexpected",
+                                                                cause.getMessage()),
+                                                  cause));
         });
 
+        final Channel channel = channelSingle.blockingGet();
 
-        channelSingle.subscribe(new io.reactivex.functions.Consumer<Channel>() {
+        childChannel = channel;
+        channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(childSessionChannelAttachment);
+
+        return protocolHandler.writeMessage2(childChannel, childSocketAuthAcceptorMessage).doOnSuccess(new Consumer
+            <Boolean>() {
             @Override
-            public void accept(final Channel channel) throws Exception {
-                childChannel = channel;
-                channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(childSessionChannelAttachment);
-                final Single<Boolean> observable = protocolHandler.writeMessage2(childChannel,
-                                                                                 childSocketAuthAcceptorMessage);
-                Single<Boolean> booleanSingle = observable.doOnError(new io.reactivex.functions.Consumer<Throwable>() {
-                    @Override
-                    public void accept(final Throwable e) throws Exception {
+            public void accept(final Boolean aBoolean) throws Exception {
+                clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingChild();
+            }
+        })
+                                                          .doOnError(new io.reactivex.functions.Consumer<Throwable>() {
+            @Override
+            public void accept(final Throwable e) throws Exception {
 
-                        if (e.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
+                if (e.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
 
-                        LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                        disConnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                              String.format("Child session error while writing: %s",
-                                                                            childSocketAuthAcceptorMessage),
-                                                              e));
-                    }
-                });
-                booleanSingle.subscribe();
-
+                LOGGER.error("[{}] ", clientSession.getTransportName(), e);
+                disConnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                      String.format("Child session error while writing: %s",
+                                                                    childSocketAuthAcceptorMessage),
+                                                      e));
             }
         });
-
-
-
-
-
-
-
-        //TODO
-        return true;
 
     }
 
@@ -383,37 +376,41 @@ public class ClientSateConnector2 {
     public void setChildSocketAuthAcceptorMessage(final ChildSocketAuthAcceptorMessage acceptorMessage) {
 
         this.childSocketAuthAcceptorMessage = acceptorMessage;
+        LOGGER.debug("Child Session");
 
     }
 
-    private void processPrimarySocketAuthAcceptorMessage() {
+    private Single<Boolean> processPrimarySocketAuthAcceptorMessage() {
 
-        if (this.primarySocketAuthAcceptorMessageSent || this.primarySocketAuthAcceptorMessage == null) {return;}
+        if (this.primarySocketAuthAcceptorMessageSent || this.primarySocketAuthAcceptorMessage == null) {
+            return Single.just(false);
+        }
 
 
-        final Single<Boolean> channelFuture = this.protocolHandler.writeMessage(this.primaryChannel,
-                                                                                this.primarySocketAuthAcceptorMessage);
-        channelFuture.doOnError(t -> {
-            if (t.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
+        return this.protocolHandler.writeMessage(this.primaryChannel, this.primarySocketAuthAcceptorMessage)
+                                   .doOnError(t -> {
+                                       if (t.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
 
-            LOGGER.error("[{}] ", clientSession.getTransportName(), t);
-            disConnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                  String.format("Primary session error " + "while writhing message: %s",
-                                                                primarySocketAuthAcceptorMessage),
-                                                  t));
-        }).subscribe();
-        this.primarySocketAuthAcceptorMessageSent = true;
+                                       LOGGER.error("[{}] ", clientSession.getTransportName(), t);
+                                       disConnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                                             String.format("Primary session error "
+                                                                                           + "while writhing message:"
+                                                                                           + " %s",
+                                                                                           primarySocketAuthAcceptorMessage),
+                                                                             t));
+                                   })
+                                   .doOnSuccess(new Consumer<Boolean>() {
+                                       @Override
+                                       public void accept(final Boolean aBoolean) throws Exception {
+
+                                           primarySocketAuthAcceptorMessageSent = true;
+                                       }
+                                   });
+
     }
 
     public void setPrimarySocketAuthAcceptorMessage(final PrimarySocketAuthAcceptorMessage acceptorMessage) {
-        sm.accept(Event.ONLINE);
         this.primarySocketAuthAcceptorMessage = acceptorMessage;
-
-    }
-
-    public ListeningExecutorService getExecutor() {
-
-        return executor;
     }
 
     private Observer<ClientState> createObserver() {
@@ -449,9 +446,6 @@ public class ClientSateConnector2 {
 
     private void processConnecting(final ClientState state) {
 
-
-        //this.clientSession.getAuthorizationProvider().setListener(this);
-        // this.authorizationProvider.setListener(this);
         primarySessionChannelAttachment = new ChannelAttachment(Boolean.TRUE);
         childSessionChannelAttachment = new ChannelAttachment(Boolean.FALSE);
 
@@ -465,30 +459,28 @@ public class ClientSateConnector2 {
             return;
         }
 
-        final Single<Channel> connectFuture = processConnectingAndGetFuture(address);
-        connectFuture
-            .doOnSuccess(channel -> LOGGER.debug("[{}] primaryChannel = {}",
-                                                 clientSession.getTransportName(),
-                                                 channel))
-            .doOnError(cause -> {
-                DisconnectReason reason = cause instanceof CertificateException
-                                          ? DisconnectReason.CERTIFICATE_EXCEPTION
-                                          : DisconnectReason.CONNECTION_PROBLEM;
+        processConnectingAndGetFuture(address).doOnSuccess(channel -> LOGGER.debug("[{}] primaryChannel = {}",
+                                                                                                       clientSession.getTransportName(),
+                                                                                                       channel))
+                                                                  .doOnError(cause -> {
+                         DisconnectReason reason = cause instanceof CertificateException
+                                                   ? DisconnectReason.CERTIFICATE_EXCEPTION
+                                                   : DisconnectReason.CONNECTION_PROBLEM;
 
-                disConnect(new ClientDisconnectReason(reason,
-                                                      String.format("%s exception %s",
-                                                                    cause instanceof CertificateException
-                                                                    ? "Certificate"
-                                                                    : "Unexpected",
-                                                                    cause.getMessage()),
-                                                      cause));
+                         disConnect(new ClientDisconnectReason(reason,
+                                                               String.format("%s exception %s",
+                                                                             cause instanceof CertificateException
+                                                                             ? "Certificate"
+                                                                             : "Unexpected",
+                                                                             cause.getMessage()),
+                                                               cause));
 
 
-            })
-            .observeOn(Schedulers.from(executor))
-            .doOnSuccess(channel -> waitForSslAndNegotitation())
-            .doOnSuccess(channel -> primaryChannel = channel)
-            .subscribe(channel1 -> accept(channel1));
+                     })
+                                                                  .observeOn(Schedulers.from(executor))
+                                                                  .doOnSuccess(channel -> waitForSslAndNegotitation())
+                                                                  .doOnSuccess(channel -> primaryChannel = channel)
+                                                                  .subscribe(channel1 -> accept(channel1));
 
 
     }
@@ -505,60 +497,62 @@ public class ClientSateConnector2 {
     private Single<Channel> processConnectingAndGetFuture(final InetSocketAddress address) {
 
 
-        return Single
-            .create((SingleOnSubscribe<Channel>) e -> {
+        return Single.create((SingleOnSubscribe<Channel>) e -> {
 
-                final ChannelFuture future = channelBootstrap.connect(address);
-                future.addListener((ChannelFutureListener) cf -> {
+            final ChannelFuture future = channelBootstrap.connect(address);
+            future.addListener((ChannelFutureListener) cf -> {
 
-                    if (cf.isSuccess() && cf.isDone()) {
-                        // Completed successfully
-                        e.onSuccess(cf.channel());
-                    } else if (cf.isCancelled() && cf.isDone()) {
-                        // Completed by cancellation
-                        e.onError(new CancellationException("cancelled before completed"));
-                    } else if (cf.isDone() && cf.cause() != null) {
-                        // Completed with failure
-                        e.onError(cf.cause());
-                    } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
-                        // Uncompleted
-                        e.onError(new ConnectTimeoutException());
-                    } else {
-                        e.onError(new Exception("Unexpected ChannelFuture state"));
-                    }
-                });
-            })
-            .doOnSubscribe(disposable -> LOGGER.debug("[{}] Connecting to [{}]",
+                if (cf.isSuccess() && cf.isDone()) {
+                    // Completed successfully
+                    e.onSuccess(cf.channel());
+                } else if (cf.isCancelled() && cf.isDone()) {
+                    // Completed by cancellation
+                    e.onError(new CancellationException("cancelled before completed"));
+                } else if (cf.isDone() && cf.cause() != null) {
+                    // Completed with failure
+                    e.onError(cf.cause());
+                } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
+                    // Uncompleted
+                    e.onError(new ConnectTimeoutException());
+                } else {
+                    e.onError(new Exception("Unexpected ChannelFuture state"));
+                }
+            });
+        })
+                     .doOnSubscribe(disposable -> LOGGER.debug("[{}] Connecting to [{}]",
+                                                               clientSession.getTransportName(),
+                                                               address))
+                     .doOnSuccess(aBoolean -> LOGGER.debug("[{}] Successfully connected to [{}]",
+                                                           clientSession.getTransportName(),
+                                                           address))
+                     .timeout(this.clientSession.getConnectionTimeout(), TimeUnit.MILLISECONDS)
+                     .doOnError(cause -> LOGGER.error("[{}] Connect failed because of {}: {}",
                                                       clientSession.getTransportName(),
-                                                      address))
-            .doOnSuccess(aBoolean -> LOGGER.debug("[{}] Successfully connected to [{}]",
-                                                  clientSession.getTransportName(),
-                                                  address))
-            .timeout(this.clientSession.getConnectionTimeout(), TimeUnit.MILLISECONDS)
-            .doOnError(cause -> LOGGER.error("[{}] Connect failed because of {}: {}",
-                                             clientSession.getTransportName(),
-                                             cause.getClass().getSimpleName(),
-                                             cause.getMessage()));
+                                                      cause.getClass().getSimpleName(),
+                                                      cause.getMessage()));
 
     }
 
     private void processSslHandShakeWaiting() {
 
-        stateObservable
-            .filter(c -> ClientState.SSL_HANDSHAKE == c)
-            .timeout(this.clientSession.getSSLHandshakeTimeout(),
-                     TimeUnit.MILLISECONDS,
-                     Schedulers.from(executor))
-            .takeUntil(c -> ClientState.SSL_HANDSHAKE
-                            == c)
-            .doOnError(e -> disConnect(new ClientDisconnectReason(DisconnectReason.SSL_HANDSHAKE_TIMEOUT,
-                                                                  "SSL handshake timeout",
-                                                                  e)))
-            .subscribe();
+        stateObservable.filter(c -> ClientState.SSL_HANDSHAKE == c)
+                       .timeout(this.clientSession.getSSLHandshakeTimeout(),
+                                TimeUnit.MILLISECONDS,
+                                Schedulers.from(executor))
+                       .takeUntil(c -> ClientState.SSL_HANDSHAKE
+                                       == c)
+                       .doOnError(e -> disConnect(new ClientDisconnectReason(DisconnectReason.SSL_HANDSHAKE_TIMEOUT,
+                                                                             "SSL handshake timeout",
+                                                                             e)))
+                       .subscribe();
 
     }
 
     void sslHandshakeSuccess() {
+
+        if (this.getClientState() == ClientState.ONLINE) {
+            return;
+        }
 
         sm.accept(Event.SSL_HANDSHAKE_SUCCESSFUL);
 
@@ -566,22 +560,25 @@ public class ClientSateConnector2 {
 
     void protocolVersionNegotiationSuccess() {
 
+        if (this.getClientState() == ClientState.ONLINE) {
+            return;
+        }
         sm.accept(Event.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL);
     }
 
 
     private void processProtocolVersionNegotiationWaiting() {
 
-        stateObservable
-            .filter(c -> ClientState.PROTOCOL_VERSION_NEGOTIATION == c)
-            .timeout(this.clientSession.getProtocolVersionNegotiationTimeout(),
-                     TimeUnit.MILLISECONDS,
-                     Schedulers.from(executor))
-            .takeUntil(c -> ClientState.PROTOCOL_VERSION_NEGOTIATION == c)
-            .doOnError(e -> disConnect(new ClientDisconnectReason(DisconnectReason.PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
-                                                                  "Protocol version negotiation timeout",
-                                                                  e)))
-            .subscribe();
+        stateObservable.filter(c -> ClientState.PROTOCOL_VERSION_NEGOTIATION == c)
+                       .timeout(this.clientSession.getProtocolVersionNegotiationTimeout(),
+                                TimeUnit.MILLISECONDS,
+                                Schedulers.from(executor))
+                       .takeUntil(c -> ClientState.PROTOCOL_VERSION_NEGOTIATION == c)
+                       .doOnError(e -> disConnect(new ClientDisconnectReason(DisconnectReason
+                                                                                 .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
+                                                                             "Protocol version negotiation timeout",
+                                                                             e)))
+                       .subscribe();
 
     }
 
@@ -592,13 +589,12 @@ public class ClientSateConnector2 {
         LOGGER.error("[{}] Received AUTHORIZATION_ERROR notification from the authorization provider, reason: [{}]",
                      this.clientSession.getTransportName(),
                      errorReason);
-        Single
-            .just(errorReason)
-            .observeOn(Schedulers.from(executor))
-            .subscribe(errorReason1 -> disConnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_FAILED,
-                                                                             String.format("Authorization failed, "
-                                                                                           + "reason [%s]",
-                                                                                           errorReason1))));
+        Single.just(errorReason)
+              .observeOn(Schedulers.from(executor))
+              .subscribe(errorReason1 -> disConnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_FAILED,
+                                                                               String.format("Authorization failed, "
+                                                                                             + "reason [%s]",
+                                                                                             errorReason1))));
 
 
     }
@@ -611,7 +607,7 @@ public class ClientSateConnector2 {
             sessionId,
             userName);
         clientSession.setServerSessionId(sessionId);
-        sm.accept(Event.AUTHORIZING_SUCCESSFUL);
+        sm.accept(Event.ONLINE);
     }
 
     public Channel getPrimaryChannel() {
@@ -631,17 +627,21 @@ public class ClientSateConnector2 {
 
     private void processAuthorizingWaiting() {
 
-        stateObservable
-            .filter(c -> ClientState.AUTHORIZING == c)
-            .timeout(this.clientSession.getAuthorizationTimeout(),
-                     TimeUnit.MILLISECONDS,
-                     Schedulers.from(executor))
-            .takeUntil(c -> ClientState.AUTHORIZING
-                            == c)
-            .doOnError(e -> disConnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_TIMEOUT,
-                                                                  "Authorization timeout",
-                                                                  e)))
-            .subscribe();
+        stateObservable.filter(c -> ClientState.AUTHORIZING == c)
+                       .timeout(this.clientSession.getAuthorizationTimeout(),
+                                TimeUnit.MILLISECONDS,
+                                Schedulers.from(executor))
+                       .takeUntil(new Predicate<ClientState>() {
+                           @Override
+                           public boolean test(final ClientState c) throws Exception {
+
+                               return ClientState.AUTHORIZING == c;
+                           }
+                       })
+                       .doOnError(e -> disConnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_TIMEOUT,
+                                                                             "Authorization timeout",
+                                                                             e)))
+                       .subscribe();
 
     }
 
@@ -664,10 +664,7 @@ public class ClientSateConnector2 {
     }
 
     public void error() {
-
-
         emitter.onError(new ClosedChannelException());
-
     }
 
     public ClientState getClientState() {
@@ -676,16 +673,11 @@ public class ClientSateConnector2 {
     }
 
     public void connect() {
-
         sm.accept(Event.CONNECTING);
-
-        // this.disposable = this.stateObservable.connect();
-
     }
 
 
     public void disConnect(final ClientDisconnectReason disconnectReason) {
-
         sm.accept(Event.DISCONNECTING);
         logDisconnectReason(disconnectReason);
     }
@@ -703,19 +695,17 @@ public class ClientSateConnector2 {
         }
 
         final StringBuilder builder = new StringBuilder();
-        builder
-            .append("Disconnect now, reason [")
-            .append(disconnectReason.getDisconnectReason())
-            .append("], comments [")
-            .append(disconnectReason.getDisconnectComments())
-            .append("]");
+        builder.append("Disconnect now, reason [")
+               .append(disconnectReason.getDisconnectReason())
+               .append("], comments [")
+               .append(disconnectReason.getDisconnectComments())
+               .append("]");
         if (this.clientSession != null) {
-            builder
-                .append(", server address [")
-                .append(this.clientSession.getAddress())
-                .append("], transport name [")
-                .append(this.clientSession.getTransportName())
-                .append("]");
+            builder.append(", server address [")
+                   .append(this.clientSession.getAddress())
+                   .append("], transport name [")
+                   .append(this.clientSession.getTransportName())
+                   .append("]");
         }
 
         if (disconnectReason.getError() != null) {
@@ -743,15 +733,12 @@ public class ClientSateConnector2 {
     }
 
     public void primaryChannelDisconnected() {
+
         sm.accept(Event.DISCONNECTING);
     }
 
     public void childChannelDisconnected() {
 
-    }
-
-    public void disConnect() {
-        sm.accept(Event.DISCONNECTING);
     }
 
     public boolean isConnecting() {

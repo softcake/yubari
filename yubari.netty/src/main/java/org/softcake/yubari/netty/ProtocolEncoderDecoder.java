@@ -205,29 +205,20 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
         final Attribute<Integer> firstMessageAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
         final Object firstMessage = firstMessageAttribute.get();
-        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
-            PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
-
-        if (messageQueueAttribute == null) {
-            return;
-        }
-
-
-        final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
-
-        if (messageQueue == null) {
-            return;
-        }
+         Attribute<ArrayList<PendingWrite>> messageQueueAttribute;
+         ArrayList<PendingWrite> messageQueue;
 
 
         if (firstMessage == null) {
-
+            messageQueueAttribute = ctx.channel().attr(PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+            messageQueue = messageQueueAttribute.get();
             synchronized (messageQueue) {
                 messageQueue.add(PendingWrite.newInstance(msg, promise));
             }
 
         } else {
-
+            messageQueueAttribute = ctx.channel().attr(PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+            messageQueue = messageQueueAttribute.get();
             this.sendScheduledMessages(ctx, messageQueueAttribute);
             this.doEncode(ctx, msg, promise);
         }

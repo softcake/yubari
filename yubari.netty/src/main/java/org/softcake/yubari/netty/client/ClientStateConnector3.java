@@ -103,7 +103,7 @@ public class ClientStateConnector3 {
 
 
         PROTOCOL_VERSION_NEGOTIATION.onEnter((c, s) -> c.onProtocolVersionNegotiationEnter(s.getState())).onExit(log(
-            "exit")).transition(Event.AUTHORIZING_SUCCESSFUL, AUTHORIZING).transition(Event.DISCONNECTING,
+            "exit")).transition(Event.AUTHORIZING, AUTHORIZING).transition(Event.DISCONNECTING,
                                                                                       DISCONNECTING);
 
 
@@ -113,15 +113,16 @@ public class ClientStateConnector3 {
             .transition(Event.ONLINE, ONLINE)
             .transition(Event.DISCONNECTING, DISCONNECTING);
 
-        ONLINE.onEnter((c, s) -> c.onOnlineEnter(s.getState())).onExit(log("exit")).transition(Event.DISCONNECTING,
-                                                                                               DISCONNECTING);
+        ONLINE.onEnter((c, s) -> c.onOnlineEnter(s.getState()))
+              .onExit((c, s) -> c.onOnlineExit(s.getState()))
+              .transition(Event.DISCONNECTING, DISCONNECTING);
         DISCONNECTING
             .onEnter((c, s) -> c.onDisconnectingEnter(s.getState()))
             .onExit(log("exit"))
             .transition(Event.DISCONNECTED, DISCONNECTED);
-            /*.transition(Event.SSL_HANDSHAKE_SUCCESSFUL, DISCONNECTED)
-            .transition(Event.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL, DISCONNECTED);*/
-        DISCONNECTED.onEnter(log("enter")).onExit(log("exit"));
+        DISCONNECTED
+            .onEnter((c, s) -> c.onDisconnectedEnter(s.getState()))
+            .onExit(log("exit"));
 
 
         return new RXStateMachine<>(clientSateConnector2, IDLE, executor);
@@ -154,7 +155,7 @@ public class ClientStateConnector3 {
         PROTOCOL_VERSION_NEGOTIATION_WAITING,
         PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL,
         AUTHORIZING_WAITING,
-        AUTHORIZING_SUCCESSFUL,
+        AUTHORIZING,
         ONLINE,
         DISCONNECTING,
         DISCONNECTED;

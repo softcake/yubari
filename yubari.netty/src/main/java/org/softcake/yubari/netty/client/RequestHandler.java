@@ -83,17 +83,28 @@ public class RequestHandler {
 
         PreCheck.parameterNotNull(requestMessage, "requestMessage");
         PreCheck.parameterNotNull(timeoutUnits, "timeoutUnits");
+        PreCheck.parameterNotNull(requestSent, "requestSent");
+        return Observable.defer(() -> {
+            return Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
+                @Override
+                public void subscribe(final ObservableEmitter<ProtocolMessage> e) throws Exception {
 
-        return Observable.defer(() -> Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
-            @Override
-            public void subscribe(final ObservableEmitter<ProtocolMessage> e) throws Exception {
+                    emitter = e;
 
-                emitter = e;
-                requestMessage.doOnSuccess(aBoolean -> RequestHandler.this
-                    .observeTimeout(Math.max(timeout, 0L), timeoutUnits, doNotRestartTimerOnInProcessResponse)
-                    .subscribe()).subscribe(requestSent::accept);
-            }
-        }));
+                    requestMessage.doOnSuccess((Boolean aBoolean) -> {
+                        RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
+                                                           timeoutUnits,
+                                                           doNotRestartTimerOnInProcessResponse).subscribe();
+                    }).subscribe(new Consumer<Boolean>() {
+                        @Override
+                        public void accept(final Boolean t) throws Exception {
+
+                            requestSent.accept(t);
+                        }
+                    });
+                }
+            });
+        });
 
 
     }

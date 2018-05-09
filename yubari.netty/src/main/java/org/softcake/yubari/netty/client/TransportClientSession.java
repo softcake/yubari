@@ -23,6 +23,7 @@ import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
 import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.channel.ChannelTrafficBlocker;
+import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
@@ -34,6 +35,7 @@ import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
 import com.dukascopy.dds4.ping.PingManager;
+import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
@@ -374,13 +376,18 @@ public class TransportClientSession {
             }
         });
         this.protocolHandler = new ClientProtocolHandler(this);
-       // this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
-        this.clientConnector = new ClientSateConnector2(this.address, this.channelBootstrap, this, this.protocolHandler);
-        clientConnector.connect();
+        // this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
+        this.clientConnector = new ClientSateConnector2(this.address,
+                                                        this.channelBootstrap,
+                                                        this,
+                                                        this.protocolHandler);
+        // clientConnector.connect();
         this.protocolHandler.setClientConnector(this.clientConnector);
-      //  this.protocolHandler.clientStateConnector((this.clientConnector);
-       // this.clientConnector.start();
-        this.synchRequestProcessor = new SynchRequestProcessor(this, this.protocolHandler, this.scheduledExecutorService);
+        //  this.protocolHandler.clientStateConnector((this.clientConnector);
+        // this.clientConnector.start();
+        this.synchRequestProcessor = new SynchRequestProcessor(this,
+                                                               this.protocolHandler,
+                                                               this.scheduledExecutorService);
     }
 
     private String[] cleanUpCipherSuites(final String[] enabledCipherSuites) {
@@ -402,7 +409,8 @@ public class TransportClientSession {
 
     void disconnect() {
 
-        this.clientConnector.disConnect();
+        this.clientConnector.disConnect(new ClientDisconnectReason(DisconnectReason.SERVER_SHUTDOWN,
+                                                                   "Disconnected from API-Call"));
     }
 
     public void disconnected() {
@@ -422,7 +430,7 @@ public class TransportClientSession {
 
         LOGGER.debug("[{}] Terminating client session", this.transportName);
         if (this.clientConnector != null) {
-           // this.clientConnector.setTerminating(this.terminationAwaitMaxTimeoutInMillis);
+            // this.clientConnector.setTerminating(this.terminationAwaitMaxTimeoutInMillis);
         }
 
         if (this.channelBootstrap != null) {
@@ -509,7 +517,9 @@ public class TransportClientSession {
 
         return this.sendRequestAsync(message, this.clientConnector.getPrimaryChannel(), this.syncMessageTimeout, false,
 
-                                     null);
+                                     aBoolean -> {
+
+                                     });
     }
 
     public Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message,
@@ -527,7 +537,8 @@ public class TransportClientSession {
                                                               message,
                                                               timeout,
                                                               TimeUnit.MILLISECONDS,
-                                                              doNotRestartTimerOnInProcessResponse,messageSentListener);
+                                                              doNotRestartTimerOnInProcessResponse,
+                                                              messageSentListener);
 
 
         } else {
@@ -646,10 +657,12 @@ public class TransportClientSession {
 
         return this.droppableMessagesServerTTL;
     }
+
     public String getUserAgent() {
 
         return this.userAgent;
     }
+
     public String getTransportName() {
 
         return this.transportName;

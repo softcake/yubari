@@ -1181,10 +1181,10 @@ public int anInt;
         this.connectedInit();
         if (this.initialized) {
             this.fireConnected();
-            InstrumentManager instrumentManager = new InstrumentManager(client);
+            InstrumentManager instrumentManager = new InstrumentManager(this.transportClient);
             Set<Instrument> instruments = new HashSet<>();
             instruments.add(Instrument.EURUSD);
-          //  instrumentManager.addToFullDepthSubscribed(instruments);
+            instrumentManager.addToFullDepthSubscribed(instruments);
 /*
             NewsSubscribeRequest newsUnsubscribeRequest = new NewsSubscribeRequest();
                         newsUnsubscribeRequest.setRequestType(SubscribeRequestType.SUBSCRIBE);
@@ -1311,6 +1311,8 @@ public int anInt;
     //    }
 
     private void fireConnected() {
+
+
         //        ISystemListener systemListener = this.getSystemListener();
         //        systemListener.onConnect();
         //        FeedDataProvider.getDefaultInstance().connected();

@@ -154,9 +154,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             @Override
             public void onNext(final ClientSateConnector2.ClientState clientState) {
 
-                if (ClientSateConnector2.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
+                if (ClientSateConnector2.ClientState.AUTHORIZING == clientState) {
                     handleAuthorizationRx(clientConnector.getPrimaryChannel());
-                } else if (ClientSateConnector2.ClientState.AUTHORIZING == clientState) {
+                } else if (ClientSateConnector2.ClientState.ONLINE == clientState) {
                     fireAuthorized();
                 }
 
@@ -361,21 +361,6 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         haloRequestMessage.setSessionName(this.clientSession.getAuthorizationProvider().getSessionName());
         writeMessage(session, (BinaryProtocolMessage) haloRequestMessage).subscribe();
 
-    }
-
-    private void processAuthorizationMessage(final ChannelHandlerContext ctx,
-                                             final BinaryProtocolMessage requestMessage) {
-
-        LOGGER.debug("[{}] Sending message [{}] to authorization provider",
-                     this.clientSession.getTransportName(),
-                     requestMessage);
-        this.clientSession.getAuthorizationProvider().messageReceived(new NettyIoSessionWrapperAdapter(ctx.channel()) {
-            @Override
-            public Single<Boolean> write(final Object message) {
-
-                return writeMessage(this.channel, (BinaryProtocolMessage) message);
-            }
-        }, (ProtocolMessage) requestMessage);
     }
 
     private void processAuthorizationMessageRx(final ChannelHandlerContext ctx,
@@ -696,7 +681,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                    || msg instanceof StreamingStatus) {
             this.streamProcessor.process(ctx, msg);
             throw new UnsupportedOperationException("Do you really need this?");
-        } else if (this.clientConnector.getClientState() == ClientSateConnector2.ClientState.PROTOCOL_VERSION_NEGOTIATION) {
+        } else if (this.clientConnector.getClientState() == ClientSateConnector2.ClientState.AUTHORIZING) {
             this.processAuthorizationMessageRx(ctx, msg);
         } else {
             this.fireFeedbackMessageReceived(ctx, requestMessage);
