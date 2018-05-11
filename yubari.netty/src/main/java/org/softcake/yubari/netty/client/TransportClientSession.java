@@ -70,6 +70,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 
 public class TransportClientSession {
@@ -150,7 +151,7 @@ public class TransportClientSession {
     private Bootstrap channelBootstrap;
     private ProtocolVersionClientNegotiatorHandler protocolVersionClientNegotiatorHandler;
     private ClientProtocolHandler protocolHandler;
-    private ClientConnector clientConnector;
+    private IClientConnector clientConnector;
     private ScheduledExecutorService scheduledExecutorService;
     private String serverSessionId;
 
@@ -328,23 +329,6 @@ public class TransportClientSession {
         this.channelBootstrap.group(nettyEventLoopGroup);
         this.channelBootstrap.channel(NioSocketChannel.class);
         this.channelOptions.forEach((key, value) -> this.channelBootstrap.option((ChannelOption) key, value));
-        /*final ClientSSLContextSubscriber
-            subscriber
-            = new ClientSSLContextSubscriber() {
-            @Override
-            public void subscribe(final Observable<SecurityExceptionEvent> event) {
-
-                event.subscribe(new Consumer<SecurityExceptionEvent>() {
-                    @Override
-                    public void accept(final SecurityExceptionEvent e) throws Exception {
-
-                        clientConnector.securityException(e.getCertificateChain(),
-                                                          e.getAuthenticationType(),
-                                                          e.getException());
-                    }
-                });
-            }
-        };*/
         this.protocolHandler = new ClientProtocolHandler(this);
         // this.clientConnector = new ClientConnectorOld(this.address, this.channelBootstrap, this, this.protocolHandler);
         this.clientConnector = new ClientConnector(this.address,
@@ -361,9 +345,13 @@ public class TransportClientSession {
                     final Set<String> sslProtocols = enabledSslProtocols == null || enabledSslProtocols.isEmpty()
                                                      ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS
                                                      : enabledSslProtocols;
-                    final SSLEngine engine = SSLContextFactory.getInstance(false, subscriber, address.getHostName())
-                                                              .createSSLEngine();
 
+                    final SSLContext sslContext = SSLContextFactory.getInstance(false, subscriber, address.getHostName());
+//TODO
+                   // SSLContextFactory.observeSecurity();
+
+
+                    final SSLEngine engine = sslContext.createSSLEngine();
 
                     engine.setUseClientMode(true);
                     engine.setEnabledProtocols(sslProtocols.toArray(new String[0]));
@@ -734,7 +722,7 @@ public class TransportClientSession {
         return this.protocolHandler;
     }
 
-    public ClientConnector getClientConnector() {
+    public IClientConnector getClientConnector() {
 
         return this.clientConnector;
     }

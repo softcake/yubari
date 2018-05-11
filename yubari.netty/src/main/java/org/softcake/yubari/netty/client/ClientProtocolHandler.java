@@ -104,7 +104,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private final StreamProcessor streamProcessor;
     private final DroppableMessageHandler droppableMessageHandler;
     private HeartbeatProcessor heartbeatProcessor;
-    private ClientConnector clientConnector;
+    private IClientConnector clientConnector;
 
 
     public ClientProtocolHandler(final TransportClientSession session) {
@@ -138,7 +138,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         return droppableMessageHandler;
     }
 
-    public void setClientConnector(final ClientConnector clientConnector) {
+    public void setClientConnector(final IClientConnector clientConnector) {
 
         this.clientConnector = clientConnector;
         this.clientConnector.observe(new Observer<ClientConnector.ClientState>() {

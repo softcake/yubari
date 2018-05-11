@@ -16,6 +16,7 @@
 
 package org.softcake.yubari.netty.ssl;
 
+import io.reactivex.Observer;
 import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +50,7 @@ public final class SSLContextFactory {
     private static char[] pass;
     private static SSLContext serverInstance;
     private static SSLContext clientInstance;
+    private static Observer<SecurityExceptionEvent> observer;
 
     static {
         String algorithm = Security.getProperty("ssl.KeyManagerFactory.algorithm");
@@ -234,6 +236,8 @@ public final class SSLContextFactory {
 
             final X509TrustManager x509TrustManager = (X509TrustManager) factory.getTrustManagers()[0];
             final DukasTrustManager trustManager = new DukasTrustManager(listener, x509TrustManager, targetHost);
+
+           // trustManager.observeScurityEvent();
             context.init(null, new TrustManager[]{trustManager}, null);
             return context;
         } catch (GeneralSecurityException e) {
@@ -244,4 +248,7 @@ public final class SSLContextFactory {
     }
 
 
+    public static void observeSecurity(Observer<SecurityExceptionEvent> exceptionEventObserver) {
+        observer = exceptionEventObserver;
+    }
 }

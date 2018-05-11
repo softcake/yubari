@@ -19,7 +19,9 @@ package org.softcake.yubari.netty.ssl;
 import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.ssl.verifier.SSLHostnameVerifier;
 
+import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
+import io.reactivex.Observer;
 import io.reactivex.functions.Consumer;
 import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
@@ -58,6 +60,10 @@ class DukasTrustManager implements X509TrustManager {
                          x509Certificate.getBasicConstraints());
 
         }
+    }
+
+    public void observeScurityEvent(Observer<SecurityExceptionEvent> event){
+        observable.subscribe(event);
     }
 
     public void checkServerTrusted(final X509Certificate[] chain, final String authType) throws CertificateException {

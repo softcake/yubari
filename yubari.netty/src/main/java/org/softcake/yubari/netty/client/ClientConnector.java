@@ -61,7 +61,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * @author René Neubert
  */
-public class ClientConnector implements SateMachineClient {
+public class ClientConnector implements SateMachineClient, IClientConnector {
     private static final int DEFAULT_EVENT_POOL_SIZE = 2;
     private static final long DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL = 0L;
     private static final int DEFAULT_CRITICAL_EVENT_QUEUE_SIZE = 50;
@@ -83,13 +83,13 @@ public class ClientConnector implements SateMachineClient {
     private final ClientProtocolHandler protocolHandler;
     private ClientConnectorStateMachine sm;
     private boolean primarySocketAuthAcceptorMessageSent;
+    private boolean childSocketAuthAcceptorMessageSent;
     private volatile Channel primaryChannel;
     private volatile Channel childChannel;
     private ChannelAttachment primaryChannelAttachment;
     private ChannelAttachment childChannelAttachment;
-    private ChildSocketAuthAcceptorMessage childSocketAuthAcceptorMessage;
     private PrimarySocketAuthAcceptorMessage primarySocketAuthAcceptorMessage;
-    private boolean childSocketAuthAcceptorMessageSent;
+    private ChildSocketAuthAcceptorMessage childSocketAuthAcceptorMessage;
     private ClientDisconnectReason disconnectReason;
 
     ClientConnector(final InetSocketAddress address,
@@ -117,6 +117,7 @@ public class ClientConnector implements SateMachineClient {
         return channel == null || !channel.isActive();
     }
 
+    @Override
     public ClientDisconnectReason getDisconnectReason() {
 
         return disconnectReason;
@@ -337,7 +338,8 @@ public class ClientConnector implements SateMachineClient {
         return processConnecting(childChannelAttachment);
     }
 
-    void setChildSocketAuthAcceptorMessage(final ChildSocketAuthAcceptorMessage acceptorMessage) {
+    @Override
+    public void setChildSocketAuthAcceptorMessage(final ChildSocketAuthAcceptorMessage acceptorMessage) {
 
         this.childSocketAuthAcceptorMessage = PreCheck.notNull(acceptorMessage, "ChildSocketAuthAcceptorMessage");
     }
@@ -386,7 +388,8 @@ public class ClientConnector implements SateMachineClient {
         });
     }
 
-    void setPrimarySocketAuthAcceptorMessage(final PrimarySocketAuthAcceptorMessage acceptorMessage) {
+    @Override
+    public void setPrimarySocketAuthAcceptorMessage(final PrimarySocketAuthAcceptorMessage acceptorMessage) {
 
         this.primarySocketAuthAcceptorMessage = PreCheck.notNull(acceptorMessage, "PrimarySocketAuthAcceptorMessage");
     }
@@ -494,14 +497,16 @@ public class ClientConnector implements SateMachineClient {
           .subscribe();
     }
 
-    void sslHandshakeSuccess() {
+    @Override
+    public void sslHandshakeSuccess() {
 
         if (ClientState.ONLINE != getClientState()) {
             sm.accept(Event.SSL_HANDSHAKE_SUCCESSFUL);
         }
     }
 
-    void protocolVersionNegotiationSuccess() {
+    @Override
+    public void protocolVersionNegotiationSuccess() {
 
         if (this.getClientState() != ClientState.ONLINE) {
             sm.accept(Event.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL);
@@ -524,7 +529,8 @@ public class ClientConnector implements SateMachineClient {
 
     }
 
-    void authorizationError(final String errorReason) {
+    @Override
+    public void authorizationError(final String errorReason) {
 
         LOGGER.error("[{}] Received AUTHORIZATION_ERROR notification from the authorization provider, reason: [{}]",
                      this.clientSession.getTransportName(),
@@ -539,7 +545,8 @@ public class ClientConnector implements SateMachineClient {
 
     }
 
-    void authorizingSuccess(final String sessionId, final String userName) {
+    @Override
+    public void authorizingSuccess(final String sessionId, final String userName) {
 
         LOGGER.debug(
             "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",
@@ -550,16 +557,19 @@ public class ClientConnector implements SateMachineClient {
         sm.accept(Event.AUTHORIZING);
     }
 
+    @Override
     public Channel getPrimaryChannel() {
 
         return this.primaryChannel;
     }
 
+    @Override
     public boolean isOnline() {
 
         return this.getClientState() == ClientState.ONLINE;
     }
 
+    @Override
     public Channel getChildChannel() {
 
         return this.childChannel;
@@ -586,16 +596,19 @@ public class ClientConnector implements SateMachineClient {
         return sm.getState();
     }
 
+    @Override
     public void connect() {
 
         sm.accept(Event.CONNECTING);
     }
 
+    @Override
     public void disconnect() {
 
         this.disconnect(new ClientDisconnectReason(DisconnectReason.CLIENT_APP_REQUEST, "Client application request"));
     }
 
+    @Override
     public void disconnect(final ClientDisconnectReason reason) {
 
         this.disconnectReason = reason;
@@ -634,21 +647,25 @@ public class ClientConnector implements SateMachineClient {
 
     }
 
-    void observe(final Observer<ClientState> observer) {
+    @Override
+    public void observe(final Observer<ClientState> observer) {
 
         sm.observe().subscribe(observer);
     }
 
-    void primaryChannelDisconnected() {
+    @Override
+    public void primaryChannelDisconnected() {
 
         sm.accept(Event.DISCONNECTING);
     }
 
-    void childChannelDisconnected() {
+    @Override
+    public void childChannelDisconnected() {
 
     }
 
-    boolean isConnecting() {
+    @Override
+    public boolean isConnecting() {
 
         final ClientState state = this.getClientState();
         return state == ClientState.CONNECTING
@@ -658,6 +675,7 @@ public class ClientConnector implements SateMachineClient {
     }
 
 
+    @Override
     public Consumer<SecurityExceptionEvent> observeSslSecurity() {
 
         return e -> {
@@ -681,6 +699,7 @@ public class ClientConnector implements SateMachineClient {
         };
     }
 
+    @Override
     public void terminate() {
 
         if (this.getClientState() == ClientState.ONLINE) {
