@@ -672,7 +672,7 @@ public class DClient implements ClientListener {
                 this.sendSynchronizedQuitMessage();
             }
 
-            this.terminateTransportClient();
+          //  this.terminateTransportClient();
         }
 
         // this.nullifySession(localCacheManager);

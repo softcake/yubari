@@ -41,7 +41,6 @@ import com.dukascopy.dds4.transport.msg.system.DisconnectRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HaloRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.HaloResponseMessage;
-import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.JSonSerializableWrapper;
 import com.dukascopy.dds4.transport.msg.system.LoginRequestMessage;
@@ -126,8 +125,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     public static int sentMessagesCounterIncrementAndGet() {
 
         final int[] ints = SENT_MESSAGES_COUNTER_THREAD_LOCAL.get();
-        final int i = ++ints[0];
-        return i;
+        return ++ints[0];
     }
 
     public HeartbeatProcessor getHeartbeatProcessor() {
@@ -156,6 +154,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                     handleAuthorization(clientConnector.getPrimaryChannel());
                 } else if (ClientSateConnector2.ClientState.ONLINE == clientState) {
                     fireAuthorized();
+                } else if (ClientSateConnector2.ClientState.DISCONNECTED == clientState) {
+                    fireDisconnected();
                 }
 
             }
@@ -163,6 +163,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             @Override
             public void onError(final Throwable e) {
 
+                fireDisconnected();
             }
 
             @Override
@@ -170,6 +171,30 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
             }
         });
+    }
+
+    private void fireDisconnected() {
+
+        ClientDisconnectReason disconnectReason = clientConnector.getDisconnectReason();
+        this.clientSession.disconnected();
+
+        if (disconnectReason == null) {
+            disconnectReason = new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                          "Unknown connection problem");
+        }
+
+        final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
+
+        final DisconnectedEvent disconnectedEvent = new DisconnectedEvent(this.clientSession.getTransportClient(),
+                                                                          disconnectReason.getDisconnectReason(),
+                                                                          disconnectReason.getDisconnectHint(),
+                                                                          disconnectReason.getError(),
+                                                                          disconnectReason.getDisconnectComments());
+        listeners.forEach(clientListener -> this.fireDisconnectedEvent(clientListener,
+                                                                       clientSession.getTransportClient(),
+                                                                       disconnectedEvent));
+
+        this.clientSession.terminate();
     }
 
     private ListeningExecutorService initEventExecutor() {
@@ -307,10 +332,10 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             if (event.isSuccess()) {
                 this.clientConnector.protocolVersionNegotiationSuccess();
             } else {
-                this.clientConnector.disConnect(new ClientDisconnectReason(DisconnectReason
-                                                                                    .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
-                                                                                "wrong protocol version",
-                                                                                event.cause()));
+                this.clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason
+                                                                               .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
+                                                                           "wrong protocol version",
+                                                                           event.cause()));
             }
         }
     }
@@ -347,7 +372,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
 
             this.clientConnector.authorizingSuccess(this.clientSession.getAuthorizationProvider().getSessionId(),
-                                                         this.clientSession.getAuthorizationProvider().getLogin());
+                                                    this.clientSession.getAuthorizationProvider().getLogin());
         } else if (protocolMessage instanceof ErrorResponseMessage) {
             this.clientConnector.authorizationError(((ErrorResponseMessage) protocolMessage).getReason());
         } else if (protocolMessage instanceof HaloResponseMessage) {
@@ -373,6 +398,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
     void fireAuthorizedEvent(final ClientListener clientListener, final ITransportClient transportClient) {
 
+
         final AbstractEventExecutorTask task = new AbstractEventExecutorTask(this.clientSession, this) {
             @Override
             public void run() {
@@ -381,7 +407,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                     clientListener.authorized(transportClient);
                 } catch (final Exception e) {
                     LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                    clientConnector.disConnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
+                    clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
                                                                           String.format(
                                                                               "Exception caught while authorized "
                                                                               + "called %s",
@@ -412,7 +438,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                     clientListener.disconnected(transportClient, disconnectedEvent);
                 } catch (final Exception e) {
                     LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                    clientConnector.disConnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
+                    clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
                                                                           String.format(
                                                                               "Exception caught while disconnected "
                                                                               + "called %s",
@@ -441,9 +467,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
                 final ChannelFuture future = channel.writeAndFlush(responseMessage);
                 final long procStartTime = System.currentTimeMillis();
-                ClientProtocolHandler.this
-                    .checkSendingErrorOnNotWritableChannel(channel, future, procStartTime)
-                    .subscribe(TransportClientSession::terminate);
+                ClientProtocolHandler.this.checkSendingErrorOnNotWritableChannel(channel, future, procStartTime)
+                                          .subscribe(TransportClientSession::terminate);
 
                 if (ClientProtocolHandler.this.isTimeToCheckError(messagesCounter)) {
                     ClientProtocolHandler.this.checkSendError(procStartTime, future);
@@ -467,7 +492,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         })
                      .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachment(channel,
                                                                                                  System
-                                                                                                      .currentTimeMillis()))
+                                                                                                     .currentTimeMillis()))
                      .doOnError(cause -> LOGGER.error("[{}] Message send failed because of {}: {}",
                                                       clientSession.getTransportName(),
                                                       cause.getClass().getSimpleName(),
@@ -602,10 +627,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             this.clientConnector.setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage) requestMessage);
         } else if (requestMessage instanceof ChildSocketAuthAcceptorMessage) {
             this.clientConnector.setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) requestMessage);
-        } else if (requestMessage instanceof HeartbeatOkResponseMessage) {
-            //  this.processSyncResponse(requestMessage);
         } else if (requestMessage instanceof JSonSerializableWrapper) {
-
             throw new UnsupportedOperationException("Do you really need this?");
         } else if (msg instanceof BinaryPartMessage
                    || msg instanceof StreamHeaderMessage
@@ -628,53 +650,15 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                                         ? DisconnectReason.SERVER_APP_REQUEST
                                         : message.getReason();
 
-        this.clientConnector.disConnect(new ClientDisconnectReason(reason,
-                                                                            message.getHint(),
-                                                                            "Disconnect request received"));
+        this.clientConnector.disconnect(new ClientDisconnectReason(reason,
+                                                                   message.getHint(),
+                                                                   "Disconnect request received"));
     }
 
     private boolean processSyncResponse(final ProtocolMessage message) {
 
-
         final SynchRequestProcessor synchRequestProcessor = this.clientSession.getSynchRequestProcessor();
         return synchRequestProcessor.processRequest(message);
-/*
-        final RequestMessageListenableFuture
-            synchRequestFuture
-            = this.clientSession.getSyncRequestFuture(message.getSynchRequestId());
-        final boolean result;
-        if (synchRequestFuture != null) {
-
-            if (message instanceof RequestInProcessMessage) {
-                result = true;
-                synchRequestFuture.setInProcessResponseLastTime(System.currentTimeMillis());
-            } else {
-
-
-                this.syncRequestProcessingExecutor.submit(new OrderedRunnable() {
-                    public void run() {
-
-                        try {
-                            synchRequestFuture.set(message);
-                        } catch (final Exception e) {
-                            LOGGER.error("Failed to process sync response for " + message, e);
-
-                        }
-
-                    }
-
-                    public Object getOrderKey() {
-
-                        return clientSession.getConcurrencyPolicy().getConcurrentKey(message);
-                    }
-                });
-                result = !this.clientSession.isDuplicateSyncMessagesToClientListeners();
-            }
-        } else {
-            result = false;
-        }
-
-        return result;*/
     }
 
 
@@ -791,36 +775,4 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         }
     }
 
-    public void clientStateConnector(final ClientSateConnector2 clientstateConnector) {
-
-
-        this.clientConnector = clientstateConnector;
-        this.clientConnector.observe(new Observer<ClientSateConnector2.ClientState>() {
-            @Override
-            public void onSubscribe(final Disposable d) {
-
-            }
-
-            @Override
-            public void onNext(final ClientSateConnector2.ClientState clientState) {
-
-                if (ClientSateConnector2.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
-                    handleAuthorization(clientConnector.getPrimaryChannel());
-                } else if (ClientSateConnector2.ClientState.AUTHORIZING == clientState) {
-                    fireAuthorized();
-                }
-
-            }
-
-            @Override
-            public void onError(final Throwable e) {
-
-            }
-
-            @Override
-            public void onComplete() {
-
-            }
-        });
-    }
 }

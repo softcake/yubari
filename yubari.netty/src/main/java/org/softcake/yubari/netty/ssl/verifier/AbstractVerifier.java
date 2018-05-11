@@ -28,6 +28,9 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 
+/**
+ * @author The Softcake Authors.
+ */
 abstract class AbstractVerifier implements SSLHostnameVerifier {
 
     /**
@@ -338,5 +341,3 @@ abstract class AbstractVerifier implements SSLHostnameVerifier {
         return buf.toString();
     }
 }
-
-    

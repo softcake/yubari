@@ -291,13 +291,7 @@ public class HeartbeatProcessor {
                      this.clientSession.getTransportName(),
                      (isPrimary ? PRIMARY : CHILD).toLowerCase(),
                      pingRequestMessage);
-        future.doOnNext(new Consumer<ProtocolMessage>() {
-            @Override
-            public void accept(final ProtocolMessage protocolMessage) throws Exception {
-
-               // messageSentListener.messageSent(protocolMessage);
-            }
-        }).subscribe(new Observer<ProtocolMessage>() {
+        future.subscribe(new Observer<ProtocolMessage>() {
             @Override
             public void onSubscribe(final Disposable d) {
 
@@ -398,7 +392,7 @@ public class HeartbeatProcessor {
 
         if (isPrimary) {
             this.clientSession.getClientConnector()
-                              .disConnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                              .disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
                                                                      "Primary session ping timeout"));
         }
 

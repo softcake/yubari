@@ -33,19 +33,24 @@ public class StateMachine<T, E extends Enum, C extends Enum> implements Consumer
     private static final Logger LOGGER = LoggerFactory.getLogger(StateMachine.class);
     private final T context;
     private final Executor executor;
+    private final String name;
     private final PublishSubject<E> events = PublishSubject.create();
+    private final PublishSubject<C> states = PublishSubject.create();
     private volatile State<T, E, C> state;
-
+    private static final String STATE_CHANGED_TO = "[{}] State changed to {}";
     protected StateMachine(final T context, final State<T, E, C> initial) {
 
-        this(context, initial, MoreExecutors.directExecutor());
+        this(context, initial, MoreExecutors.directExecutor(),"");
+
     }
 
-    protected StateMachine(final T context, final State<T, E, C> initial, final Executor executor) {
+    protected StateMachine(final T context, final State<T, E, C> initial, final Executor executor, String name) {
 
         this.state = initial;
         this.context = context;
         this.executor = executor;
+        this.name = name;
+
     }
 
     public Observable<Void> connect() {
@@ -53,18 +58,20 @@ public class StateMachine<T, E extends Enum, C extends Enum> implements Consumer
         return Observable.create(sub -> {
 
             state.enter(context);
-
+            states.onNext(state.getState());
             sub.setDisposable(events.collect(() -> context, new BiConsumer<T, E>() {
                 @Override
                 public void accept(final T context, final E event) throws Exception {
 
                     final State<T, E, C> next = state.next(event);
                     if (next != null) {
+                        states.onNext(next.getState());
+                        LOGGER.info("[{}] State changed to {}", name, next.getState().toString());
                         state.exit(context);
                         state = next;
                         next.enter(context);
                     } else {
-                        LOGGER.info("Invalid event : {} state: {}", event, state);
+                        LOGGER.info("Invalid event : {} current state: {}", event, state);
                     }
                 }
             }).subscribeOn(Schedulers.from(executor)).subscribe());
@@ -76,6 +83,12 @@ public class StateMachine<T, E extends Enum, C extends Enum> implements Consumer
 
         events.toSerialized().onNext(event);
     }
+
+    public Observable<C> observe(){
+
+       return states.subscribeOn(Schedulers.from(executor)).serialize();
+    }
+
 
     public C getState() {
 

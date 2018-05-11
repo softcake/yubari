@@ -18,6 +18,7 @@ package org.softcake.yubari.netty.client;
 
 import org.softcake.yubari.netty.client.ClientSateConnector2.ClientState;
 
+import io.reactivex.Observable;
 import io.reactivex.Single;
 import io.reactivex.functions.BiConsumer;
 import io.reactivex.functions.Consumer;
@@ -33,29 +34,24 @@ import java.util.concurrent.Executor;
 public class ClientConnectorStateMachine {
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientConnectorStateMachine.class);
     private final Executor executor;
+    private final TransportClientSession session;
     StateMachine<SateMachineClient, Event, ClientState> sm;
 
-    public ClientConnectorStateMachine(final SateMachineClient clientSateConnector2, final Executor executor) {
+    public ClientConnectorStateMachine(final SateMachineClient clientSateConnector2, final Executor executor, TransportClientSession session) {
 
+        this.session = session;
         sm = createStates(clientSateConnector2, executor);
 
         this.executor = executor;
     }
 
-    public static BiConsumer<SateMachineClient, ClientState> log(
-        final String text) {
+    public static BiConsumer<SateMachineClient, ClientState> log(final String text) {
 
-        return new BiConsumer<>() {
-            @Override
-            public void accept(final SateMachineClient c, final ClientState s) {
-
-                LOGGER.info("" + c + ":" + s + ":" + text);
-            }
-        };
+        return (c, s) -> LOGGER.info("" + c + ":" + s + ":" + text);
     }
 
     private StateMachine<SateMachineClient, Event, ClientState> createStates(final SateMachineClient
-                                                                                    clientSateConnector2,
+                                                                                 clientSateConnector2,
                                                                              final Executor executor) {
 
 
@@ -81,20 +77,12 @@ public class ClientConnectorStateMachine {
             ClientState.DISCONNECTED);
 
 
-        IDLE.onEnter(new BiConsumer<SateMachineClient, ClientState>() {
-            @Override
-            public void accept(final SateMachineClient c, final ClientState s)
-                throws Exception {
-
-                c.onIdleEnter(s);
-            }
-        })
+        IDLE.onEnter((c, s) -> c.onIdleEnter(s))
             .transition(Event.CONNECTING, CONNECTING)
             .transition(Event.DISCONNECTING, DISCONNECTING);
 
         CONNECTING.onEnter((c, s) -> c.onConnectingEnter(s))
-                  .transition(Event.SSL_HANDSHAKE_SUCCESSFUL,
-                              SSL_HANDSHAKE)
+                  .transition(Event.SSL_HANDSHAKE_SUCCESSFUL, SSL_HANDSHAKE)
                   .transition(Event.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL, PROTOCOL_VERSION_NEGOTIATION)
                   .transition(Event.DISCONNECTING, DISCONNECTING);
 
@@ -103,27 +91,30 @@ public class ClientConnectorStateMachine {
                      .transition(Event.DISCONNECTING, DISCONNECTING);
 
 
-        PROTOCOL_VERSION_NEGOTIATION.onEnter((c, s) -> c.onProtocolVersionNegotiationEnter(s)).transition(
-            Event.AUTHORIZING,
-            AUTHORIZING).transition(Event.DISCONNECTING, DISCONNECTING);
+        PROTOCOL_VERSION_NEGOTIATION.onEnter((c, s) -> c.onProtocolVersionNegotiationEnter(s))
+                                    .transition(Event.AUTHORIZING, AUTHORIZING)
+                                    .transition(Event.DISCONNECTING, DISCONNECTING);
 
 
-        AUTHORIZING.onEnter((c, s) -> c.onAuthorizingEnter(s)).transition(Event.ONLINE, ONLINE).transition(
-            Event.DISCONNECTING,
-            DISCONNECTING);
+        AUTHORIZING.onEnter((c, s) -> c.onAuthorizingEnter(s))
+                   .transition(Event.ONLINE, ONLINE)
+                   .transition(Event.DISCONNECTING, DISCONNECTING);
 
-        ONLINE.onEnter((c, s) -> c.onOnlineEnter(s))
-              .onExit((c, s) -> c.onOnlineExit(s))
-              .transition(Event.DISCONNECTING, DISCONNECTING);
-        DISCONNECTING.onEnter((c, s) -> c.onDisconnectingEnter(s)).transition(Event.DISCONNECTED,
-                                                                                         DISCONNECTED);
+        ONLINE.onEnter((c, s) -> c.onOnlineEnter(s)).onExit((c, s) -> c.onOnlineExit(s)).transition(Event.DISCONNECTING,
+                                                                                                    DISCONNECTING);
+        DISCONNECTING.onEnter((c, s) -> c.onDisconnectingEnter(s)).transition(Event.DISCONNECTED, DISCONNECTED);
         DISCONNECTED.onEnter((c, s) -> c.onDisconnectedEnter(s)).onExit(log("exit"));
 
 
-        return new StateMachine<>(clientSateConnector2, IDLE, executor);
+        return new StateMachine<>(clientSateConnector2, IDLE, executor, session.getTransportName());
 
 
     }
+
+    public Observable<ClientState> observe(){
+        return sm.observe();
+    }
+
 
     public void accept(final Event e) {
 
@@ -135,6 +126,8 @@ public class ClientConnectorStateMachine {
             }
         });
     }
+
+
 
     public ClientState getState() {
 

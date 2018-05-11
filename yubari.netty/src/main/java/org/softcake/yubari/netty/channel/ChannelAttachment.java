@@ -52,6 +52,34 @@ public class ChannelAttachment extends AbstractChannelAttachment {
 
         this.reconnectAttempt = reconnectAttempt;
     }
+
+    public boolean isMaxReconnectAttemptsReached(final long maxReconnectAttempts) {
+
+        return this.reconnectAttempt >= maxReconnectAttempts;
+
+    }
+
+    public boolean canResetReconnectAttempts(final long connectionReconnectsResetDelay,
+                                             final long currentTimeInMillis) {
+
+        return this.reconnectAttempt != 0 && (this.getLastIoTime() > this.lastConnectAttemptTime
+                                              || this.lastConnectAttemptTime + connectionReconnectsResetDelay
+                                                 < currentTimeInMillis);
+    }
+
+    public boolean resetReconnectAttemptsIfValid(final long connectionReconnectsResetDelay,
+                                                 final long currentTimeInMillis) {
+
+
+        if (canResetReconnectAttempts(connectionReconnectsResetDelay, currentTimeInMillis)) {
+            this.reconnectAttempt = 0;
+            return true;
+        }
+
+
+        return false;
+    }
+
     public void incrementReconnectAttempt() {
 
         this.reconnectAttempt = this.reconnectAttempt + 1;

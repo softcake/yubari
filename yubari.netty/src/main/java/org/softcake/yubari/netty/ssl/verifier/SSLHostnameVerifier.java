@@ -23,6 +23,11 @@ import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 
+/**
+ * This class is the interface for extended hostname verification.
+ *
+ * @author The Softcake Authors.
+ */
 public interface SSLHostnameVerifier extends javax.net.ssl.HostnameVerifier {
 
     /**
@@ -46,6 +51,8 @@ public interface SSLHostnameVerifier extends javax.net.ssl.HostnameVerifier {
         @Override
         public final String toString() { return "DEFAULT"; }
     };
+
+
     /**
      * The DEFAULT_AND_LOCALHOST HostnameVerifier works like the DEFAULT
      * one with one additional relaxation:  a host of "localhost",
@@ -66,6 +73,7 @@ public interface SSLHostnameVerifier extends javax.net.ssl.HostnameVerifier {
         @Override
         public final String toString() { return "DEFAULT_AND_LOCALHOST"; }
     };
+
     /**
      * The STRICT HostnameVerifier works the same way as java.net.URL in Sun
      * Java 1.4, Sun Java 5, Sun Java 6.  It's also pretty close to IE6.
@@ -93,6 +101,7 @@ public interface SSLHostnameVerifier extends javax.net.ssl.HostnameVerifier {
         @Override
         public final String toString() { return "STRICT"; }
     };
+
     /**
      * The STRICT_IE6 HostnameVerifier works just like the STRICT one with one
      * minor variation:  the hostname can match against any of the CN's in the
@@ -110,6 +119,7 @@ public interface SSLHostnameVerifier extends javax.net.ssl.HostnameVerifier {
         @Override
         public final String toString() { return "STRICT_IE6"; }
     };
+
     /**
      * The ALLOW_ALL HostnameVerifier essentially turns hostname verification
      * off.  This implementation is a no-op, and never throws the SSLException.
@@ -127,12 +137,37 @@ public interface SSLHostnameVerifier extends javax.net.ssl.HostnameVerifier {
     @Override
     boolean verify(String host, SSLSession session);
 
+    /**
+     * Verify that the host name is an acceptable match with the server's authentication scheme.
+     *
+     * @param host the host name
+     * @param ssl  SSLSocket used on the connection to host
+     * @throws IOException
+     */
     void check(String host, SSLSocket ssl) throws IOException;
 
     void check(String host, X509Certificate cert) throws SSLException;
 
+    /**
+     * Checks during SSL authentication that a hostname matches the Common Name or "DNS" Subject alts from the SSL
+     * certificate presented by the server.
+     *
+     * @param host        the DNS host name to verify
+     * @param cns         common names from the SSL certificate presented by the server
+     * @param subjectAlts alternative subject names from the SSL certificate presented by the server
+     * @throws SSLException if the hostname isn't acceptable
+     */
     void check(String host, String[] cns, String[] subjectAlts) throws SSLException;
 
+
+    /**
+     * Checks during SSL authentication that a hostname matches the Common Name or "DNS" Subject alts from the SSL
+     * certificate presented by the server.
+     *
+     * @param hosts The array of  DNS host name´s to verify
+     * @param ssl   The SSL socket to read the certificates from
+     * @throws IOException if the hostname isn't acceptable or if read fails
+     */
     void check(String[] hosts, SSLSocket ssl) throws IOException;
 
     void check(String[] hosts, X509Certificate cert) throws SSLException;
@@ -148,10 +183,8 @@ public interface SSLHostnameVerifier extends javax.net.ssl.HostnameVerifier {
      *                    certificate.
      * @param subjectAlts Subject-Alt fields of type 2 ("DNS"), as extracted
      *                    from the X.509 certificate.
-     * @param hosts       The array of hostnames to verify.
      * @throws SSLException If verification failed.
      */
     void check(String[] hosts, String[] cns, String[] subjectAlts) throws SSLException;
-
 
 }

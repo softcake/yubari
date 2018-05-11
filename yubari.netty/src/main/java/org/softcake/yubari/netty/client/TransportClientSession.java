@@ -351,8 +351,7 @@ public class TransportClientSession {
         // this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
         this.clientConnector = new ClientSateConnector2(this.address,
                                                         this.channelBootstrap,
-                                                        this,
-                                                        this.protocolHandler);
+                                                        this);
         // clientConnector.connect();
         this.protocolHandler.setClientConnector(this.clientConnector);
         final Consumer<SecurityExceptionEvent> subscriber = clientConnector.observeSslSecurity();
@@ -410,8 +409,7 @@ public class TransportClientSession {
 
     void disconnect() {
 
-        this.clientConnector.disConnect(new ClientDisconnectReason(DisconnectReason.SERVER_SHUTDOWN,
-                                                                   "Disconnected from API-Call"));
+        this.clientConnector.disconnect();
     }
 
     public void disconnected() {
@@ -431,7 +429,7 @@ public class TransportClientSession {
 
         LOGGER.debug("[{}] Terminating client session", this.transportName);
         if (this.clientConnector != null) {
-            // this.clientConnector.setTerminating(this.terminationAwaitMaxTimeoutInMillis);
+           this.clientConnector.terminate();
         }
 
         if (this.channelBootstrap != null) {
@@ -449,7 +447,6 @@ public class TransportClientSession {
             this.scheduledExecutorService.shutdownNow();
         }
 
-        // this.syncRequests.clear();
     }
 
     boolean sendMessageNaive(final ProtocolMessage message) {
