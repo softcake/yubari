@@ -18,22 +18,30 @@ package org.softcake.yubari.netty.client;
 
 import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
 
+import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
+import org.softcake.yubari.netty.client.ClientConnectorStateMachine.Event;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
-import org.softcake.yubari.netty.mina.ClientListener;
-import org.softcake.yubari.netty.mina.DisconnectedEvent;
+import org.softcake.yubari.netty.mina.TransportHelper;
+import org.softcake.yubari.netty.ssl.SecurityExceptionEvent;
 
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
+import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ConnectTimeoutException;
-import io.netty.util.Attribute;
+import io.reactivex.Observable;
+import io.reactivex.Observer;
 import io.reactivex.Single;
+import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
+import io.reactivex.functions.Consumer;
+import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,403 +49,356 @@ import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CancellationException;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 /**
- * @author The softcake Authors.
+ * @author René Neubert
  */
-@SuppressWarnings("squid:S128")
-public class ClientConnector extends Thread  {
-    private static final long SESSION_CLOSE_WAIT_TIME = 5L;
-    private static final String STATE_CHANGED_TO = "[{}] State changed to {}";
-    private static final long TIME_TO_WAIT_FOR_DISCONNECTING = 10000L;
+public class ClientConnector implements SateMachineClient {
+    private static final int DEFAULT_EVENT_POOL_SIZE = 2;
+    private static final long DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL = 0L;
+    private static final int DEFAULT_CRITICAL_EVENT_QUEUE_SIZE = 50;
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientConnector.class);
+    private static final List<Thread> eventExecutorThreadsForLogging = Collections.synchronizedList(new ArrayList<>());
+    private static final long SESSION_CLOSE_WAIT_TIME = 5L;
+
+    private final ListeningExecutorService executor = TransportHelper.createExecutor(DEFAULT_EVENT_POOL_SIZE,
+                                                                                     DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL,
+                                                                                     DEFAULT_CRITICAL_EVENT_QUEUE_SIZE,
+                                                                                     "TransportClientSateExecutorThread",
+                                                                                     eventExecutorThreadsForLogging,
+                                                                                     "DDS2 Standalone Transport Client",
+                                                                                     true);
+    private final ExecutorService scheduledExecutorService;
+    private final InetSocketAddress address;
     private final Bootstrap channelBootstrap;
     private final TransportClientSession clientSession;
     private final ClientProtocolHandler protocolHandler;
-    private final AtomicReference<ClientState> clientState;
-    private final Object stateWaitLock;
-    private final AtomicBoolean isExecutorThreadTerminated;
-    private final Object executorThreadTerminationLocker;
-
-    private final InetSocketAddress address;
-
-
-    private volatile ClientDisconnectReason disconnectReason;
-    private volatile boolean terminating;
-    private volatile Channel primaryChannel;
-    private ChannelAttachment primarySessionChannelAttachment;
-    private volatile Channel childChannel;
-    private ChannelAttachment childSessionChannelAttachment;
-    //private ClientAuthorizationProvider authorizationProvider;
-    private Long sslHandshakeStartTime;
-    private Long protocolVersionNegotiationStartTime;
-    private Long authorizationStartTime;
-    private PrimarySocketAuthAcceptorMessage primarySocketAuthAcceptorMessage;
+    private ClientConnectorStateMachine sm;
     private boolean primarySocketAuthAcceptorMessageSent;
+    private volatile Channel primaryChannel;
+    private volatile Channel childChannel;
+    private ChannelAttachment primaryChannelAttachment;
+    private ChannelAttachment childChannelAttachment;
     private ChildSocketAuthAcceptorMessage childSocketAuthAcceptorMessage;
-    private boolean isProcessConnecting = false;
+    private PrimarySocketAuthAcceptorMessage primarySocketAuthAcceptorMessage;
+    private boolean childSocketAuthAcceptorMessageSent;
+    private ClientDisconnectReason disconnectReason;
 
-    public ClientConnector(final InetSocketAddress address,
-                           final Bootstrap channelBootstrap,
-                           final TransportClientSession clientSession,
-                           final ClientProtocolHandler protocolHandler) {
+    ClientConnector(final InetSocketAddress address,
+                    final Bootstrap channelBootstrap,
+                    final TransportClientSession clientSession) {
 
-        super((clientSession.getTransportName() != null ? String.format("(%s) ", clientSession.getTransportName()) : "")
-              + "ClientConnector");
-        this.clientState = new AtomicReference<>(ClientState.DISCONNECTED);
-        this.stateWaitLock = new Object();
-        this.terminating = false;
-        this.isExecutorThreadTerminated = new AtomicBoolean(false);
-        this.executorThreadTerminationLocker = new Object();
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(String.format(
+            "[%s] TransportClientEventExecutorThread",
+            "DDS2 Standalone Transport Client")).build();
+
+        this.scheduledExecutorService = Executors.newSingleThreadExecutor(threadFactory);
         this.address = address;
         this.channelBootstrap = channelBootstrap;
         this.clientSession = clientSession;
-        this.protocolHandler = protocolHandler;
+        this.protocolHandler = clientSession.getProtocolHandler();
 
 
+        sm = new ClientConnectorStateMachine(this, executor, clientSession);
+        sm.connect();
     }
 
-    private synchronized ClientDisconnectReason getDisconnectReason() {
 
-        return this.disconnectReason;
+    private static boolean isChannelInActive(final Channel channel) {
+
+        return channel == null || !channel.isActive();
     }
 
-    private static Channel setChannelAttributeForSuccessfullyConnection(final Channel channel,
-                                                                        final ChannelAttachment attachment) {
+    public ClientDisconnectReason getDisconnectReason() {
 
-        channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(attachment);
-
-        return channel;
-    }
-
-    public void authorizationError(final String errorReason) {
-
-
-        LOGGER.debug("[{}] Received AUTHORIZATION_ERROR notification from the authorization provider, reason: [{}]",
-                     this.clientSession.getTransportName(),
-                     errorReason);
-
-
-        final ClientDisconnectReason reason = new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_FAILED,
-                                                                         String.format("Authorization failed, "
-                                                                                       + "reason [%s]", errorReason));
-
-        this.tryToSetState(ClientState.AUTHORIZING, ClientState.DISCONNECTING, reason, Boolean.TRUE);
-
-    }
-
-    public void authorized(final String sessionId, final String userName) {
-
-        LOGGER.debug(
-            "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",
-            this.clientSession.getTransportName(),
-            sessionId,
-            userName);
-
-
-        this.clientSession.setServerSessionId(sessionId);
-
-        if (this.tryToSetState(ClientState.AUTHORIZING, ClientState.ONLINE)) {
-            this.protocolHandler.fireAuthorized();
-        }
-
-    }
-
-    void connect() {
-
-        this.tryToSetState(ClientState.DISCONNECTED, ClientState.CONNECTING, Boolean.TRUE);
-
-    }
-
-    public void disconnect() {
-
-        this.disconnect(new ClientDisconnectReason(DisconnectReason.CLIENT_APP_REQUEST, "Client application request"));
-    }
-
-    //TODO Event Channel inactive
-    void primaryChannelDisconnected() {
-
-        this.disconnect(getDisconnectReason());
-    }
-
-    public void disconnect(final ClientDisconnectReason disconnectReason) {
-
-        while (true) {
-            final ClientState state = this.clientState.get();
-            switch (state) {
-                case CONNECTING:
-                case SSL_HANDSHAKE_WAITING:
-                case SSL_HANDSHAKE_SUCCESSFUL:
-                case PROTOCOL_VERSION_NEGOTIATION_WAITING:
-                case PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL:
-                case AUTHORIZING:
-                case ONLINE:
-                    if (!tryToSetState(state, ClientState.DISCONNECTING, disconnectReason, Boolean.TRUE)) {
-                        break;
-                    }
-                    synchronized (this.stateWaitLock) {
-                        this.stateWaitLock.notifyAll();
-                        return;
-                    }
-
-                case DISCONNECTING:
-                    return;
-                case DISCONNECTED:
-                    return;
-                default:
-                    throw new IllegalArgumentException("Unsupported state " + state);
-            }
-        }
-    }
-//TODO Event Child Channel disconnect
-    void childChannelDisconnected() {
-
-
-        synchronized (this.stateWaitLock) {
-            this.stateWaitLock.notifyAll();
-        }
-    }
-
-    void sslHandshakeSuccess() {
-
-        if (!this.tryToSetState(ClientState.SSL_HANDSHAKE_WAITING, ClientState.SSL_HANDSHAKE_SUCCESSFUL)) {
-            this.tryToSetState(ClientState.CONNECTING, ClientState.SSL_HANDSHAKE_SUCCESSFUL);
-        }
-
-    }
-
-    void protocolVersionHandshakeSuccess() {
-
-        if (!this.tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
-                                ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL)
-            && !this.tryToSetState(ClientState.CONNECTING, ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL)
-            && !this.tryToSetState(ClientState.SSL_HANDSHAKE_SUCCESSFUL,
-                                   ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL)) {
-            this.tryToSetState(ClientState.SSL_HANDSHAKE_WAITING, ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL);
-        }
-
+        return disconnectReason;
     }
 
     @Override
-    public void run() {
+    public void onIdleEnter(final ClientState state) {
 
-        while (true) {
-            boolean interrupted = false;
+        throw new UnsupportedOperationException();
+    }
 
-            try {
-                if (this.terminating) {
+    @Override
+    public void onIdleExit(final ClientState state) {
 
-                    this.clientState.set(ClientState.DISCONNECTED);
-                    this.cleanUp();
+        throw new UnsupportedOperationException();
+    }
 
-                    synchronized (this.executorThreadTerminationLocker) {
-                        this.isExecutorThreadTerminated.set(Boolean.TRUE);
-                        this.executorThreadTerminationLocker.notifyAll();
-                    }
-                    return;
-                }
+    @Override
+    public void onConnectingEnter(final ClientState state) {
 
+        if (address == null) {
+            LOGGER.error("[{}] Address not set in transport and "
+                         + "AbstractClientAuthorizationProvider.getAddress returned null",
+                         this.clientSession.getTransportName());
 
-                final ClientState state = this.getClientState();
+            disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                  "Address is not set in transport client"));
 
-                final long timeToWait;
-                switch (state) {
-                    case CONNECTING:
-                        this.cleanUp();
-                        this.processConnecting();
-                        continue;
-                    case SSL_HANDSHAKE_WAITING:
-                        if (isProcessSSLHandshakeTimeout()) {
-                            continue;
-                        }
+        } else {
 
-                        isProcessConnecting = false;
-                        timeToWait = this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout()
-                                     - System.currentTimeMillis();
+            this.createChannelAttachments();
+            this.connectPrimarySession().subscribe();
+        }
+    }
 
+    private void createChannelAttachments() {
 
-                        waitAndNotifyThreads(timeToWait, ClientState.SSL_HANDSHAKE_WAITING);
-                        continue;
-                    case SSL_HANDSHAKE_SUCCESSFUL:
-                        if (this.tryToSetState(ClientState.SSL_HANDSHAKE_SUCCESSFUL,
-                                               ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING)) {
-                            this.protocolVersionNegotiationStartTime = System.currentTimeMillis();
-                        }
-                        continue;
-                    case PROTOCOL_VERSION_NEGOTIATION_WAITING:
-                        if (isProcessVersionNegotiationTimeout()) {
-                            continue;
-                        }
+        primaryChannelAttachment = new ChannelAttachment(Boolean.TRUE);
+        childChannelAttachment = new ChannelAttachment(Boolean.FALSE);
+    }
 
-                        timeToWait = this.protocolVersionNegotiationStartTime
-                                     + this.clientSession.getProtocolVersionNegotiationTimeout()
-                                     - System.currentTimeMillis();
+    @Override
+    public void onConnectingExit(final ClientState state) {
 
+        throw new UnsupportedOperationException();
+    }
 
-                        waitAndNotifyThreads(timeToWait, ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING);
-                        continue;
-                    case PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL:
-                        if (this.tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL,
-                                               ClientState.AUTHORIZING)) {
-                            this.authorizationStartTime = System.currentTimeMillis();
-                            // this.protocolHandler.handleAuthorization(this.authorizationProvider, this
-                            // .primaryChannel);
-                            this.protocolHandler.handleAuthorization(this.primaryChannel);
-                        }
-                        continue;
-                    case AUTHORIZING:
-                        if (isProcessAuthorizationTimeout()) {
-                            continue;
-                        }
+    @Override
+    public void onSslHandshakeEnter(final ClientState state) {
 
-                        timeToWait = this.authorizationStartTime + this.clientSession.getAuthorizationTimeout() - System
-                            .currentTimeMillis();
+        processProtocolVersionNegotiationWaiting();
+    }
 
-                        waitAndNotifyThreads(timeToWait, ClientState.AUTHORIZING);
-                        continue;
-                    case ONLINE:
-                        if (!this.processOnline()) {
-                            continue;
-                        }
-                        waitAndNotifyThreads(100L, ClientState.ONLINE);
-                        continue;
-                    case DISCONNECTING:
+    @Override
+    public void onSslHandshakeExit(final ClientState state) {
 
+        throw new UnsupportedOperationException();
+    }
 
-                        this.tryToSetState(ClientState.DISCONNECTING, ClientState.DISCONNECTED, Boolean.TRUE);
-                        this.fireDisconnected(getDisconnectReason());
-                        this.cleanUp();
-                        continue;
-                    case DISCONNECTED:
-                        waitAndNotifyThreads(TIME_TO_WAIT_FOR_DISCONNECTING, ClientState.DISCONNECTED);
-                        continue;
-                    default:
-                        throw new IllegalArgumentException("Unsupported state " + state);
-                }
-            } catch (final InterruptedException e) {
+    @Override
+    public void onProtocolVersionNegotiationEnter(final ClientState state) {
 
-                LOGGER.error("Thread is interrupted: {}", Thread.currentThread().getName(), e);
-                interrupted = Boolean.TRUE;
-                try {
-                    this.clientState.set(ClientState.DISCONNECTED);
-                    this.cleanUp();
+        processAuthorizingWaiting();
+    }
 
+    @Override
+    public void onProtocolVersionNegotiationExit(final ClientState state) {
+        throw new UnsupportedOperationException();
+    }
 
-                } catch (final InterruptedException ex) {
-                    LOGGER.error("Thread is interrupted: {}", Thread.currentThread().getName(), e);
-                    interrupted = Boolean.TRUE;
+    @Override
+    public void onAuthorizingEnter(final ClientState state) {
 
-                }
-            } finally {
-                synchronized (this.executorThreadTerminationLocker) {
-                    this.isExecutorThreadTerminated.set(Boolean.TRUE);
-                    this.executorThreadTerminationLocker.notifyAll();
-                }
+        sm.accept(Event.ONLINE);
+    }
 
-                if (interrupted) {
-                    LOGGER.error("Thread is interrupted: {}", Thread.currentThread().getName());
-                    Thread.currentThread().interrupt();
-                }
+    @Override
+    public void onAuthorizingExit(final ClientState state) {
+
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void onOnlineEnter(final ClientState state) {
+
+        processOnline().subscribe();
+    }
+
+    @Override
+    public void onOnlineExit(final ClientState state) {
+
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void onDisconnectingEnter(final ClientState state) {
+
+        sm.accept(Event.DISCONNECTED);
+    }
+
+    @Override
+    public void onDisconnectingExit(final ClientState state) {
+
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void onDisconnectedEnter(final ClientState state) {
+
+        this.logDisconnectReason(disconnectReason);
+        shutdown(executor, 5000L, TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public void onDisconnectedExit(final ClientState state) {
+
+        throw new UnsupportedOperationException();
+    }
+
+    private Observable<ClientState> processOnline() {
+
+        return Observable.interval(100, 500, TimeUnit.MILLISECONDS, Schedulers.from(executor))
+                         .map(aLong -> getClientState())
+                         .takeWhile(state -> state == ClientState.ONLINE)
+                         .doOnNext(state -> processPrimarySessionOnline())
+                         .filter(state -> clientSession.isUseFeederSocket())
+                         .doOnNext(state -> processChildSessionOnline());
+
+    }
+
+    private void processChildSessionOnline() {
+
+        if (isChannelInActive(this.childChannel)) {
+
+            if (childChannelAttachment.isMaxReconnectAttemptsReached(this.clientSession
+                                                                         .getChildConnectionReconnectAttempts())) {
+                LOGGER.warn("[{}] Child session max connection attempts reached. Disconnecting clientSession",
+                            this.clientSession.getTransportName());
+                disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                      "Child session max connection attempts" + " reached"));
 
             }
 
+            if (this.childChannelAttachment.getLastConnectAttemptTime() + this.clientSession.getReconnectDelay()
+                < System.currentTimeMillis()) {
+                this.connectChildSession().subscribe();
 
+            }
+        } else {
+            processSocketAuthAcceptorMessage(this.childSocketAuthAcceptorMessage).subscribe();
+            protocolHandler.getHeartbeatProcessor().startSendPingChild();
+            this.childChannelAttachment.resetReconnectAttemptsIfValid(this.clientSession
+                                                                          .getChildConnectionReconnectsResetDelay(),
+                                                                      System.currentTimeMillis());
         }
     }
 
-    private boolean isProcessAuthorizationTimeout() {
+    private void processPrimarySessionOnline() {
 
-        if (this.authorizationStartTime + this.clientSession.getAuthorizationTimeout() < System.currentTimeMillis()) {
+        if (isChannelInActive(this.primaryChannel)) {
+            LOGGER.warn("[{}] Primary session disconnected. Disconnecting transport client",
+                        this.clientSession.getTransportName());
 
-            LOGGER.info("[{}] Authorization timeout", this.clientSession.getTransportName());
+            disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                  "Primary session is not active"));
 
-            this.tryToSetState(ClientState.AUTHORIZING,
-                               ClientState.DISCONNECTING,
-                               new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_TIMEOUT,
-                                                          "Authorization timeout"),
-                               Boolean.TRUE);
-
-            return true;
+        } else {
+            processSocketAuthAcceptorMessage(this.primarySocketAuthAcceptorMessage).subscribe();
+            protocolHandler.getHeartbeatProcessor().startSendPingPrimary();
         }
-
-        return false;
     }
 
-    private boolean isProcessVersionNegotiationTimeout() {
+    private void closeAndCleanChildSession() {
 
-        if (this.protocolVersionNegotiationStartTime + this.clientSession.getProtocolVersionNegotiationTimeout()
-            < System.currentTimeMillis()) {
-
-            LOGGER.info("[{}] Protocol version negotiation timeout", this.clientSession.getTransportName());
-
-
-            this.tryToSetState(ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING,
-                               ClientState.DISCONNECTING,
-                               new ClientDisconnectReason(DisconnectReason.PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
-                                                          "Protocol version " + "negotiation timeout"),
-                               Boolean.TRUE);
-
-            return true;
+        if (this.childChannel != null) {
+            this.childChannel.disconnect();
+            this.childChannel.close();
+            this.childChannel = null;
         }
 
-        return false;
+        this.childChannelAttachment.setLastConnectAttemptTime(System.currentTimeMillis());
+        this.childChannelAttachment.resetTimes();
+        this.childChannelAttachment.incrementReconnectAttempt();
+        this.childSocketAuthAcceptorMessageSent = false;
     }
 
-    private boolean isProcessSSLHandshakeTimeout() {
+    private void closeAndCleanPrimarySession() {
 
-        if (this.sslHandshakeStartTime == null) {
-            return false;
+        if (this.primaryChannel != null) {
+            this.primaryChannel.disconnect();
+            this.primaryChannel.close();//.await(SESSION_CLOSE_WAIT_TIME, TimeUnit.SECONDS);
+            this.primaryChannel = null;
         }
-        if (this.sslHandshakeStartTime + this.clientSession.getSSLHandshakeTimeout() < System.currentTimeMillis()) {
 
-            LOGGER.info("[{}] SSL handshake timeout", this.clientSession.getTransportName());
-
-            this.tryToSetState(ClientState.SSL_HANDSHAKE_WAITING,
-                               ClientState.DISCONNECTING,
-                               new ClientDisconnectReason(DisconnectReason.SSL_HANDSHAKE_TIMEOUT,
-                                                          "SSL handshake timeout"),
-                               Boolean.TRUE);
-
-            return true;
-        }
-        return false;
+        this.primarySocketAuthAcceptorMessageSent = false;
+        this.primarySocketAuthAcceptorMessage = null;
     }
 
-    @SuppressWarnings("squid:S2274")
-    private void waitAndNotifyThreads(final long timeToWait, final ClientState state1) throws InterruptedException {
+    private Single<Channel> connectPrimarySession() {
 
-        final long waitTime = timeToWait <= 0L ? 0L : timeToWait;
-        synchronized (this.stateWaitLock) {
-            if (this.getClientState() == state1) {
-                this.stateWaitLock.wait(waitTime);
+        closeAndCleanPrimarySession();
+        LOGGER.debug("[{}] Trying to connect primary session. Attempt {}",
+                     this.clientSession.getTransportName(),
+                     this.primaryChannelAttachment.getReconnectAttempt() + 1);
+
+
+        return processConnecting(primaryChannelAttachment).doOnSuccess(channel -> waitForSslAndNegotitation());
+    }
+
+    private Single<Channel> connectChildSession() {
+
+        closeAndCleanChildSession();
+        LOGGER.debug("[{}] Trying to connect child session. Attempt {}",
+                     this.clientSession.getTransportName(),
+                     this.childChannelAttachment.getReconnectAttempt() + 1);
+
+
+        return processConnecting(childChannelAttachment);
+    }
+
+    void setChildSocketAuthAcceptorMessage(final ChildSocketAuthAcceptorMessage acceptorMessage) {
+
+        this.childSocketAuthAcceptorMessage = PreCheck.notNull(acceptorMessage, "ChildSocketAuthAcceptorMessage");
+    }
+
+    private Single<Boolean> processSocketAuthAcceptorMessage(final ProtocolMessage msg) {
+
+        if (msg instanceof PrimarySocketAuthAcceptorMessage) {
+
+            return this.primarySocketAuthAcceptorMessageSent || this.primarySocketAuthAcceptorMessage == null
+                   ? Single.just(false)
+                   : writeSocketAuthAcceptorMessage(msg, Boolean.TRUE);
+
+        } else if (msg instanceof ChildSocketAuthAcceptorMessage) {
+            return this.childSocketAuthAcceptorMessageSent || this.childSocketAuthAcceptorMessage == null ? Single.just(
+                false) : writeSocketAuthAcceptorMessage(msg, Boolean.FALSE);
+
+        } else {
+            throw new IllegalArgumentException(
+                "message must be instance of PrimarySocketAuthAcceptorMessage or ChildSocketAuthAcceptorMessage");
+        }
+
+    }
+
+    private Single<Boolean> writeSocketAuthAcceptorMessage(final ProtocolMessage msg, final boolean isPrimary) {
+
+        final Channel channel = isPrimary ? this.primaryChannel : this.childChannel;
+
+        return this.protocolHandler.writeMessage(channel, msg).doOnError(t -> {
+            if (t.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
+
+            LOGGER.error("[{}] ", clientSession.getTransportName(), t);
+            disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
+                                                  String.format("%s session error while writhing message: %s",
+                                                                isPrimary ? "Primary" : "Child",
+                                                                msg),
+                                                  t));
+        }).doOnSuccess(aBoolean -> {
+
+            if (isPrimary) {
+                primarySocketAuthAcceptorMessageSent = true;
+            } else {
+                childSocketAuthAcceptorMessageSent = true;
             }
 
-        }
+
+        });
     }
 
-    private void processConnecting() throws InterruptedException {
+    void setPrimarySocketAuthAcceptorMessage(final PrimarySocketAuthAcceptorMessage acceptorMessage) {
 
+        this.primarySocketAuthAcceptorMessage = PreCheck.notNull(acceptorMessage, "PrimarySocketAuthAcceptorMessage");
+    }
 
-        this.processConnectingPreConditions();
+    private Single<Channel> processConnecting(final ChannelAttachment attachment) {
 
-        if (!this.isServerAddressValid()) {
-            this.processConnectingInvalidServerAddress();
-            return;
-        }
-        if (this.isProcessConnecting) {
-            return;
-        }
+        final boolean isPrimary = attachment.isPrimaryConnection();
 
-
-this.isProcessConnecting = true;
-        final Single<Channel> connectFuture = this.processConnectingAndGetFuture(this.address);
-        Single<Channel> channelSingle = connectFuture.doOnSuccess(channel -> LOGGER.debug("[{}] primaryChannel = {}",
+        return processConnectingAndGetFuture(address).doOnSuccess(channel -> LOGGER.debug("[{}] {} channel = {}",
+                                                                                          isPrimary
+                                                                                          ? "primary"
+                                                                                          : "child",
                                                                                           clientSession
                                                                                               .getTransportName(),
                                                                                           channel)).doOnError(cause -> {
@@ -445,125 +406,41 @@ this.isProcessConnecting = true;
                                       ? DisconnectReason.CERTIFICATE_EXCEPTION
                                       : DisconnectReason.CONNECTION_PROBLEM;
 
-
-            tryToSetState(ClientState.CONNECTING,
-                          ClientState.DISCONNECTING,
-                          new ClientDisconnectReason(reason,
-                                                     String.format("%s exception %s",
-                                                                   cause instanceof CertificateException
-                                                                   ? "Certificate"
-                                                                   : "Unexpected",
-                                                                   cause.getMessage()),
-                                                     cause),
-                          Boolean.TRUE);
-            isProcessConnecting = false;
-        });
-
-                     channelSingle.subscribe(channel -> {
+            disconnect(new ClientDisconnectReason(reason,
+                                                  String.format("%s exception %s",
+                                                                cause instanceof CertificateException
+                                                                ? "Certificate"
+                                                                : "Unexpected",
+                                                                cause.getMessage()),
+                                                  cause));
 
 
-        });
-        Channel channel = channelSingle.blockingGet();
-        primaryChannel = channel;
-        channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(primarySessionChannelAttachment);
-        final Attribute<ChannelAttachment> attribute = channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
-        final ChannelAttachment attachment = attribute.get();
+        }).subscribeOn(Schedulers.from(executor)).doOnSuccess(channel -> {
 
-        processConnectOverSSLIfNecessary();
-    }
-
-    private void processConnectingPreConditions() {
-
-        resetDisconnectReason();
-        // this.authorizationProvider = this.clientSession.getAuthorizationProvider();
-
-        //this.clientSession.getAuthorizationProvider().setListener(this);
-        // this.authorizationProvider.setListener(this);
-        this.primarySessionChannelAttachment = new ChannelAttachment(Boolean.TRUE);
-        this.childSessionChannelAttachment = new ChannelAttachment(Boolean.FALSE);
-    }
-
-    private void handleUnexpectedConnectingError() {
-
-        LOGGER.debug("[{}] Connect call failed", this.clientSession.getTransportName());
-
-        this.tryToSetState(ClientState.CONNECTING,
-                           ClientState.DISCONNECTING,
-                           new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM, "Connect call failed"),
-                           Boolean.TRUE);
-    }
-
-    private void handleConnectingError(final ChannelFuture connectFuture) {
-
-        final Throwable cause = connectFuture.cause();
-
-        LOGGER.debug("[{}] Connect call failed because of {}: {}",
-                     this.clientSession.getTransportName(),
-                     cause.getClass().getSimpleName(),
-                     cause.getMessage());
-
-
-        this.tryToSetState(ClientState.CONNECTING,
-                           ClientState.DISCONNECTING,
-                           new ClientDisconnectReason(DisconnectReason.CERTIFICATE_EXCEPTION,
-                                                      String.format("%s exception %s",
-                                                                    cause instanceof CertificateException
-                                                                    ? "Certificate"
-                                                                    : "Unexpected",
-                                                                    cause.getMessage()),
-                                                      cause),
-                           Boolean.TRUE);
-    }
-
-    private void processConnectOverSSLIfNecessary() {
-
-        if (this.clientSession.isUseSSL()) {
-            if (this.tryToSetState(ClientState.CONNECTING, ClientState.SSL_HANDSHAKE_WAITING)) {
-                this.sslHandshakeStartTime = System.currentTimeMillis();
-
+            if (isPrimary) {
+                primaryChannel = channel;
+            } else {
+                childChannel = channel;
             }
-        } else if (this.tryToSetState(ClientState.CONNECTING, ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING)) {
-            this.protocolVersionNegotiationStartTime = System.currentTimeMillis();
+        }).doOnSuccess(ch -> ch.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(attachment));
 
-        }
 
     }
 
-  /*  private ChannelFuture processConnectingAndGetFuture() throws InterruptedException {
+    private void waitForSslAndNegotitation() {
 
-        LOGGER.debug("[{}] Connecting to [{}]", this.clientSession.getTransportName(), this.address);
+        if (ClientConnector.this.clientSession.isUseSSL()) {
+            processSslHandShakeWaiting();
+        } else {
+            processProtocolVersionNegotiationWaiting();
+        }
+    }
 
+    private Single<Channel> processConnectingAndGetFuture(final InetSocketAddress address) {
 
-        final ChannelFuture connectFuture = this.channelBootstrap.connect(this.address);
-        connectFuture.await(this.clientSession.getConnectionTimeout());
-        return connectFuture;
-    }*/
-
-    private Single<Channel> processConnectingAndGetFuture(final InetSocketAddress address) throws InterruptedException {
-
-
-        return Single.create((SingleOnSubscribe<Channel>) e -> {
-
-            final ChannelFuture future = channelBootstrap.connect(address);
-            future.addListener((ChannelFutureListener) cf -> {
-
-                if (cf.isSuccess() && cf.isDone()) {
-                    // Completed successfully
-                    e.onSuccess(cf.channel());
-                } else if (cf.isCancelled() && cf.isDone()) {
-                    // Completed by cancellation
-                    e.onError(new CancellationException("cancelled before completed"));
-                } else if (cf.isDone() && cf.cause() != null) {
-                    // Completed with failure
-                    e.onError(cf.cause());
-                } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
-                    // Uncompleted
-                    e.onError(new ConnectTimeoutException());
-                } else {
-                    e.onError(new Exception("Unexpected ChannelFuture state"));
-                }
-            });
-        })
+        return Single.create((SingleOnSubscribe<Channel>) e -> channelBootstrap.connect(address)
+                                                                               .addListener(getDefaultChannelFutureListener(
+                                                                                   e)))
                      .doOnSubscribe(disposable -> LOGGER.debug("[{}] Connecting to [{}]",
                                                                clientSession.getTransportName(),
                                                                address))
@@ -578,350 +455,99 @@ this.isProcessConnecting = true;
 
     }
 
-    private void processConnectingInvalidServerAddress() {
 
-        LOGGER.error("[{}] Address not set in transport and "
-                     + "AbstractClientAuthorizationProvider.getAddress returned null",
-                     this.clientSession.getTransportName());
+    public static ChannelFutureListener getDefaultChannelFutureListener(final SingleEmitter<Channel> e) {
 
-        this.tryToSetState(ClientState.CONNECTING,
-                           ClientState.DISCONNECTING,
-                           new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                      "Address is not set in transport client"),
-                           Boolean.TRUE);
+        return cf -> {
+
+            if (cf.isSuccess() && cf.isDone()) {
+                // Completed successfully
+                e.onSuccess(cf.channel());
+            } else if (cf.isCancelled() && cf.isDone()) {
+                // Completed by cancellation
+                e.onError(new CancellationException("cancelled before completed"));
+            } else if (cf.isDone() && cf.cause() != null) {
+                // Completed with failure
+                e.onError(cf.cause());
+            } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
+                // Uncompleted
+                e.onError(new ConnectTimeoutException());
+            } else {
+                e.onError(new Exception("Unexpected ChannelFuture state"));
+            }
+        };
     }
 
-    private boolean isServerAddressValid() {
+    private void processSslHandShakeWaiting() {
 
-        return this.address != null;
+        sm.observe()
+          .filter(c -> ClientState.SSL_HANDSHAKE == c)
+          .timeout(this.clientSession.getSSLHandshakeTimeout(),
+                   TimeUnit.MILLISECONDS,
+                   Schedulers.from(executor))
+          .takeUntil(c -> ClientState.SSL_HANDSHAKE
+                          == c)
+          .doOnError(e -> ClientConnector.this.disconnect(new ClientDisconnectReason(DisconnectReason
+                                                                                              .SSL_HANDSHAKE_TIMEOUT,
+                                                                                     "SSL handshake timeout",
+                                                                                     e)))
+          .subscribe();
     }
 
-    private boolean processOnline() throws InterruptedException {
+    void sslHandshakeSuccess() {
 
-        /*if (this.authorizationProvider != null) {
-            this.authorizationProvider.cleanUp();
-            this.authorizationProvider = null;
-        }*/
-        this.clientSession.getAuthorizationProvider().cleanUp();
-        if (this.primaryChannel == null || !this.primaryChannel.isActive()) {
-            LOGGER.warn("[{}] Primary session disconnected. Disconnecting transport client",
-                        this.clientSession.getTransportName());
-
-            setDisconnectReason(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                           "Primary session is not active"));
-
-            this.tryToSetState(ClientState.ONLINE, ClientState.DISCONNECTING, Boolean.TRUE);
-            return false;
-
+        if (ClientState.ONLINE != getClientState()) {
+            sm.accept(Event.SSL_HANDSHAKE_SUCCESSFUL);
         }
+    }
 
-        this.processPrimarySocketAuthAcceptorMessage();
-        //clientSession.getProtocolHandler().getHeartbeatProcessor().sendPing(Boolean.TRUE);
-        clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingPrimary();
+    void protocolVersionNegotiationSuccess() {
 
-        if (!this.clientSession.isUseFeederSocket() || this.childSocketAuthAcceptorMessage == null) {return true;}
-
-        if (this.childChannel != null && this.childChannel.isActive()) {
-            //clientSession.getProtocolHandler().getHeartbeatProcessor().sendPing(Boolean.FALSE);
-            clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingChild();
-            if (this.canResetChildChannelReconnectAttempts()) {
-
-                this.childSessionChannelAttachment.setReconnectAttempt(0);
-            }
-        } else {
-
-            if (this.isMaxChildChannelReconnectAttemptsReached()) {
-                LOGGER.warn("[{}] Child session max connection attempts reached. Disconnecting clientSession",
-                            this.clientSession.getTransportName());
-
-                setDisconnectReason(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                               "Child session max connection attempts" + " reached"));
-                this.tryToSetState(ClientState.ONLINE, ClientState.DISCONNECTING, Boolean.TRUE);
-
-                return false;
-            }
-
-
-            if (this.childSessionChannelAttachment.getLastConnectAttemptTime() + this.clientSession.getReconnectDelay()
-                < System.currentTimeMillis()) {
-
-                return this.connectChildSession();
-            }
+        if (this.getClientState() != ClientState.ONLINE) {
+            sm.accept(Event.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL);
         }
-
-        return true;
-
     }
 
 
-    private boolean connectChildSession() throws InterruptedException {
+    private void processProtocolVersionNegotiationWaiting() {
 
-        if (this.childChannel != null) {
-            this.childChannel.disconnect();
-            this.childChannel.close();
-            this.childChannel = null;
-        }
+        sm.observe()
+          .filter(c -> ClientState.PROTOCOL_VERSION_NEGOTIATION == c)
+          .timeout(this.clientSession.getProtocolVersionNegotiationTimeout(),
+                   TimeUnit.MILLISECONDS,
+                   Schedulers.from(executor))
+          .takeUntil(c -> ClientState.PROTOCOL_VERSION_NEGOTIATION == c)
+          .doOnError(e -> disconnect(new ClientDisconnectReason(DisconnectReason.PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
+                                                                "Protocol version negotiation timeout",
+                                                                e)))
+          .subscribe();
 
+    }
 
-        this.childSessionChannelAttachment.setLastConnectAttemptTime(System.currentTimeMillis());
-        this.childSessionChannelAttachment.resetTimes();
-        this.childSessionChannelAttachment.incrementReconnectAttempt();
+    void authorizationError(final String errorReason) {
 
-        LOGGER.debug("[{}] Trying to connect child session. Attempt {}",
+        LOGGER.error("[{}] Received AUTHORIZATION_ERROR notification from the authorization provider, reason: [{}]",
                      this.clientSession.getTransportName(),
-                     this.childSessionChannelAttachment.getReconnectAttempt() + 1);
+                     errorReason);
+        Single.just(errorReason)
+              .observeOn(Schedulers.from(executor))
+              .subscribe(errorReason1 -> disconnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_FAILED,
+                                                                               String.format("Authorization failed, "
+                                                                                             + "reason [%s]",
+                                                                                             errorReason1))));
 
-
-        final Single<Channel> connectFuture = this.processConnectingAndGetFuture(this.address);
-
-
-        Single<Channel> channelSingle = connectFuture.doOnSuccess(channel -> LOGGER.debug("[{}] childChannel = {}",
-                                                                                          clientSession
-                                                                                              .getTransportName(),
-                                                                                          channel)).doOnError(cause -> {
-            DisconnectReason reason = cause instanceof CertificateException
-                                      ? DisconnectReason.CERTIFICATE_EXCEPTION
-                                      : DisconnectReason.CONNECTION_PROBLEM;
-
-
-            tryToSetState(ClientState.CONNECTING,
-                          ClientState.DISCONNECTING,
-                          new ClientDisconnectReason(reason,
-                                                     String.format("%s Child connection exception %s",
-                                                                   cause instanceof CertificateException
-                                                                   ? "Certificate"
-                                                                   : "Unexpected",
-                                                                   cause.getMessage()),
-                                                     cause),
-                          Boolean.TRUE);
-        });
-
-
-
-                     channelSingle.subscribe(new io.reactivex.functions.Consumer<Channel>() {
-            @Override
-            public void accept(final Channel channel) throws Exception {
-
-
-
-            }
-        });
-        Channel channel = channelSingle.blockingGet();
-        childChannel = channel;
-        channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(childSessionChannelAttachment);
-        final Single<Boolean> observable = protocolHandler.writeMessage(childChannel,
-                                                                        childSocketAuthAcceptorMessage);
-        Single<Boolean> booleanSingle = observable.doOnError(new io.reactivex.functions.Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable e) throws Exception {
-
-                if (e.getCause() instanceof ClosedChannelException || !isOnline()) {return;}
-
-                LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                      String.format("Child session error while writing: %s",
-                                                                    childSocketAuthAcceptorMessage),
-                                                      e));
-            }
-        });
-        booleanSingle.subscribe();
-        final Attribute<ChannelAttachment> attribute =channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
-        final ChannelAttachment attachment = attribute.get();
-       // booleanSingle.blockingGet();
-
-        //TODO
-        return true;
 
     }
 
-    private boolean isMaxChildChannelReconnectAttemptsReached() {
+    void authorizingSuccess(final String sessionId, final String userName) {
 
-        return this.childSessionChannelAttachment.getReconnectAttempt()
-               >= this.clientSession.getChildConnectionReconnectAttempts();
-    }
-
-    private boolean canResetChildChannelReconnectAttempts() {
-
-        return this.childSessionChannelAttachment.getReconnectAttempt() != 0
-               && (this.childSessionChannelAttachment.getLastIoTime()
-                   > this.childSessionChannelAttachment.getLastConnectAttemptTime()
-                   || this.childSessionChannelAttachment.getLastConnectAttemptTime()
-                      + this.clientSession.getChildConnectionReconnectsResetDelay() < System.currentTimeMillis());
-    }
-
-    private void processPrimarySocketAuthAcceptorMessage() {
-
-        if (this.primarySocketAuthAcceptorMessageSent || this.primarySocketAuthAcceptorMessage == null) {return;}
-
-
-        final Single<Boolean> channelFuture = this.protocolHandler.writeMessage(this.primaryChannel,
-                                                                                this.primarySocketAuthAcceptorMessage);
-        channelFuture.subscribe(new io.reactivex.functions.Consumer<Boolean>() {
-            @Override
-            public void accept(final Boolean cf) throws Exception {
-
-
-            }
-        }, new io.reactivex.functions.Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable t) throws Exception {
-
-                if (t.getCause() instanceof ClosedChannelException || !ClientConnector.this.isOnline()) {return;}
-
-                LOGGER.error("[{}] ", clientSession.getTransportName(), t);
-                ClientConnector.this.disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                                           String.format("Primary session error "
-                                                                                         + "while writhing message: %s",
-                                                                                         primarySocketAuthAcceptorMessage),
-                                                                           t));
-            }
-        });
-
-
-        this.primarySocketAuthAcceptorMessageSent = true;
-
-    }
-
-
-    private void cleanUp() throws InterruptedException {
-
-
-        LOGGER.debug("[{}] Closing all sockets and cleaning references", this.clientSession.getTransportName());
-
-
-        this.closeAllSessions();
-/*
-        if (this.authorizationProvider != null) {
-            this.authorizationProvider.cleanUp();
-            this.authorizationProvider = null;
-        }*/
-        this.clientSession.getAuthorizationProvider().cleanUp();
-
-        this.primarySocketAuthAcceptorMessage = null;
-        this.childSocketAuthAcceptorMessage = null;
-        this.sslHandshakeStartTime = null;
-        this.protocolVersionNegotiationStartTime = null;
-        this.authorizationStartTime = null;
-    }
-
-    private void closeAllSessions() throws InterruptedException {
-
-        closePrimarySession();
-
-        closeChildSession();
-    }
-
-    private void closeChildSession() throws InterruptedException {
-
-        if (this.childChannel != null) {
-            this.childChannel.disconnect();
-            this.childChannel.close().await(SESSION_CLOSE_WAIT_TIME, TimeUnit.SECONDS);
-            this.childChannel = null;
-        }
-    }
-
-    private void closePrimarySession() throws InterruptedException {
-
-        if (this.primaryChannel != null) {
-            this.primaryChannel.disconnect();
-            this.primaryChannel.close().await(SESSION_CLOSE_WAIT_TIME, TimeUnit.SECONDS);
-            this.primaryChannel = null;
-        }
-    }
-
-    private ClientState getClientState() {
-
-        return this.clientState.get();
-    }
-
-
-    private boolean isStateChanged() {
-
-        boolean stateChanged;
-
-        ClientState state;
-        do {
-            state = this.clientState.get();
-            stateChanged = this.clientState.compareAndSet(state, ClientState.DISCONNECTING);
-        } while (state != ClientState.DISCONNECTING && state != ClientState.DISCONNECTED && !(stateChanged));
-        return stateChanged;
-    }
-
-    private boolean tryToSetState(final ClientState expected, final ClientState newState) {
-
-        return this.tryToSetState(expected, newState, null);
-
-    }
-
-    private boolean tryToSetState(final ClientState expected,
-                                  final ClientState newState,
-                                  final boolean throwExecption) {
-
-        return this.tryToSetState(expected, newState, null, throwExecption);
-
-    }
-
-    private boolean tryToSetState(final ClientState expected,
-                                  final ClientState newState,
-                                  final ClientDisconnectReason reason) {
-
-        return this.tryToSetState(expected, newState, reason, Boolean.FALSE);
-
-    }
-
-    private boolean tryToSetState(final ClientState expected,
-                                  final ClientState newState,
-                                  final ClientDisconnectReason reason,
-                                  final boolean throwExecption) {
-
-        if (!this.clientState.compareAndSet(expected, newState)) {
-            if (newState == ClientState.DISCONNECTING) {
-
-
-                if (this.isStateChanged()) {
-                    setDisconnectReason(disconnectReason);
-                    LOGGER.debug(STATE_CHANGED_TO, this.clientSession.getTransportName(), newState);
-                }
-            } else if (this.clientState.get() != newState && throwExecption) {
-                throw new IllegalStateException(String.format("[%s] Expected state [%s], real state [%s]",
-                                                              this.clientSession.getTransportName(),
-                                                              expected.name(),
-                                                              this.clientState.get()));
-            } else if (this.clientState.get() != newState) {
-                return false;
-            }
-        } else {
-            setDisconnectReason(reason);
-            LOGGER.debug(STATE_CHANGED_TO, this.clientSession.getTransportName(), newState);
-
-        }
-
-
-        synchronized (this.stateWaitLock) {
-            this.stateWaitLock.notifyAll();
-            return true;
-        }
-    }
-
-    public boolean isOnline() {
-
-        return this.clientState.get() == ClientState.ONLINE;
-    }
-
-    boolean isConnecting() {
-
-        final ClientState state = this.clientState.get();
-        return state == ClientState.CONNECTING
-               || state == ClientState.SSL_HANDSHAKE_WAITING
-               || state == ClientState.SSL_HANDSHAKE_SUCCESSFUL
-               || state == ClientState.PROTOCOL_VERSION_NEGOTIATION_WAITING
-               || state == ClientState.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL
-               || state == ClientState.AUTHORIZING;
-    }
-
-    boolean isAuthorizing() {
-
-        return this.clientState.get() == ClientState.AUTHORIZING;
+        LOGGER.debug(
+            "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",
+            this.clientSession.getTransportName(),
+            sessionId,
+            userName);
+        clientSession.setServerSessionId(sessionId);
+        sm.accept(Event.AUTHORIZING);
     }
 
     public Channel getPrimaryChannel() {
@@ -929,79 +555,69 @@ this.isProcessConnecting = true;
         return this.primaryChannel;
     }
 
+    public boolean isOnline() {
+
+        return this.getClientState() == ClientState.ONLINE;
+    }
+
     public Channel getChildChannel() {
 
         return this.childChannel;
     }
 
-    public synchronized void setDisconnectReason(final ClientDisconnectReason disconnectReason) {
+    private void processAuthorizingWaiting() {
 
-        if (disconnectReason != null) {
-            this.disconnectReason = disconnectReason;
-        }
+        sm.observe()
+          .filter(c -> ClientState.AUTHORIZING == c)
+          .timeout(this.clientSession.getAuthorizationTimeout(),
+                   TimeUnit.MILLISECONDS,
+                   Schedulers.from(executor))
+          .takeUntil(c -> ClientState.AUTHORIZING
+                          == c)
+          .doOnError(e -> disconnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_TIMEOUT,
+                                                                "Authorization timeout",
+                                                                e)))
+          .subscribe();
+
     }
 
-    public synchronized void resetDisconnectReason() {
+    private ClientState getClientState() {
 
-        this.disconnectReason = null;
+        return sm.getState();
     }
 
-    public void setChildSocketAuthAcceptorMessage(final ChildSocketAuthAcceptorMessage acceptorMessage) {
+    public void connect() {
 
-        this.childSocketAuthAcceptorMessage = acceptorMessage;
-
-        synchronized (this.stateWaitLock) {
-            this.stateWaitLock.notifyAll();
-        }
+        sm.accept(Event.CONNECTING);
     }
 
-    public void setPrimarySocketAuthAcceptorMessage(final PrimarySocketAuthAcceptorMessage acceptorMessage) {
+    public void disconnect() {
 
-        this.primarySocketAuthAcceptorMessage = acceptorMessage;
-
-        synchronized (this.stateWaitLock) {
-            this.stateWaitLock.notifyAll();
-        }
+        this.disconnect(new ClientDisconnectReason(DisconnectReason.CLIENT_APP_REQUEST, "Client application request"));
     }
 
-    private void fireDisconnected(ClientDisconnectReason disconnectReason) {
+    public void disconnect(final ClientDisconnectReason reason) {
 
-        this.clientSession.disconnected();
-
-        if (disconnectReason == null) {
-            disconnectReason = new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                          "Unknown connection problem");
-        }
-
-        final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
-
-        final DisconnectedEvent disconnectedEvent = new DisconnectedEvent(this.clientSession.getTransportClient(),
-                                                                          disconnectReason.getDisconnectReason(),
-                                                                          disconnectReason.getDisconnectHint(),
-                                                                          disconnectReason.getError(),
-                                                                          disconnectReason.getDisconnectComments());
-        listeners.forEach(new Consumer<ClientListener>() {
-            @Override
-            public void accept(final ClientListener clientListener) {
-
-                ClientConnector.this.protocolHandler.fireDisconnectedEvent(clientListener,
-                                                                           ClientConnector.this.clientSession
-                                                                               .getTransportClient(),
-                                                                           disconnectedEvent);
-            }
-        });
-
-
-        this.logDisconnectInQueue(disconnectReason);
-        this.clientSession.terminate();
+        this.disconnectReason = reason;
     }
 
-    @SuppressWarnings("squid:S2629")
+    private void logDisconnectReason(final ClientDisconnectReason disconnectReason) {
+
+        Single.just(disconnectReason).observeOn(Schedulers.from(executor)).subscribe(this::logDisconnectInQueue);
+    }
+
     private void logDisconnectInQueue(final ClientDisconnectReason disconnectReason) {
 
+        if (disconnectReason == null) {
+            return;
+        }
+
         final StringBuilder builder = new StringBuilder();
-        builder.append("Disconnect task in queue, reason [").append(disconnectReason.getDisconnectReason()).append(
-            "], comments [").append(disconnectReason.getDisconnectComments()).append("]");
+        builder.append("Disconnect now, reason [")
+               .append(disconnectReason.getDisconnectReason())
+               .append("], comments [")
+               .append(disconnectReason.getDisconnectComments())
+               .append("]");
         if (this.clientSession != null) {
             builder.append(", server address [")
                    .append(this.clientSession.getAddress())
@@ -1009,73 +625,90 @@ this.isProcessConnecting = true;
                    .append(this.clientSession.getTransportName())
                    .append("]");
         }
-
+        final String logMsg = builder.toString();
         if (disconnectReason.getError() != null) {
-            LOGGER.info(builder.toString(), disconnectReason.getError());
+            LOGGER.info(logMsg, disconnectReason.getError());
         } else {
-            LOGGER.info(builder.toString());
+            LOGGER.info(logMsg);
         }
 
     }
 
-    void securityException(final X509Certificate[] chain, final String authType, final CertificateException e) {
+    void observe(final Observer<ClientState> observer) {
 
-        LOGGER.error("[{}] CERTIFICATE_EXCEPTION: ", this.clientSession.getTransportName(), e);
+        sm.observe().subscribe(observer);
+    }
 
-        if (this.clientSession.getSecurityExceptionHandler() == null
-            || !this.clientSession.getSecurityExceptionHandler().isIgnoreSecurityException(chain, authType, e)) {
+    void primaryChannelDisconnected() {
 
-            final ClientDisconnectReason reason = new ClientDisconnectReason(DisconnectReason.CERTIFICATE_EXCEPTION,
-                                                                             String.format("Certificate exception %s",
-                                                                                           e.getMessage()),
-                                                                             e);
+        sm.accept(Event.DISCONNECTING);
+    }
 
-            this.tryToSetState(ClientState.SSL_HANDSHAKE_WAITING, ClientState.DISCONNECTING, reason, Boolean.TRUE);
-
-        }
+    void childChannelDisconnected() {
 
     }
 
-    boolean isTerminating() {
+    boolean isConnecting() {
 
-        return this.terminating;
+        final ClientState state = this.getClientState();
+        return state == ClientState.CONNECTING
+               || state == ClientState.SSL_HANDSHAKE
+               || state == ClientState.PROTOCOL_VERSION_NEGOTIATION
+               || state == ClientState.AUTHORIZING;
     }
 
-    void setTerminating(final long terminationAwaitMaxTimeoutInMillis) {
 
-        this.terminating = true;
+    public Consumer<SecurityExceptionEvent> observeSslSecurity() {
 
-        synchronized (this.stateWaitLock) {
-            this.stateWaitLock.notifyAll();
-        }
+        return e -> {
 
-        if (terminationAwaitMaxTimeoutInMillis > 0L && !this.isExecutorThreadTerminated.get()) {
+            final X509Certificate[] chain = e.getCertificateChain();
+            final String authType = e.getAuthenticationType();
+            final CertificateException ex = e.getException();
 
-            synchronized (this.executorThreadTerminationLocker) {
-                boolean interrupted = false;
-                while (!this.isExecutorThreadTerminated.get()) {
+            LOGGER.error("[{}] CERTIFICATE_EXCEPTION: ", clientSession.getTransportName(), ex);
 
-                    try {
-                        this.executorThreadTerminationLocker.wait(terminationAwaitMaxTimeoutInMillis);
-                    } catch (final InterruptedException e) {
-                        interrupted = true;
-                        LOGGER.error("Error occurred...", e);
-                    } finally {
-                        if (interrupted) {Thread.currentThread().interrupt();}
-                    }
+            if (clientSession.getSecurityExceptionHandler() == null || !clientSession.getSecurityExceptionHandler()
+                                                                                     .isIgnoreSecurityException(chain,
+                                                                                                                authType,
+                                                                                                                ex)) {
+                disconnect(new ClientDisconnectReason(DisconnectReason.CERTIFICATE_EXCEPTION,
+                                                      String.format("Certificate exception %s", ex.getMessage()),
+                                                      ex));
 
-                }
             }
+
+        };
+    }
+
+    public void terminate() {
+
+        if (this.getClientState() == ClientState.ONLINE) {
+            sm.accept(Event.DISCONNECTING);
+        }
+    }
+
+    private static void shutdown(final ListeningExecutorService executor,
+                          final long waitTimeUnitCount,
+                          final TimeUnit waitTimeUnit) {
+
+        executor.shutdown();
+
+        try {
+            if (!executor.awaitTermination(waitTimeUnitCount, waitTimeUnit)) {
+                executor.shutdownNow();
+            }
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
 
     }
 
     public enum ClientState {
+        IDLE,
         CONNECTING,
-        SSL_HANDSHAKE_WAITING,
-        SSL_HANDSHAKE_SUCCESSFUL,
-        PROTOCOL_VERSION_NEGOTIATION_WAITING,
-        PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL,
+        SSL_HANDSHAKE,
+        PROTOCOL_VERSION_NEGOTIATION,
         AUTHORIZING,
         ONLINE,
         DISCONNECTING,
@@ -1084,5 +717,7 @@ this.isProcessConnecting = true;
         ClientState() {
 
         }
+
     }
+
 }

@@ -22,7 +22,6 @@ import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
 import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.channel.ChannelTrafficBlocker;
-import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
@@ -33,7 +32,6 @@ import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
 import com.dukascopy.dds4.ping.PingManager;
-import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -152,7 +150,7 @@ public class TransportClientSession {
     private Bootstrap channelBootstrap;
     private ProtocolVersionClientNegotiatorHandler protocolVersionClientNegotiatorHandler;
     private ClientProtocolHandler protocolHandler;
-    private ClientSateConnector2 clientConnector;
+    private ClientConnector clientConnector;
     private ScheduledExecutorService scheduledExecutorService;
     private String serverSessionId;
 
@@ -348,10 +346,10 @@ public class TransportClientSession {
             }
         };*/
         this.protocolHandler = new ClientProtocolHandler(this);
-        // this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
-        this.clientConnector = new ClientSateConnector2(this.address,
-                                                        this.channelBootstrap,
-                                                        this);
+        // this.clientConnector = new ClientConnectorOld(this.address, this.channelBootstrap, this, this.protocolHandler);
+        this.clientConnector = new ClientConnector(this.address,
+                                                   this.channelBootstrap,
+                                                   this);
         // clientConnector.connect();
         this.protocolHandler.setClientConnector(this.clientConnector);
         final Consumer<SecurityExceptionEvent> subscriber = clientConnector.observeSslSecurity();
@@ -736,7 +734,7 @@ public class TransportClientSession {
         return this.protocolHandler;
     }
 
-    public ClientSateConnector2 getClientConnector() {
+    public ClientConnector getClientConnector() {
 
         return this.clientConnector;
     }

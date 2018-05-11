@@ -104,7 +104,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private final StreamProcessor streamProcessor;
     private final DroppableMessageHandler droppableMessageHandler;
     private HeartbeatProcessor heartbeatProcessor;
-    private ClientSateConnector2 clientConnector;
+    private ClientConnector clientConnector;
 
 
     public ClientProtocolHandler(final TransportClientSession session) {
@@ -138,23 +138,23 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         return droppableMessageHandler;
     }
 
-    public void setClientConnector(final ClientSateConnector2 clientConnector) {
+    public void setClientConnector(final ClientConnector clientConnector) {
 
         this.clientConnector = clientConnector;
-        this.clientConnector.observe(new Observer<ClientSateConnector2.ClientState>() {
+        this.clientConnector.observe(new Observer<ClientConnector.ClientState>() {
             @Override
             public void onSubscribe(final Disposable d) {
 
             }
 
             @Override
-            public void onNext(final ClientSateConnector2.ClientState clientState) {
+            public void onNext(final ClientConnector.ClientState clientState) {
 
-                if (ClientSateConnector2.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
+                if (ClientConnector.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
                     handleAuthorization(clientConnector.getPrimaryChannel());
-                } else if (ClientSateConnector2.ClientState.ONLINE == clientState) {
+                } else if (ClientConnector.ClientState.ONLINE == clientState) {
                     fireAuthorized();
-                } else if (ClientSateConnector2.ClientState.DISCONNECTED == clientState) {
+                } else if (ClientConnector.ClientState.DISCONNECTED == clientState) {
                     fireDisconnected();
                 }
 

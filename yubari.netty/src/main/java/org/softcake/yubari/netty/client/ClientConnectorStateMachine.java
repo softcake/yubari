@@ -16,7 +16,7 @@
 
 package org.softcake.yubari.netty.client;
 
-import org.softcake.yubari.netty.client.ClientSateConnector2.ClientState;
+import org.softcake.yubari.netty.client.ClientConnector.ClientState;
 
 import io.reactivex.Observable;
 import io.reactivex.Single;
