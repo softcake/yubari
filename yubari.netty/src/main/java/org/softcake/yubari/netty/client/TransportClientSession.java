@@ -17,7 +17,6 @@
 package org.softcake.yubari.netty.client;
 
 
-import org.softcake.yubari.netty.NettyIoSessionWrapperAdapter;
 import org.softcake.yubari.netty.ProtocolEncoderDecoder;
 import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
 import org.softcake.yubari.netty.TransportClientSessionStateHandler;
@@ -27,17 +26,15 @@ import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
-import org.softcake.yubari.netty.mina.IoSessionWrapper;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
-import org.softcake.yubari.netty.ssl.ClientSSLContextSubscriber;
 import org.softcake.yubari.netty.ssl.SSLContextFactory;
+import org.softcake.yubari.netty.ssl.SecurityExceptionEvent;
 import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
 import com.dukascopy.dds4.ping.PingManager;
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
-import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
@@ -158,13 +155,6 @@ public class TransportClientSession {
     private ClientSateConnector2 clientConnector;
     private ScheduledExecutorService scheduledExecutorService;
     private String serverSessionId;
-    private IoSessionWrapper sessionWrapper = new NettyIoSessionWrapperAdapter() {
-        public Single<Boolean> write(final Object message) {
-
-            return protocolHandler.writeMessage(this.channel, (BinaryProtocolMessage) message);
-        }
-    };
-
 
     protected TransportClientSession(final TransportClient transportClient,
                                      final InetSocketAddress address,
@@ -340,12 +330,32 @@ public class TransportClientSession {
         this.channelBootstrap.group(nettyEventLoopGroup);
         this.channelBootstrap.channel(NioSocketChannel.class);
         this.channelOptions.forEach((key, value) -> this.channelBootstrap.option((ChannelOption) key, value));
-        final ClientSSLContextSubscriber
+        /*final ClientSSLContextSubscriber
             subscriber
-            = event -> event.subscribe(e -> clientConnector.securityException(e.getCertificateChain(),
-                                                                              e.getAuthenticationType(),
-                                                                              e.getException()));
+            = new ClientSSLContextSubscriber() {
+            @Override
+            public void subscribe(final Observable<SecurityExceptionEvent> event) {
 
+                event.subscribe(new Consumer<SecurityExceptionEvent>() {
+                    @Override
+                    public void accept(final SecurityExceptionEvent e) throws Exception {
+
+                        clientConnector.securityException(e.getCertificateChain(),
+                                                          e.getAuthenticationType(),
+                                                          e.getException());
+                    }
+                });
+            }
+        };*/
+        this.protocolHandler = new ClientProtocolHandler(this);
+        // this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
+        this.clientConnector = new ClientSateConnector2(this.address,
+                                                        this.channelBootstrap,
+                                                        this,
+                                                        this.protocolHandler);
+        // clientConnector.connect();
+        this.protocolHandler.setClientConnector(this.clientConnector);
+        final Consumer<SecurityExceptionEvent> subscriber = clientConnector.observeSslSecurity();
         this.channelBootstrap.handler(new ChannelInitializer<SocketChannel>() {
             protected void initChannel(final SocketChannel ch) throws Exception {
 
@@ -375,16 +385,7 @@ public class TransportClientSession {
                 pipeline.addLast("handler", protocolHandler);
             }
         });
-        this.protocolHandler = new ClientProtocolHandler(this);
-        // this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this, this.protocolHandler);
-        this.clientConnector = new ClientSateConnector2(this.address,
-                                                        this.channelBootstrap,
-                                                        this,
-                                                        this.protocolHandler);
-        // clientConnector.connect();
-        this.protocolHandler.setClientConnector(this.clientConnector);
-        //  this.protocolHandler.clientStateConnector((this.clientConnector);
-        // this.clientConnector.start();
+
         this.synchRequestProcessor = new SynchRequestProcessor(this,
                                                                this.protocolHandler,
                                                                this.scheduledExecutorService);
@@ -546,11 +547,6 @@ public class TransportClientSession {
         }
     }
 
-    public IoSessionWrapper getIoSessionWrapper() {
-
-        ((NettyIoSessionWrapperAdapter) this.sessionWrapper).setChannel(this.clientConnector.getPrimaryChannel());
-        return this.sessionWrapper;
-    }
 
     boolean isOnline() {
 

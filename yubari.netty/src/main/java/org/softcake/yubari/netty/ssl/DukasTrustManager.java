@@ -19,10 +19,9 @@ package org.softcake.yubari.netty.ssl;
 import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.ssl.verifier.SSLHostnameVerifier;
 
-import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
-import io.reactivex.ObservableOnSubscribe;
-import io.reactivex.observables.ConnectableObservable;
+import io.reactivex.functions.Consumer;
+import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,27 +33,19 @@ import javax.net.ssl.X509TrustManager;
 
 class DukasTrustManager implements X509TrustManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(DukasTrustManager.class);
-    private final ConnectableObservable<SecurityExceptionEvent> observable;
+    private final PublishSubject<SecurityExceptionEvent> observable;
     private ObservableEmitter<SecurityExceptionEvent> subscriber;
     private X509TrustManager sunX509TrustManager;
     private String hostName;
 
-    DukasTrustManager(final ClientSSLContextSubscriber listener, final X509TrustManager manager, final String hostName) {
+    DukasTrustManager(final Consumer<SecurityExceptionEvent> listener, final X509TrustManager manager, final String hostName) {
 
 
         this.sunX509TrustManager = PreCheck.parameterNotNull(manager, "manager");
         this.hostName = PreCheck.parameterNotNullOrEmpty(hostName, "hostName");
-        this.observable = Observable.create(new ObservableOnSubscribe
-            <SecurityExceptionEvent>() {
-            @Override
-            public void subscribe(final ObservableEmitter<SecurityExceptionEvent> s) throws Exception {
-
-                subscriber = s;
-            }
-        })
-                                    .publish();
-        PreCheck.parameterNotNull(listener, "listener").subscribe(this.observable);
-        this.observable.connect();
+        this.observable = PublishSubject.create();
+        observable.subscribe(listener);
+        //PreCheck.parameterNotNull(listener, "listener").subscribe(this.observable);
     }
 
     private static void logCertificateChain(final X509Certificate[] chain) {
@@ -86,7 +77,6 @@ class DukasTrustManager implements X509TrustManager {
             }
 
             this.sunX509TrustManager.checkServerTrusted(chain, authType);
-
             checkTrusted(chain[0]);
         } catch (final CertificateException e) {
             LOGGER.error("Certificate exception for certificates chain:", e);
@@ -97,7 +87,7 @@ class DukasTrustManager implements X509TrustManager {
                 LOGGER.error("\tchain is empty{}","");
             }
 
-            subscriber.onNext(new SecurityExceptionEvent(chain, authType, e));
+            observable.onNext(new SecurityExceptionEvent(chain, authType, e));
         }
 
     }
@@ -125,7 +115,7 @@ class DukasTrustManager implements X509TrustManager {
         try {
             this.sunX509TrustManager.checkClientTrusted(chain, authType);
         } catch (final CertificateException e) {
-            subscriber.onNext(new SecurityExceptionEvent(chain, authType, e));
+            observable.onNext(new SecurityExceptionEvent(chain, authType, e));
         }
     }
 

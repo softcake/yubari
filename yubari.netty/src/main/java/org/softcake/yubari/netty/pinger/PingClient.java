@@ -116,10 +116,13 @@ public class PingClient {
 
                     final ChannelPipeline pipeline = ch.pipeline();
                     if (PingClient.this.pingTarget.isUseSsl()) {
-                        final SSLEngine engine = SSLContextFactory.getInstance(false, event -> event.subscribe(e -> {
+                        final SSLEngine engine = SSLContextFactory.getInstance(false,
 
-                            disconnect(DisconnectReason.CERTIFICATE_EXCEPTION, e.getException());
-                        }), pingTarget.getAddress().getHostName()).createSSLEngine();
+                                                                               e -> disconnect(DisconnectReason
+                                                                                                   .CERTIFICATE_EXCEPTION,
+                                                                                               e.getException()),
+                                                                               pingTarget.getAddress().getHostName())
+                                                                  .createSSLEngine();
                         final Set<String> sslProtocols = PingClient.this.pingTarget.getEnabledSslProtocols().isEmpty()
                                                          ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS
                                                          : PingClient.this.pingTarget.getEnabledSslProtocols();

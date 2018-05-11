@@ -52,4 +52,8 @@ public class ChannelAttachment extends AbstractChannelAttachment {
 
         this.reconnectAttempt = reconnectAttempt;
     }
+    public void incrementReconnectAttempt() {
+
+        this.reconnectAttempt = this.reconnectAttempt + 1;
+    }
 }

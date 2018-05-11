@@ -19,7 +19,6 @@ package org.softcake.yubari.netty.client;
 import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
 
 import org.softcake.cherry.core.base.PreCheck;
-import org.softcake.yubari.netty.NettyIoSessionWrapperAdapter;
 import org.softcake.yubari.netty.ProtocolVersionNegotiationEvent;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.processors.HeartbeatProcessor;
@@ -67,7 +66,6 @@ import io.reactivex.Single;
 import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -154,8 +152,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             @Override
             public void onNext(final ClientSateConnector2.ClientState clientState) {
 
-                if (ClientSateConnector2.ClientState.AUTHORIZING == clientState) {
-                    handleAuthorizationRx(clientConnector.getPrimaryChannel());
+                if (ClientSateConnector2.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
+                    handleAuthorization(clientConnector.getPrimaryChannel());
                 } else if (ClientSateConnector2.ClientState.ONLINE == clientState) {
                     fireAuthorized();
                 }
@@ -304,7 +302,6 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
             //TODO
             this.clientConnector.sslHandshakeSuccess();
-            // this.clientConnector.sslHandshakeSuccess();
         } else if (evt instanceof ProtocolVersionNegotiationEvent) {
             ProtocolVersionNegotiationEvent event = (ProtocolVersionNegotiationEvent) evt;
             if (event.isSuccess()) {
@@ -326,31 +323,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         ctx.close();
     }
 
-    /*void handleAuthorization(final ClientAuthorizationProvider authorizationProvider, final Channel session) {
-
-        LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
-        authorizationProvider.authorize(new NettyIoSessionWrapperAdapter(session) {
-            @Override
-            public ChannelFuture write(final Object message) {
-
-                return writeMessageOld(this.channel, (BinaryProtocolMessage) message);
-            }
-        });
-    }*/
-
     void handleAuthorization(final Channel session) {
-
-        LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
-        this.clientSession.getAuthorizationProvider().authorize(new Consumer<Object>() {
-            @Override
-            public void accept(final Object obj) throws Exception {
-
-                writeMessage(session, (BinaryProtocolMessage) obj).subscribe();
-            }
-        });
-    }
-
-    void handleAuthorizationRx(final Channel session) {
 
         LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
         final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
@@ -359,12 +332,12 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         haloRequestMessage.setSecondaryConnectionDisabled(!this.clientSession.isUseFeederSocket());
         haloRequestMessage.setSecondaryConnectionMessagesTTL(this.clientSession.getDroppableMessagesServerTTL());
         haloRequestMessage.setSessionName(this.clientSession.getAuthorizationProvider().getSessionName());
-        writeMessage(session, (BinaryProtocolMessage) haloRequestMessage).subscribe();
+        writeMessage(session, haloRequestMessage).subscribe();
 
     }
 
-    private void processAuthorizationMessageRx(final ChannelHandlerContext ctx,
-                                               final BinaryProtocolMessage protocolMessage) {
+    private void processAuthorizationMessage(final ChannelHandlerContext ctx,
+                                             final BinaryProtocolMessage protocolMessage) {
 
         LOGGER.debug("[{}] Sending message [{}] to authorization provider",
                      this.clientSession.getTransportName(),
@@ -393,7 +366,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         listeners.forEach(clientListener -> this.fireAuthorizedEvent(clientListener,
                                                                      this.clientSession.getTransportClient()));
 
-        LOGGER.info("Authorize task in queue, server address [{}], transport name [{}]",
+        LOGGER.info("Authorize in queue, server address [{}], transport name [{}]",
                     this.clientSession.getAddress(),
                     this.clientSession.getTransportName());
     }
@@ -456,48 +429,6 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         };
         task.executeInExecutor(this.authEventExecutor);
     }
-    public Single<Boolean> writeMessage2(final Channel channel, final BinaryProtocolMessage responseMessage) {
-
-        final int messagesCounter = sentMessagesCounterIncrementAndGet();
-
-        return Single.create(new SingleOnSubscribe<Boolean>() {
-            @Override
-            public void subscribe(final SingleEmitter<Boolean> e) throws Exception {
-
-                final ChannelFuture future = channel.writeAndFlush(responseMessage);
-                final long procStartTime = System.currentTimeMillis();
-                ClientProtocolHandler.this
-                    .checkSendingErrorOnNotWritableChannel(channel, future, procStartTime)
-                    .subscribe(TransportClientSession::terminate);
-
-                if (ClientProtocolHandler.this.isTimeToCheckError(messagesCounter)) {
-                    ClientProtocolHandler.this.checkSendError(procStartTime, future);
-                } else if (ClientProtocolHandler.this.isTimeToCheckWarning(messagesCounter)) {
-                    ClientProtocolHandler.this.checkSendingWarning(procStartTime, future);
-                }
-
-                future.addListener((ChannelFutureListener) cf -> {
-
-                    if (cf.isSuccess()) {
-                        e.onSuccess(true);
-                    } else if (cf.isCancelled()) {
-                        e.onError(new CancellationException("cancelled before completed"));
-                    } else if (cf.isDone() && cf.cause() != null) {
-                        e.onError(cf.cause());
-                    } else {
-                        e.onError(new Exception("Unexpected ChannelFuture state"));
-                    }
-                });
-            }
-        })
-            .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachement(channel,
-                                                                                         System
-                                                                                             .currentTimeMillis()))
-            .doOnError(cause -> LOGGER.error("[{}] Message send failed because of {}: {}",
-                                             clientSession.getTransportName(),
-                                             cause.getClass().getSimpleName(),
-                                             cause.getMessage()));
-    }
 
 
     public Single<Boolean> writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
@@ -534,8 +465,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                 });
             }
         })
-                     .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachement(channel,
-                                                                                                  System
+                     .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachment(channel,
+                                                                                                 System
                                                                                                       .currentTimeMillis()))
                      .doOnError(cause -> LOGGER.error("[{}] Message send failed because of {}: {}",
                                                       clientSession.getTransportName(),
@@ -626,7 +557,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                   });
     }
 
-    private void updateChannelAttachement(final Channel channel, final long lastWriteIoTime) {
+    private void updateChannelAttachment(final Channel channel, final long lastWriteIoTime) {
 
         final ChannelAttachment ca = channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
         ca.setLastWriteIoTime(lastWriteIoTime);
@@ -681,8 +612,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                    || msg instanceof StreamingStatus) {
             this.streamProcessor.process(ctx, msg);
             throw new UnsupportedOperationException("Do you really need this?");
-        } else if (this.clientConnector.getClientState() == ClientSateConnector2.ClientState.AUTHORIZING) {
-            this.processAuthorizationMessageRx(ctx, msg);
+        } else if (this.clientConnector.isConnecting()) {
+            this.processAuthorizationMessage(ctx, msg);
         } else {
             this.fireFeedbackMessageReceived(ctx, requestMessage);
         }
@@ -874,7 +805,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             public void onNext(final ClientSateConnector2.ClientState clientState) {
 
                 if (ClientSateConnector2.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
-                    handleAuthorizationRx(clientConnector.getPrimaryChannel());
+                    handleAuthorization(clientConnector.getPrimaryChannel());
                 } else if (ClientSateConnector2.ClientState.AUTHORIZING == clientState) {
                     fireAuthorized();
                 }

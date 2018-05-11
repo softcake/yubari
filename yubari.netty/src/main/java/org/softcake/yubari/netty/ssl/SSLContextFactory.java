@@ -16,6 +16,7 @@
 
 package org.softcake.yubari.netty.ssl;
 
+import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,14 +71,14 @@ public final class SSLContextFactory {
 
 
     public static SSLContext getInstance(final boolean server,
-                                         final ClientSSLContextSubscriber listener,
+                                         final Consumer<SecurityExceptionEvent> listener,
                                          final String targetHost) throws SSLException {
 
         return getInstance(server, listener, targetHost, null);
     }
 
     public static SSLContext getInstance(final boolean server,
-                                         final ClientSSLContextSubscriber listener,
+                                         final  Consumer<SecurityExceptionEvent> listener,
                                          final String targetHost,
                                          final String pathToCertificate) throws SSLException {
 
@@ -94,7 +95,7 @@ public final class SSLContextFactory {
         return retInstance;
     }
 
-    private static SSLContext getClientInstance(final ClientSSLContextSubscriber listener, final String targetHost)
+    private static SSLContext getClientInstance(final  Consumer<SecurityExceptionEvent> listener, final String targetHost)
         throws SSLException {
 
         SSLContext retInstance = clientInstance;
@@ -222,7 +223,7 @@ public final class SSLContextFactory {
         return trustManagerFactory;
     }
 
-    private static SSLContext createClientSSLContext(final ClientSSLContextSubscriber listener, final String targetHost)
+    private static SSLContext createClientSSLContext(final  Consumer<SecurityExceptionEvent> listener, final String targetHost)
         throws SSLException {
 
         try {

@@ -18,7 +18,6 @@ package org.softcake.yubari.netty.client;
 
 import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
 
-import org.softcake.yubari.netty.AuthorizationProviderListener;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
@@ -53,7 +52,7 @@ import java.util.function.Consumer;
  * @author The softcake Authors.
  */
 @SuppressWarnings("squid:S128")
-public class ClientConnector extends Thread implements AuthorizationProviderListener {
+public class ClientConnector extends Thread  {
     private static final long SESSION_CLOSE_WAIT_TIME = 5L;
     private static final String STATE_CHANGED_TO = "[{}] State changed to {}";
     private static final long TIME_TO_WAIT_FOR_DISCONNECTING = 10000L;
@@ -478,7 +477,7 @@ this.isProcessConnecting = true;
         resetDisconnectReason();
         // this.authorizationProvider = this.clientSession.getAuthorizationProvider();
 
-        this.clientSession.getAuthorizationProvider().setListener(this);
+        //this.clientSession.getAuthorizationProvider().setListener(this);
         // this.authorizationProvider.setListener(this);
         this.primarySessionChannelAttachment = new ChannelAttachment(Boolean.TRUE);
         this.childSessionChannelAttachment = new ChannelAttachment(Boolean.FALSE);
@@ -666,8 +665,7 @@ this.isProcessConnecting = true;
 
         this.childSessionChannelAttachment.setLastConnectAttemptTime(System.currentTimeMillis());
         this.childSessionChannelAttachment.resetTimes();
-        this.childSessionChannelAttachment.setReconnectAttempt(this.childSessionChannelAttachment.getReconnectAttempt()
-                                                               + 1);
+        this.childSessionChannelAttachment.incrementReconnectAttempt();
 
         LOGGER.debug("[{}] Trying to connect child session. Attempt {}",
                      this.clientSession.getTransportName(),
