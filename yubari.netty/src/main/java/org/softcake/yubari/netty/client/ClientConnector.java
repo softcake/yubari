@@ -105,10 +105,23 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
         this.channelBootstrap = channelBootstrap;
         this.clientSession = clientSession;
         this.protocolHandler = clientSession.getProtocolHandler();
-
-
         sm = new ClientConnectorStateMachine(this, executor, clientSession);
         sm.connect();
+        protocolHandler.observeAuthorizationEvent(executor).subscribe(new Consumer<AuthorizationEvent.Event>() {
+            @Override
+            public void accept(final AuthorizationEvent.Event authorizationEvent) throws Exception {
+
+                LOGGER.info("AuthohrizationEvent {}", authorizationEvent);
+                if (authorizationEvent.equals(AuthorizationEvent.Event.SSL)) {
+
+                } else if (authorizationEvent.equals(AuthorizationEvent.Event.PROTOCOL_VERSION_NEGOTIATION)) {
+
+                } else if (authorizationEvent.equals(AuthorizationEvent.Event.AUTHORIZING)) {
+
+
+                }
+            }
+        });
     }
 
 
@@ -185,6 +198,7 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
 
     @Override
     public void onProtocolVersionNegotiationExit(final ClientState state) {
+
         throw new UnsupportedOperationException();
     }
 
@@ -410,7 +424,7 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
                                       : DisconnectReason.CONNECTION_PROBLEM;
 
             disconnect(new ClientDisconnectReason(reason,
-                                                  String.format("%s exception %s",
+                                                  String.format("%s exception " + "%s",
                                                                 cause instanceof CertificateException
                                                                 ? "Certificate"
                                                                 : "Unexpected",
@@ -442,8 +456,8 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
     private Single<Channel> processConnectingAndGetFuture(final InetSocketAddress address) {
 
         return Single.create((SingleOnSubscribe<Channel>) e -> channelBootstrap.connect(address)
-                                                                               .addListener(getDefaultChannelFutureListener(
-                                                                                   e)))
+                                                                               .addListener(
+                                                                                   getDefaultChannelFutureListener(e)))
                      .doOnSubscribe(disposable -> LOGGER.debug("[{}] Connecting to [{}]",
                                                                clientSession.getTransportName(),
                                                                address))
@@ -491,7 +505,7 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
           .takeUntil(c -> ClientState.SSL_HANDSHAKE
                           == c)
           .doOnError(e -> ClientConnector.this.disconnect(new ClientDisconnectReason(DisconnectReason
-                                                                                              .SSL_HANDSHAKE_TIMEOUT,
+                                                                                         .SSL_HANDSHAKE_TIMEOUT,
                                                                                      "SSL handshake timeout",
                                                                                      e)))
           .subscribe();
@@ -708,8 +722,8 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
     }
 
     private static void shutdown(final ListeningExecutorService executor,
-                          final long waitTimeUnitCount,
-                          final TimeUnit waitTimeUnit) {
+                                 final long waitTimeUnitCount,
+                                 final TimeUnit waitTimeUnit) {
 
         executor.shutdown();
 

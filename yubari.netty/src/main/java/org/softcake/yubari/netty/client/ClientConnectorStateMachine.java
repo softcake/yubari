@@ -100,7 +100,7 @@ public class ClientConnectorStateMachine {
                    .transition(Event.ONLINE, ONLINE)
                    .transition(Event.DISCONNECTING, DISCONNECTING);
 
-        ONLINE.onEnter((c, s) -> c.onOnlineEnter(s)).onExit((c, s) -> c.onOnlineExit(s)).transition(Event.DISCONNECTING,
+        ONLINE.onEnter((c, s) -> c.onOnlineEnter(s)).transition(Event.DISCONNECTING,
                                                                                                     DISCONNECTING);
         DISCONNECTING.onEnter((c, s) -> c.onDisconnectingEnter(s)).transition(Event.DISCONNECTED, DISCONNECTED);
         DISCONNECTED.onEnter((c, s) -> c.onDisconnectedEnter(s)).onExit(log("exit"));

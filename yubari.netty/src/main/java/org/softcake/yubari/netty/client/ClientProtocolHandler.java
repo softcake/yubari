@@ -66,6 +66,7 @@ import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
+import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,6 +76,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -92,7 +94,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             return new int[1];
         }
     });
-
+private final PublishSubject<AuthorizationEvent.Event> authorizationEvent;
     private final TransportClientSession clientSession;
     private final ListeningExecutorService eventExecutor;
     private final ListeningExecutorService authEventExecutor;
@@ -120,7 +122,15 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         this.streamProcessor = new StreamProcessor(clientSession, this.streamProcessingExecutor);
         this.heartbeatProcessor = new HeartbeatProcessor(clientSession);
 
+        authorizationEvent = PublishSubject.create();
+
     }
+
+    public Observable<AuthorizationEvent.Event> observeAuthorizationEvent(Executor executor){
+
+        return authorizationEvent.subscribeOn(Schedulers.from(executor));
+    }
+
 
     public static int sentMessagesCounterIncrementAndGet() {
 
@@ -327,9 +337,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
             //TODO
             this.clientConnector.sslHandshakeSuccess();
+            authorizationEvent.onNext(AuthorizationEvent.Event.SSL);
         } else if (evt instanceof ProtocolVersionNegotiationEvent) {
             ProtocolVersionNegotiationEvent event = (ProtocolVersionNegotiationEvent) evt;
             if (event.isSuccess()) {
+                authorizationEvent.onNext(AuthorizationEvent.Event.PROTOCOL_VERSION_NEGOTIATION);
                 this.clientConnector.protocolVersionNegotiationSuccess();
             } else {
                 this.clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason
@@ -370,7 +382,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
         if (protocolMessage instanceof OkResponseMessage) {
 
-
+            authorizationEvent.onNext(AuthorizationEvent.Event.AUTHORIZING);
             this.clientConnector.authorizingSuccess(this.clientSession.getAuthorizationProvider().getSessionId(),
                                                     this.clientSession.getAuthorizationProvider().getLogin());
         } else if (protocolMessage instanceof ErrorResponseMessage) {
