@@ -28,20 +28,25 @@ import io.reactivex.ObservableSource;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Action;
+import io.reactivex.functions.BiFunction;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
 import io.reactivex.functions.Predicate;
 import io.reactivex.internal.operators.observable.ObservableJust;
 import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
+import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -74,216 +79,66 @@ public class RXJavaExample {
                                                                                      eventExecutorThreadsForLogging,
                                                                                      "DDS2 Standalone Transport Client",
                                                                                      true);
-    private PublishProcessor<String> processor = PublishProcessor.create();
+    private PublishProcessor<Message> processor = PublishProcessor.create();
     private long sleepTime = DEFAULT_SLEEP_TIME;
 
     public static void main(final String[] args) {
+        List<String> words = Arrays.asList(
+            "the",
+            "quick",
+            "brown",
+            "fox",
+            "jumped",
+            "over",
+            "the",
+            "lazy",
+            "dog"
+        );
 
+        Observable.just(words)
+                  .subscribe(word->System.out.println(word));
+        Observable.fromArray(words)
+                  .zipWith(Observable.range(1, Integer.MAX_VALUE), new BiFunction<List<String>, Integer, String>() {
+                      @Override
+                      public String apply(final List<String> string, final Integer count) throws Exception {
 
-        final boolean doNotRestartTimerOnInProcessResponse = false;
-        final Observable<String> stringObservable = Observable.create(new ObservableOnSubscribe<String>() {
-            @Override
-            public void subscribe(final ObservableEmitter<String> emitter) throws Exception {
+                          return String.format("%2d. %s", count, string);
+                      }
+                  })
+                  .subscribe(System.out::println);
 
-                LOGGER.info("subscribing : ");
+        Observable.fromIterable(words)
+                  .flatMap(new Function<String, ObservableSource<? extends String>>() {
+                      @Override
+                      public ObservableSource<? extends String> apply(final String word) throws Exception {
 
-
-                AtomicInteger count = new AtomicInteger();
-
-                AtomicBoolean isResponse = new AtomicBoolean(false);
-
-                AtomicLong inProcessResponseLastTime = new AtomicLong(System.currentTimeMillis());
-                Observable.interval(1001L, TimeUnit.MILLISECONDS).subscribe(new Consumer<Long>() {
-                    @Override
-                    public void accept(final Long aLong) throws Exception {
-
-                        inProcessResponseLastTime.set(System.currentTimeMillis());
-                    }
-                });
-
-                Observable.timer(2100, TimeUnit.MILLISECONDS).subscribe(new Consumer<Long>() {
-                    @Override
-                    public void accept(final Long aLong) throws Exception {
-
-                        isResponse.set(true);
-                        emitter.onNext("Message");
-                        emitter.onComplete();
-                    }
-                });
-
-                Observable.timer(DEFAULT_TIMEOUT_TIME, TimeUnit.MILLISECONDS)
-                          .repeatWhen(new Function<Observable<Object>, ObservableSource<?>>() {
-                              @Override
-                              public ObservableSource<?> apply(final Observable<Object> objectObservable)
-                                  throws Exception {
-
-                                  AtomicLong scheduledTime = new AtomicLong(Long.MIN_VALUE);
-
-
-                                  return objectObservable.takeWhile(new Predicate<Object>() {
-                                      @Override
-                                      public boolean test(final Object o) throws Exception {
-
-                                          if (isResponse.get()) {
-
-                                          } else if (doNotRestartTimerOnInProcessResponse) {
-                                              emitter.onError(new TimeoutException("Timeout while waiting for "
-                                                                                   + "response"));
-
-                                          } else if (inProcessResponseLastTime.get() + DEFAULT_TIMEOUT_TIME
-                                                     <= System.currentTimeMillis()) {
-                                              emitter.onError(new TimeoutException(
-                                                  "Timeout while waiting for response with retry timeout"));
-
-                                          } else {
-
-
-                                              scheduledTime.set(inProcessResponseLastTime.get() + DEFAULT_TIMEOUT_TIME
-                                                                - System.currentTimeMillis());
-                                              if (scheduledTime.get() > 0L) {
-                                                  LOGGER.info("Retrying {}", scheduledTime.get());
-                                                  return true;
-
-                                              } else {
-                                                  emitter.onError(new TimeoutException("Unexpecte timeout"));
-
-                                              }
-                                          }
-                                          return false;
-                                      }
-                                  }).flatMap((Function<Object, ObservableSource<?>>) o -> Observable.timer(scheduledTime
-                                                                                                               .get(),
-                                                                                                           TimeUnit
-                                                                                                               .MILLISECONDS));
-                              }
-                          })
-                          .subscribe();
-
-
-            }
-        });
-        final Observable<Long> empty = Observable.just("empty").timer(1000L, TimeUnit.MILLISECONDS);
-
-        empty.subscribe(new Consumer<Long>() {
-            @Override
-            public void accept(final Long aLong) throws Exception {
-
-                LOGGER.info(" Message send");
-                stringObservable.subscribe(new Observer<String>() {
-                    @Override
-                    public void onSubscribe(final Disposable d) {
-
-                        LOGGER.info("Subscribe");
-                    }
-
-                    @Override
-                    public void onNext(final String s) {
-
-                        LOGGER.info(s);
-                    }
-
-                    @Override
-                    public void onError(final Throwable e) {
-
-                        LOGGER.error("ERROR oocured {}", e.getMessage());
-                    }
-
-                    @Override
-                    public void onComplete() {
-
-                        LOGGER.info("Complete");
-                    }
-                });
-            }
-        });
-
-
-
-
-
-        //.blockingSubscribe(System.out::println, System.out::println);
-
-       /* Observable.timer(1, TimeUnit.SECONDS)
-        .doOnSubscribe(s -> System.out.println("subscribing"))
-          .map(new Function<Long, Object>() {
-              @Override
-              public Object apply(final Long v) throws Exception { throw new RuntimeException(); }
-          }).doOnError(new Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable throwable) throws Exception {
-                System.out.println("delay retry by " + throwable);
-            }
-        })
-        .retryWhen(new Function<Observable<Throwable>, ObservableSource<?>>() {
-            @Override
-            public ObservableSource<?> apply(final Observable<Throwable> errors) throws Exception {
-
-                AtomicInteger counter = new AtomicInteger();
-                return errors.takeWhile(new Predicate<Throwable>() {
-                    @Override
-                    public boolean test(final Throwable e) throws Exception {
-
-                        return counter.getAndIncrement() != 3;
-                    }
-                }).flatMap(new Function<Throwable, ObservableSource<? extends Long>>() {
-                    @Override
-                    public ObservableSource<? extends Long> apply(final Throwable e) throws Exception {
-
-                        System.out.println("delay retry by " + counter.get() + " second(s)");
-                        return Observable.timer(counter.get(), TimeUnit.SECONDS);
-                    }
-                });
-            }
-        })
-        .blockingSubscribe(System.out::println, System.out::println);*/
-
-
-        Observable.just("Hello").delay(100000, TimeUnit.MILLISECONDS).subscribe(new Observer<String>() {
-            @Override
-            public void onSubscribe(final Disposable d) {
-
-            }
-
-            @Override
-            public void onNext(final String s) {
-
-                LOGGER.info(s);
-            }
-
-            @Override
-            public void onError(final Throwable e) {
-
-            }
-
-            @Override
-            public void onComplete() {
-
-            }
-        });
-
-       /* try {
-            Thread.sleep(10000L);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }*/
-
+                          return Observable.fromArray(word.split(""));
+                      }
+                  })
+                  .zipWith(Observable.range(1, Integer.MAX_VALUE),
+                           (string, count) -> String.format("%2d. %s", count, string))
+                  .subscribe(System.out::println);
         final RXJavaExample example = new RXJavaExample();
 
-        final PublishProcessor<String> processor = example.getProcessor();
+        final PublishProcessor<Message> processor = example.getProcessor();
 
-        final Flowable<String> filter = processor.onBackpressureBuffer(5, new Action() {
+        final Flowable<Message> filter = processor.onBackpressureBuffer(5, new Action() {
             @Override
             public void run() throws Exception {
 
                 //  LOGGER.info("Overflow");
             }
-        }, BackpressureOverflowStrategy.DROP_OLDEST).filter(s -> true).map(s -> "Mapped " + s)
+        }, BackpressureOverflowStrategy.DROP_OLDEST).filter(new Predicate<Message>() {
+            @Override
+            public boolean test(final Message s) throws Exception {
 
-                                                 .onBackpressureDrop(new Consumer<String>() {
+                return true;
+            }
+        }).onBackpressureDrop(new Consumer<Message>() {
                                                      @Override
-                                                     public void accept(final String s) throws Exception {
+                                                     public void accept(final Message s) throws Exception {
 
-                                                         //  LOGGER.info("Dropped {}", s);
+                                                           LOGGER.info("Dropped {}", s.getMessage());
                                                      }
                                                  }).observeOn(Schedulers.from(example.getExecutor()));
 
@@ -293,9 +148,9 @@ public class RXJavaExample {
         example.startMessageCreator();
     }
 
-    private static Subscriber<String> getSubscriber(final String name, final boolean useSleep) {
+    private static Subscriber<Message> getSubscriber(final String name, final boolean useSleep) {
 
-        return new Subscriber<String>() {
+        return new Subscriber<Message>() {
             private Subscription subscription;
 
             @Override
@@ -307,7 +162,7 @@ public class RXJavaExample {
             }
 
             @Override
-            public void onNext(final String s) {
+            public void onNext(final Message s) {
 
                 this.subscription.request(1);
                 if (useSleep) {
@@ -320,7 +175,7 @@ public class RXJavaExample {
                 }
 
 
-                //  LOGGER.info("{}: {}", name, s);
+                  LOGGER.info("{}: {}", name, s.getMessage());
             }
 
             @Override
@@ -342,7 +197,7 @@ public class RXJavaExample {
         return executor;
     }
 
-    public PublishProcessor<String> getProcessor() {
+    public PublishProcessor<Message> getProcessor() {
 
         return processor;
     }
@@ -353,7 +208,11 @@ public class RXJavaExample {
         thread.start();
     }
 
-    public void messageReceived(final String msg) throws Exception {
+    public void messageReceived(final Message msg) throws Exception {
+
+        final Map<String,Long> dropdmap = new HashMap<>();
+
+
 
         processor.onNext(msg);
 

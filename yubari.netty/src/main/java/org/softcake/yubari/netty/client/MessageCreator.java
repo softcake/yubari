@@ -36,8 +36,12 @@ public class MessageCreator implements Runnable {
 
         while (true) {
             String msg = "message-" + count;
+
+
             try {
-                this.example.messageReceived(msg);
+                this.example.messageReceived(new Message("A",count));
+                this.example.messageReceived(new Message("B",count));
+                this.example.messageReceived(new Message("C",count));
             } catch (Exception e) {
                 e.printStackTrace();
             }
