@@ -22,10 +22,10 @@ import java.util.concurrent.ThreadLocalRandom;
  * @author René Neubert
  */
 public class MessageCreator implements Runnable {
-    RXJavaExample example;
+    RxPublishExample example;
     int count = 0;
 
-    public MessageCreator(final RXJavaExample example) {
+    public MessageCreator(final RxPublishExample example) {
 
         this.example = example;
     }
@@ -38,23 +38,25 @@ public class MessageCreator implements Runnable {
             String msg = "message-" + count;
 
 
-            try {
-                this.example.messageReceived(new Message("A",count));
-                this.example.messageReceived(new Message("B",count));
-                this.example.messageReceived(new Message("C",count));
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            count++;
+
+
             if (count == Integer.MAX_VALUE) {
                 count = 0;
             }
-            final long nextLong = ThreadLocalRandom.current().nextLong(10, 100);
+            final long nextLong = ThreadLocalRandom.current().nextLong(1000, 1500);
             try {
                 Thread.sleep(nextLong);
             } catch (InterruptedException e) {
                 e.printStackTrace();
                 break;
+            }
+            try {
+                this.example.messageReceived(new Message("A",count));
+                this.example.messageReceived(new Message("B",count));
+                this.example.messageReceived(new Message("C",count));
+                count++;
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
 

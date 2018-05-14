@@ -68,6 +68,7 @@ import io.reactivex.Single;
 import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
@@ -469,7 +470,28 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
 
     public Single<Boolean> writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
+Observable.just(true).delay(2000L, TimeUnit.MILLISECONDS).subscribe(new Observer<Boolean>() {
+    @Override
+    public void onSubscribe(final Disposable d) {
+        clientSession.getChannelTrafficBlocker().suspend(channel);
+    }
 
+    @Override
+    public void onNext(final Boolean aBoolean) {
+
+        clientSession.getChannelTrafficBlocker().resume(channel);
+    }
+
+    @Override
+    public void onError(final Throwable e) {
+
+    }
+
+    @Override
+    public void onComplete() {
+
+    }
+});
         final int messagesCounter = sentMessagesCounterIncrementAndGet();
 
         return Single.create(new SingleOnSubscribe<Boolean>() {

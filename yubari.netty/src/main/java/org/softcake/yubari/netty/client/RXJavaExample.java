@@ -18,6 +18,7 @@ package org.softcake.yubari.netty.client;
 
 import org.softcake.yubari.netty.mina.TransportHelper;
 
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import io.reactivex.BackpressureOverflowStrategy;
 import io.reactivex.Flowable;
@@ -35,6 +36,7 @@ import io.reactivex.functions.Predicate;
 import io.reactivex.internal.operators.observable.ObservableJust;
 import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
+import io.reactivex.schedulers.TestScheduler;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -47,6 +49,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -83,6 +86,27 @@ public class RXJavaExample {
     private long sleepTime = DEFAULT_SLEEP_TIME;
 
     public static void main(final String[] args) {
+
+        final List<String> items = Lists.newArrayList("a", "b", "c", "d", "e", "f");
+
+        final TestScheduler scheduler = new TestScheduler();
+
+        Observable.fromIterable(items)
+                  .flatMap(new Function<String, ObservableSource<? extends String>>() {
+                      @Override
+                      public ObservableSource<? extends String> apply(final String s) throws Exception {
+
+                          final int delay = new Random().nextInt(10);
+                          return Observable.just(s + "x").delay(delay, TimeUnit.SECONDS, scheduler);
+                      }
+                  })
+                  .toList()
+                  .doOnSuccess(System.out::println)
+                  .subscribe();
+
+        scheduler.advanceTimeBy(1, TimeUnit.MINUTES);
+
+
         List<String> words = Arrays.asList(
             "the",
             "quick",
@@ -128,13 +152,7 @@ public class RXJavaExample {
 
                 //  LOGGER.info("Overflow");
             }
-        }, BackpressureOverflowStrategy.DROP_OLDEST).filter(new Predicate<Message>() {
-            @Override
-            public boolean test(final Message s) throws Exception {
-
-                return true;
-            }
-        }).onBackpressureDrop(new Consumer<Message>() {
+        }, BackpressureOverflowStrategy.DROP_OLDEST).onBackpressureDrop(new Consumer<Message>() {
                                                      @Override
                                                      public void accept(final Message s) throws Exception {
 
@@ -143,8 +161,14 @@ public class RXJavaExample {
                                                  }).observeOn(Schedulers.from(example.getExecutor()));
 
 
+        filter.toObservable().buffer(10,2).flatMap(new Function<List<Message>, ObservableSource<Message>>() {
+            @Override
+            public ObservableSource<Message> apply(final List<Message> messages) throws Exception {
+
+                return Observable.fromIterable(messages);
+            }
+        }).subscribe(getObserver("Second", true));
         filter.subscribe(getSubscriber("First", false));
-        filter.subscribe(getSubscriber("Second", true));
         example.startMessageCreator();
     }
 
@@ -166,7 +190,7 @@ public class RXJavaExample {
 
                 this.subscription.request(1);
                 if (useSleep) {
-                    final long nextLong = ThreadLocalRandom.current().nextLong(1000, 2000);
+                    final long nextLong = ThreadLocalRandom.current().nextLong(3000, 10000);
                     try {
                         Thread.sleep(nextLong);
                     } catch (final InterruptedException e) {
@@ -176,6 +200,48 @@ public class RXJavaExample {
 
 
                   LOGGER.info("{}: {}", name, s.getMessage());
+            }
+
+            @Override
+            public void onError(final Throwable t) {
+
+                // LOGGER.error("Error occurred in onError for subscriber {}", name, t);
+            }
+
+            @Override
+            public void onComplete() {
+
+                LOGGER.info("Completed for Subscriber {}", name);
+            }
+        };
+    }
+    private static Observer<Message> getObserver(final String name, final boolean useSleep) {
+
+        return new Observer<Message>() {
+
+
+
+
+            @Override
+            public void onSubscribe(final Disposable d) {
+
+            }
+
+            @Override
+            public void onNext(final Message s) {
+
+
+                if (useSleep) {
+                    final long nextLong = ThreadLocalRandom.current().nextLong(3000, 10000);
+                    try {
+                        Thread.sleep(nextLong);
+                    } catch (final InterruptedException e) {
+                        LOGGER.error("Error occurred in onNext for subscriber {}", name, e);
+                    }
+                }
+
+
+                LOGGER.info("{}: {}", name, s.getMessage());
             }
 
             @Override
@@ -204,8 +270,8 @@ public class RXJavaExample {
 
     public void startMessageCreator() {
 
-        final Thread thread = new Thread(new MessageCreator(this), "MessageCounter");
-        thread.start();
+      /*  final Thread thread = new Thread(new MessageCreator(this), "MessageCounter");
+        thread.start();*/
     }
 
     public void messageReceived(final Message msg) throws Exception {
