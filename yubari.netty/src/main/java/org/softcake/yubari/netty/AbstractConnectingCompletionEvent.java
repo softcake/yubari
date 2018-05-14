@@ -16,18 +16,18 @@
 
 package org.softcake.yubari.netty;
 
-import io.netty.util.internal.ObjectUtil;
+import org.softcake.cherry.core.base.PreCheck;
 
-public abstract class AbstractProtocolVersionNegotiationEvent {
+public abstract class AbstractConnectingCompletionEvent {
 
     private final Throwable cause;
 
-    AbstractProtocolVersionNegotiationEvent() {
+    AbstractConnectingCompletionEvent() {
         cause = null;
     }
 
-    AbstractProtocolVersionNegotiationEvent(Throwable cause) {
-        this.cause = ObjectUtil.checkNotNull(cause, "cause");
+    AbstractConnectingCompletionEvent(final Throwable cause) {
+        this.cause = PreCheck.parameterNotNull(cause, "cause");
     }
 
     /**
@@ -48,7 +48,7 @@ public abstract class AbstractProtocolVersionNegotiationEvent {
     @Override
     public  String toString() {
         final Throwable cause = cause();
-        return cause == null? getClass().getSimpleName() + "(SUCCESS)" :
+        return cause == null? getClass().getSimpleName() + "(success)" :
                getClass().getSimpleName() +  '(' + cause + ')';
     }
 }

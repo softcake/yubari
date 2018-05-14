@@ -29,11 +29,11 @@ import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ConnectTimeoutException;
 import io.netty.util.Attribute;
 import io.reactivex.Single;
+import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
+import io.reactivex.functions.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +41,6 @@ import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -542,27 +541,20 @@ this.isProcessConnecting = true;
     private Single<Channel> processConnectingAndGetFuture(final InetSocketAddress address) throws InterruptedException {
 
 
-        return Single.create((SingleOnSubscribe<Channel>) e -> {
+        return Single.create(new SingleOnSubscribe<Channel>() {
+            @Override
+            public void subscribe(final SingleEmitter<Channel> e) throws Exception {
 
-            final ChannelFuture future = channelBootstrap.connect(address);
-            future.addListener((ChannelFutureListener) cf -> {
+                final ChannelFuture future = channelBootstrap.connect(address);
+                future.addListener(NettyUtil.getDefaultChannelFutureListener(e, new Function<ChannelFuture, Channel>
+                    () {
+                    @Override
+                    public Channel apply(final ChannelFuture channelFuture) throws Exception {
 
-                if (cf.isSuccess() && cf.isDone()) {
-                    // Completed successfully
-                    e.onSuccess(cf.channel());
-                } else if (cf.isCancelled() && cf.isDone()) {
-                    // Completed by cancellation
-                    e.onError(new CancellationException("cancelled before completed"));
-                } else if (cf.isDone() && cf.cause() != null) {
-                    // Completed with failure
-                    e.onError(cf.cause());
-                } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
-                    // Uncompleted
-                    e.onError(new ConnectTimeoutException());
-                } else {
-                    e.onError(new Exception("Unexpected ChannelFuture state"));
-                }
-            });
+                        return channelFuture.channel();
+                    }
+                }));
+            }
         })
                      .doOnSubscribe(disposable -> LOGGER.debug("[{}] Connecting to [{}]",
                                                                clientSession.getTransportName(),

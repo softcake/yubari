@@ -19,7 +19,10 @@ package org.softcake.yubari.netty.client;
 import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
 
 import org.softcake.cherry.core.base.PreCheck;
-import org.softcake.yubari.netty.ProtocolVersionNegotiationEvent;
+import org.softcake.yubari.netty.AbstractConnectingCompletionEvent;
+import org.softcake.yubari.netty.AuthorizationCompletionEvent;
+import org.softcake.yubari.netty.ProtocolVersionNegotiationCompletionEvent;
+import org.softcake.yubari.netty.SslCompletionEvent;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.processors.HeartbeatProcessor;
 import org.softcake.yubari.netty.client.processors.StreamProcessor;
@@ -74,7 +77,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -94,7 +96,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             return new int[1];
         }
     });
-private final PublishSubject<AuthorizationEvent.Event> authorizationEvent;
+    private final PublishSubject<AbstractConnectingCompletionEvent> authorizationEvent;
     private final TransportClientSession clientSession;
     private final ListeningExecutorService eventExecutor;
     private final ListeningExecutorService authEventExecutor;
@@ -126,7 +128,7 @@ private final PublishSubject<AuthorizationEvent.Event> authorizationEvent;
 
     }
 
-    public Observable<AuthorizationEvent.Event> observeAuthorizationEvent(Executor executor){
+    public Observable<AbstractConnectingCompletionEvent> observeAuthorizationEvent(Executor executor) {
 
         return authorizationEvent.subscribeOn(Schedulers.from(executor));
     }
@@ -299,9 +301,7 @@ private final PublishSubject<AuthorizationEvent.Event> authorizationEvent;
         final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel().attr(
             CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
         final ChannelAttachment attachment = channelAttachmentAttribute.get();
-        if (attachment == null) {
-            LOGGER.trace("Attchement null");
-        }
+
         LOGGER.trace("[{}] Message received {}, primary channel: {}",
                      this.clientSession.getTransportName(),
                      msg,
@@ -333,22 +333,12 @@ private final PublishSubject<AuthorizationEvent.Event> authorizationEvent;
 
         super.userEventTriggered(ctx, evt);
 
-        if (evt instanceof SslHandshakeCompletionEvent && ((SslHandshakeCompletionEvent) evt).isSuccess()) {
-
-            //TODO
-            this.clientConnector.sslHandshakeSuccess();
-            authorizationEvent.onNext(AuthorizationEvent.Event.SSL);
-        } else if (evt instanceof ProtocolVersionNegotiationEvent) {
-            ProtocolVersionNegotiationEvent event = (ProtocolVersionNegotiationEvent) evt;
-            if (event.isSuccess()) {
-                authorizationEvent.onNext(AuthorizationEvent.Event.PROTOCOL_VERSION_NEGOTIATION);
-                this.clientConnector.protocolVersionNegotiationSuccess();
-            } else {
-                this.clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason
-                                                                               .PROTOCOL_VERSION_NEGOTIATION_TIMEOUT,
-                                                                           "wrong protocol version",
-                                                                           event.cause()));
-            }
+        if (evt instanceof SslHandshakeCompletionEvent) {
+            authorizationEvent.onNext(((SslHandshakeCompletionEvent) evt).isSuccess()
+                                      ? SslCompletionEvent.success()
+                                      : SslCompletionEvent.failed(((SslHandshakeCompletionEvent) evt).cause()));
+        } else if (evt instanceof ProtocolVersionNegotiationCompletionEvent) {
+            authorizationEvent.onNext((ProtocolVersionNegotiationCompletionEvent) evt);
         }
     }
 
@@ -381,12 +371,21 @@ private final PublishSubject<AuthorizationEvent.Event> authorizationEvent;
                      protocolMessage);
 
         if (protocolMessage instanceof OkResponseMessage) {
-
-            authorizationEvent.onNext(AuthorizationEvent.Event.AUTHORIZING);
-            this.clientConnector.authorizingSuccess(this.clientSession.getAuthorizationProvider().getSessionId(),
-                                                    this.clientSession.getAuthorizationProvider().getLogin());
+            LOGGER.debug(
+                "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",
+                this.clientSession.getTransportName(),
+                this.clientSession.getAuthorizationProvider().getSessionId(),
+                this.clientSession.getAuthorizationProvider().getLogin());
+            this.clientSession.setServerSessionId(this.clientSession.getAuthorizationProvider().getSessionId());
+            authorizationEvent.onNext(AuthorizationCompletionEvent.success());
         } else if (protocolMessage instanceof ErrorResponseMessage) {
-            this.clientConnector.authorizationError(((ErrorResponseMessage) protocolMessage).getReason());
+
+            final String errorReason = ((ErrorResponseMessage) protocolMessage).getReason();
+            LOGGER.error("[{}] Received AUTHORIZATION_ERROR notification from the authorization provider, reason: [{}]",
+                         this.clientSession.getTransportName(),
+                         errorReason);
+            authorizationEvent.onNext(AuthorizationCompletionEvent.failed(new Exception(errorReason)));
+
         } else if (protocolMessage instanceof HaloResponseMessage) {
             final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
             loginRequestMessage.setUsername(this.clientSession.getAuthorizationProvider().getLogin());
@@ -488,18 +487,7 @@ private final PublishSubject<AuthorizationEvent.Event> authorizationEvent;
                     ClientProtocolHandler.this.checkSendingWarning(procStartTime, future);
                 }
 
-                future.addListener((ChannelFutureListener) cf -> {
-
-                    if (cf.isSuccess()) {
-                        e.onSuccess(true);
-                    } else if (cf.isCancelled()) {
-                        e.onError(new CancellationException("cancelled before completed"));
-                    } else if (cf.isDone() && cf.cause() != null) {
-                        e.onError(cf.cause());
-                    } else {
-                        e.onError(new Exception("Unexpected ChannelFuture state"));
-                    }
-                });
+                future.addListener(NettyUtil.getDefaultChannelFutureListener(e, channelFuture -> Boolean.TRUE));
             }
         })
                      .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachment(channel,
@@ -657,13 +645,12 @@ private final PublishSubject<AuthorizationEvent.Event> authorizationEvent;
 
     private void proccessDisconnectRequestMessage(final DisconnectRequestMessage requestMessage) {
 
-        final DisconnectRequestMessage message = requestMessage;
-        final DisconnectReason reason = message.getReason() == null
+        final DisconnectReason reason = requestMessage.getReason() == null
                                         ? DisconnectReason.SERVER_APP_REQUEST
-                                        : message.getReason();
+                                        : requestMessage.getReason();
 
         this.clientConnector.disconnect(new ClientDisconnectReason(reason,
-                                                                   message.getHint(),
+                                                                   requestMessage.getHint(),
                                                                    "Disconnect request received"));
     }
 

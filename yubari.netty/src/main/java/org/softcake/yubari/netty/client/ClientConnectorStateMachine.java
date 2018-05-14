@@ -77,33 +77,33 @@ public class ClientConnectorStateMachine {
             ClientState.DISCONNECTED);
 
 
-        IDLE.onEnter((c, s) -> c.onIdleEnter(s))
+        IDLE.onEnter((c, s) -> c.onClientStateEnter(s))
             .transition(Event.CONNECTING, CONNECTING)
             .transition(Event.DISCONNECTING, DISCONNECTING);
 
-        CONNECTING.onEnter((c, s) -> c.onConnectingEnter(s))
+        CONNECTING.onEnter((c, s) -> c.onClientStateEnter(s))
                   .transition(Event.SSL_HANDSHAKE_SUCCESSFUL, SSL_HANDSHAKE)
                   .transition(Event.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL, PROTOCOL_VERSION_NEGOTIATION)
                   .transition(Event.DISCONNECTING, DISCONNECTING);
 
-        SSL_HANDSHAKE.onEnter((c, s) -> c.onSslHandshakeEnter(s))
+        SSL_HANDSHAKE.onEnter((c, s) -> c.onClientStateEnter(s))
                      .transition(Event.PROTOCOL_VERSION_NEGOTIATION_SUCCESSFUL, PROTOCOL_VERSION_NEGOTIATION)
                      .transition(Event.DISCONNECTING, DISCONNECTING);
 
 
-        PROTOCOL_VERSION_NEGOTIATION.onEnter((c, s) -> c.onProtocolVersionNegotiationEnter(s))
+        PROTOCOL_VERSION_NEGOTIATION.onEnter((c, s) -> c.onClientStateEnter(s))
                                     .transition(Event.AUTHORIZING, AUTHORIZING)
                                     .transition(Event.DISCONNECTING, DISCONNECTING);
 
 
-        AUTHORIZING.onEnter((c, s) -> c.onAuthorizingEnter(s))
+        AUTHORIZING.onEnter((c, s) -> c.onClientStateEnter(s))
                    .transition(Event.ONLINE, ONLINE)
                    .transition(Event.DISCONNECTING, DISCONNECTING);
 
-        ONLINE.onEnter((c, s) -> c.onOnlineEnter(s)).transition(Event.DISCONNECTING,
+        ONLINE.onEnter((c, s) -> c.onClientStateEnter(s)).transition(Event.DISCONNECTING,
                                                                                                     DISCONNECTING);
-        DISCONNECTING.onEnter((c, s) -> c.onDisconnectingEnter(s)).transition(Event.DISCONNECTED, DISCONNECTED);
-        DISCONNECTED.onEnter((c, s) -> c.onDisconnectedEnter(s)).onExit(log("exit"));
+        DISCONNECTING.onEnter((c, s) -> c.onClientStateEnter(s)).transition(Event.DISCONNECTED, DISCONNECTED);
+        DISCONNECTED.onEnter((c, s) -> c.onClientStateEnter(s)).onExit(log("exit"));
 
 
         return new StateMachine<>(clientSateConnector2, IDLE, executor, session.getTransportName());

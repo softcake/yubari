@@ -69,6 +69,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -328,13 +329,18 @@ public class TransportClientSession {
         this.channelBootstrap = new Bootstrap();
         this.channelBootstrap.group(nettyEventLoopGroup);
         this.channelBootstrap.channel(NioSocketChannel.class);
-        this.channelOptions.forEach((key, value) -> this.channelBootstrap.option((ChannelOption) key, value));
+        this.channelOptions.forEach(new BiConsumer<ChannelOption<?>, Object>() {
+            @Override
+            public void accept(final ChannelOption<?> key, final Object value) {
+
+                TransportClientSession.this.channelBootstrap.option((ChannelOption) key, value);
+            }
+        });
         this.protocolHandler = new ClientProtocolHandler(this);
-        // this.clientConnector = new ClientConnectorOld(this.address, this.channelBootstrap, this, this.protocolHandler);
         this.clientConnector = new ClientConnector(this.address,
                                                    this.channelBootstrap,
                                                    this);
-        // clientConnector.connect();
+
         this.protocolHandler.setClientConnector(this.clientConnector);
         final Consumer<SecurityExceptionEvent> subscriber = clientConnector.observeSslSecurity();
         this.channelBootstrap.handler(new ChannelInitializer<SocketChannel>() {

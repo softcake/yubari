@@ -44,8 +44,8 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
     private static final int BODY_LENGTH = 4;
     private static final String TRANSPORT_HELLO_MESSAGE = "DDS4TRANSPORT";
     private static final int SEVER_RESPONSE_MESSAGE_SIZE = TRANSPORT_HELLO_MESSAGE.length() + 2 + 4;
-    private final String transportName;
     private static final Logger LOGGER = LoggerFactory.getLogger(ProtocolVersionClientNegotiatorHandler.class);
+    private final String transportName;
 
     public ProtocolVersionClientNegotiatorHandler(final String transportName) {
 
@@ -218,13 +218,13 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
 
                         setProtocolVersionAttribute(ctx, acceptedVersion);
                         LOGGER.trace("[{}] Server responded with version: {}", this.transportName, acceptedVersion);
-                        ctx.fireUserEventTriggered(ProtocolVersionNegotiationEvent.SUCCESS);
+                        ctx.fireUserEventTriggered(ProtocolVersionNegotiationCompletionEvent.success());
 
                     } else {
-                        IllegalArgumentException exception = new IllegalArgumentException(String.format(
+                        final IllegalArgumentException exception = new IllegalArgumentException(String.format(
                             "Not supported protocol version: [%d]",
                             acceptedVersion));
-                        ctx.fireUserEventTriggered(new ProtocolVersionNegotiationEvent(exception));
+                        ctx.fireUserEventTriggered(ProtocolVersionNegotiationCompletionEvent.failed(exception));
                         logErrorMessage(acceptedVersion);
                         //TODO really?
                         ctx.close();

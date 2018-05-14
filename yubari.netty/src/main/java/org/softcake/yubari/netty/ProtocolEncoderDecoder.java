@@ -16,8 +16,8 @@
 
 package org.softcake.yubari.netty;
 
-import static  org.softcake.yubari.netty.TransportAttributeKeys.DECODER_ATTACHMENT_ATTRIBUTE_KEY;
-import static  org.softcake.yubari.netty.TransportAttributeKeys.ENCODER_ATTACHMENT_ATTRIBUTE_KEY;
+import static org.softcake.yubari.netty.TransportAttributeKeys.DECODER_ATTACHMENT_ATTRIBUTE_KEY;
+import static org.softcake.yubari.netty.TransportAttributeKeys.ENCODER_ATTACHMENT_ATTRIBUTE_KEY;
 import static org.softcake.yubari.netty.TransportAttributeKeys.PROTOCOL_VERSION_ATTRIBUTE_KEY;
 import static org.softcake.yubari.netty.TransportAttributeKeys.PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY;
 
@@ -94,7 +94,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
             synchronized (messageQueue) {
                 messageQueue.forEach(pendingWrite -> {
-                   // ReferenceCountUtil.release(pendingWrite.msg());
+                    // ReferenceCountUtil.release(pendingWrite.msg());
 
                     try {
                         pendingWrite.failAndRecycle(CLOSED_CHANNEL_EXCEPTION);
@@ -134,13 +134,17 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
     @Override
     public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
 
-        if (evt instanceof ProtocolVersionNegotiationEvent) {
+        if (evt instanceof ProtocolVersionNegotiationCompletionEvent
+            && ((ProtocolVersionNegotiationCompletionEvent) evt).isSuccess()) {
+
             final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
                 PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
             final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
             if (messageQueue != null) {
                 this.sendScheduledMessages(ctx, messageQueueAttribute);
             }
+
+
         }
 
         super.userEventTriggered(ctx, evt);
@@ -157,11 +161,11 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         final int protocolVersion = getProtocolVersion(ctx);
 
         if (protocolVersion < DEFAULT_PROTOCOL_VERSION) {
-            throw new UnsupportedEncodingException("Protocolversion < 4 not supported");
+            throw new UnsupportedEncodingException("Protocol version < 4 not supported");
         }
 
         final ByteBuf byteBuf = (ByteBuf) msg;
-        try (DataInputStream msgData = new DataInputStream(new ByteBufInputStream(byteBuf))) {
+        try (final DataInputStream msgData = new DataInputStream(new ByteBufInputStream(byteBuf))) {
 
             final SessionProtocolDecoder sessionProtocolDecoder = getSessionProtocolDecoder(ctx);
             final BinaryProtocolMessage message = sessionProtocolDecoder.decodeMessage(protocolVersion, msgData);
@@ -205,20 +209,16 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
         final Attribute<Integer> firstMessageAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
         final Object firstMessage = firstMessageAttribute.get();
-         Attribute<ArrayList<PendingWrite>> messageQueueAttribute;
-         ArrayList<PendingWrite> messageQueue;
+        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+        final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
 
 
         if (firstMessage == null) {
-            messageQueueAttribute = ctx.channel().attr(PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
-            messageQueue = messageQueueAttribute.get();
             synchronized (messageQueue) {
                 messageQueue.add(PendingWrite.newInstance(msg, promise));
             }
 
         } else {
-            messageQueueAttribute = ctx.channel().attr(PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
-            messageQueue = messageQueueAttribute.get();
             this.sendScheduledMessages(ctx, messageQueueAttribute);
             this.doEncode(ctx, msg, promise);
         }
@@ -228,7 +228,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
         ByteBuf buf = ctx.alloc().ioBuffer();
 
-        try (DataOutputStream dataOutputStream = new DataOutputStream(new ByteBufOutputStream(buf))) {
+        try (final DataOutputStream dataOutputStream = new DataOutputStream(new ByteBufOutputStream(buf))) {
 
             LOGGER.trace("[{}] Encoding [{}] to bytes", this.transportName, messageObject);
 
@@ -356,7 +356,9 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         }
 
         synchronized (messageQueue) {
-            messageQueue.forEach(pendingWrite -> doEncode(ctx, pendingWrite.msg(), (ChannelPromise) pendingWrite.promise()));
+            messageQueue.forEach(pendingWrite -> doEncode(ctx,
+                                                          pendingWrite.msg(),
+                                                          (ChannelPromise) pendingWrite.promise()));
             ctx.flush();
             messageQueue.clear();
         }

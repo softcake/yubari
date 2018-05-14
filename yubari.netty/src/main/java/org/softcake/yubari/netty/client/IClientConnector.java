@@ -53,14 +53,6 @@ public interface IClientConnector   {
 
     void childChannelDisconnected();
 
-    void sslHandshakeSuccess();
-
-    void protocolVersionNegotiationSuccess();
-
-    void authorizingSuccess(String sessionId, String login);
-
-    void authorizationError(String reason);
-
     void setPrimarySocketAuthAcceptorMessage(PrimarySocketAuthAcceptorMessage requestMessage);
 
     void setChildSocketAuthAcceptorMessage(ChildSocketAuthAcceptorMessage requestMessage);

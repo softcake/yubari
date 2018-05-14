@@ -17,36 +17,8 @@
 package org.softcake.yubari.netty.client;
 
 public interface SateMachineClient {
-    void onIdleEnter(ClientConnector.ClientState state);
 
-    void onIdleExit(ClientConnector.ClientState state);
+    void onClientStateEnter(final ClientConnector.ClientState state);
 
-    void onConnectingEnter(ClientConnector.ClientState state);
-
-    void onConnectingExit(ClientConnector.ClientState state);
-
-    void onSslHandshakeEnter(ClientConnector.ClientState state);
-
-    void onSslHandshakeExit(ClientConnector.ClientState state);
-
-    void onProtocolVersionNegotiationEnter(ClientConnector.ClientState state);
-
-    void onProtocolVersionNegotiationExit(ClientConnector.ClientState state);
-
-    void onAuthorizingEnter(ClientConnector.ClientState state);
-
-    void onAuthorizingExit(ClientConnector.ClientState state);
-
-    void onOnlineEnter(ClientConnector.ClientState state);
-
-    void onOnlineExit(ClientConnector.ClientState state);
-
-    void onDisconnectingEnter(ClientConnector.ClientState state);
-
-    void onDisconnectingExit(ClientConnector.ClientState state);
-
-    void onDisconnectedEnter(ClientConnector.ClientState state);
-
-    void onDisconnectedExit(ClientConnector.ClientState state);
 
 }
