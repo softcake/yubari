@@ -303,7 +303,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
         final ChannelAttachment attachment = channelAttachmentAttribute.get();
 
-        LOGGER.trace("[{}] Message received {}, primary channel: {}",
+        LOGGER.debug("[{}] Message received {}, primary channel: {}",
                      this.clientSession.getTransportName(),
                      msg,
                      attachment.isPrimaryConnection());
@@ -470,34 +470,14 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
 
     public Single<Boolean> writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
-Observable.just(true).delay(2000L, TimeUnit.MILLISECONDS).subscribe(new Observer<Boolean>() {
-    @Override
-    public void onSubscribe(final Disposable d) {
-        clientSession.getChannelTrafficBlocker().suspend(channel);
-    }
 
-    @Override
-    public void onNext(final Boolean aBoolean) {
-
-        clientSession.getChannelTrafficBlocker().resume(channel);
-    }
-
-    @Override
-    public void onError(final Throwable e) {
-
-    }
-
-    @Override
-    public void onComplete() {
-
-    }
-});
         final int messagesCounter = sentMessagesCounterIncrementAndGet();
 
         return Single.create(new SingleOnSubscribe<Boolean>() {
             @Override
             public void subscribe(final SingleEmitter<Boolean> e) throws Exception {
-
+                //clientSession.getChannelTrafficBlocker().suspend(channel);
+               // Observable.just(true).delay(2000L, TimeUnit.MILLISECONDS).subscribe(aBoolean -> clientSession.getChannelTrafficBlocker().resume(channel));
                 final ChannelFuture future = channel.writeAndFlush(responseMessage);
                 final long procStartTime = System.currentTimeMillis();
                 ClientProtocolHandler.this.checkSendingErrorOnNotWritableChannel(channel, future, procStartTime)

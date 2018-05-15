@@ -129,23 +129,27 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
                                                        final boolean isError) {
 
         return () -> {
-
+            if (future.isDone()) {
+                return;
+            }
 
 
             final long nanoTime = System.nanoTime();
             final long lastExecutionWarningOrErrorTime;
             final boolean isSet;
 
+            LOGGER.info("Time:{}", System.currentTimeMillis()-startTime);
+
             if (isError) {
                 lastExecutionWarningOrErrorTime = LAST_EXECUTION_ERROR_TIME.get();
                 isSet = LAST_EXECUTION_ERROR_TIME.compareAndSet(lastExecutionWarningOrErrorTime, nanoTime);
             } else {
 
-                LOGGER.info("First. {}", LAST_EXECUTION_WARNING_TIME.get());
+
                 lastExecutionWarningOrErrorTime = LAST_EXECUTION_WARNING_TIME.get();
                 isSet = LAST_EXECUTION_WARNING_TIME.compareAndSet(lastExecutionWarningOrErrorTime, nanoTime);
 
-                LOGGER.info("Second. {}", LAST_EXECUTION_WARNING_TIME.get());
+
             }
 
             if (lastExecutionWarningOrErrorTime + ERROR_TIME_OFFSET < nanoTime && isSet) {
@@ -236,12 +240,12 @@ public abstract class AbstractEventExecutorChannelTask implements OrderedThreadP
 
                 try {
 
-
+/*
                     if (message instanceof CurrencyMarket) {
                         CurrencyMarket msg = (CurrencyMarket) message;
                         attemps[0]++;
                         LOGGER.info("Attemps in delayedExecutionTask : {} ID: {}", attemps[0], msg.getCreationTimestamp());
-                    }
+                    }*/
 
 
 

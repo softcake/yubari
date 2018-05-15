@@ -100,13 +100,19 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
 
     public static boolean isSuspended(final Channel channel) {
 
-        final Boolean suspended = channel.attr(READ_SUSPENDED).get();
-        return suspended != null && !Boolean.FALSE.equals(suspended);
+       Boolean suspended = channel.attr(READ_SUSPENDED).get();
+        if (suspended == null) {
+            suspended = Boolean.FALSE;
+            channel.attr(READ_SUSPENDED).set(suspended);
+        }
+        LOGGER.info("---------------------------------------< Channnel isSuspended?:{}", suspended);
+        return suspended;
     }
 
     public static boolean isSuspended(final ChannelHandlerContext ctx) {
-
-        return isSuspended(ctx.channel());
+        boolean a = isSuspended(ctx.channel());
+        LOGGER.info("---------------------------------------< isSuspended?:{}", a);
+        return a;
     }
 
     public void suspend(final ChannelHandlerContext ctx) {
@@ -116,8 +122,8 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
 
     public void suspend(final Channel channel) {
 
-        channel.attr(READ_SUSPENDED).set(true);
-        channel.config().setAutoRead(false);
+        channel.attr(READ_SUSPENDED).set(Boolean.TRUE);
+       // channel.config().setAutoRead(false);
         LOGGER.trace("[{}] Reading suspended", this.transportName);
     }
 

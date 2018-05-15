@@ -864,21 +864,26 @@ public class DClient implements ClientListener {
     }
 public int anInt;
     public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
+
+        anInt++;
+
+        if (anInt == 20) {
+            try {
+
+                Thread.sleep(120000L);
+                anInt = 0;
+            } catch (InterruptedException e) {
+
+            }
+        }
+LOGGER.info("retry");
        /* if ((message instanceof CurrencyMarket)) {
             final long end = System.currentTimeMillis();
            final long start = ((CurrencyMarket)  message).getCreationTimestamp();
 
             LOGGER.error("Timestamp in DCClient: {} Execution Time: {}ms", start , end-start );
         }*/
-      /*  anInt++;
-
-        if (anInt == 10) {
-            try {
-                Thread.sleep(120000L);
-            } catch (InterruptedException e) {
-
-            }
-        }
+      /*
 
         if (message instanceof CurrencyMarket) {
             CurrencyMarket msg = (CurrencyMarket) message;
@@ -1184,6 +1189,8 @@ public int anInt;
             InstrumentManager instrumentManager = new InstrumentManager(this.transportClient);
             Set<Instrument> instruments = new HashSet<>();
             instruments.add(Instrument.EURUSD);
+            instruments.add(Instrument.AUDCAD);
+            instruments.add(Instrument.EURJPY);
             instrumentManager.addToFullDepthSubscribed(instruments);
 /*
             NewsSubscribeRequest newsUnsubscribeRequest = new NewsSubscribeRequest();

@@ -18,24 +18,28 @@ package org.softcake.yubari.netty.client;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
+import org.softcake.yubari.netty.data.DroppableMessageHandler2;
 import org.softcake.yubari.netty.mina.TransportHelper;
 
+import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.ListeningExecutorService;
+import io.reactivex.BackpressureStrategy;
+import io.reactivex.Flowable;
 import io.reactivex.Observable;
-import io.reactivex.ObservableSource;
 import io.reactivex.functions.Consumer;
-import io.reactivex.functions.Function;
 import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -54,12 +58,6 @@ public class RxPublishExample {
     private static final long SHORTER_SLEEP_TIME = 5L;
     private static final long DEFAULT_SLEEP_TIME = 10L;
     private static final long DEFAULT_TIMEOUT_TIME = 1000L;
-
-    public ListeningExecutorService getExecutor() {
-
-        return executor;
-    }
-
     private final ListeningExecutorService executor = TransportHelper.createExecutor(DEFAULT_EVENT_POOL_SIZE,
                                                                                      DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL,
                                                                                      DEFAULT_CRITICAL_EVENT_QUEUE_SIZE,
@@ -67,51 +65,27 @@ public class RxPublishExample {
                                                                                      eventExecutorThreadsForLogging,
                                                                                      "DDS2 Standalone Transport Client",
                                                                                      true);
-    private PublishSubject<Message> messagePublishSubject = PublishSubject.create();
+    AtomicInteger messagesCounter = new AtomicInteger(0);
+    AtomicInteger droppedMessagesCounter = new AtomicInteger(0);
+    DroppableMessageHandler2 messageHandler2 = new DroppableMessageHandler2(null);
+    AtomicBoolean isSupsended = new AtomicBoolean(Boolean.FALSE);
+    PublishSubject<ProtocolMessage> publishSubject = PublishSubject.create();
+    private PublishSubject<ProtocolMessage> messagePublishSubject = PublishSubject.create();
 
     public static void main(String[] args) {
 
         RxPublishExample example = new RxPublishExample();
         AtomicLong aLong = new AtomicLong(Long.MIN_VALUE);
-        example.getMessagePublishSubject().filter(new Predicate<Message>() {
+
+       // example.getMessagePublishSubject().subscribe();
+
+        example.getMessagePublishSubject().subscribe(new Consumer<ProtocolMessage>() {
             @Override
-            public boolean test(final Message message) throws Exception {
+            public void accept(final ProtocolMessage message) throws Exception {
 
+                LOGGER.info("Message in first Consumer: {}", message);
 
-                LOGGER.info("Message in predicate: {}",message.getMessage());
-                return message.getName().equals("A");
-            }
-        }).doOnNext(new Consumer<Message>() {
-            @Override
-            public void accept(final Message message) throws Exception {
-
-               aLong.set(message.getCreationTime());
-            }
-        }).observeOn(Schedulers.from(example.getExecutor())).filter(new Predicate<Message>() {
-            @Override
-            public boolean test(final Message message) throws Exception {
-
-                final long creationTime = aLong.get();
-                if (creationTime == message.getCreationTime()) {
-                    return true;
-                } else {
-
-                    return false;
-                }
-
-            }
-        }).doAfterNext(new Consumer<Message>() {
-            @Override
-            public void accept(final Message message) throws Exception {
-                long executionTime =  System.currentTimeMillis() - message.getCreationTime();
-                LOGGER.warn("Execution takes too long: {}ms {}",executionTime,message.getMessage());
-            }
-        }).subscribe(new Consumer<Message>() {
-            @Override
-            public void accept(final Message message) throws Exception {
-                LOGGER.info("Message in first Consumer: {}", message.getMessage());
-
-                final long nextLong = ThreadLocalRandom.current().nextLong(100, 500);
+                final long nextLong = ThreadLocalRandom.current().nextLong(300, 800);
                 try {
                     Thread.sleep(nextLong);
                 } catch (final InterruptedException e) {
@@ -121,27 +95,160 @@ public class RxPublishExample {
             }
         });
 
-      /*  example.getMessagePublishSubject().subscribeOn(Schedulers.from(example.getExecutor())).subscribe(new Consumer<Message>() {
+        example.getMessagePublishSubject().subscribe(new Consumer<ProtocolMessage>() {
             @Override
-            public void accept(final Message message) throws Exception {
+            public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
-                LOGGER.info("Message in second Consumer: {}", message.getMessage());
+                LOGGER.info("Message in second Consumer: {}", protocolMessage);
             }
-        });*/
+        });
 
         example.startMessageCreator();
 
     }
 
+    public AtomicInteger getDroppedMessagesCounter() {
 
-    public Observable<Message> getMessagePublishSubject() {
-
-        return  messagePublishSubject;
-
+        return droppedMessagesCounter;
     }
 
-    public void messageReceived(final Message msg) throws Exception {
+    public AtomicInteger getMessagesCounter() {
 
+        return messagesCounter;
+    }
+
+    public DroppableMessageHandler2 getMessageHandler2() {
+
+        return messageHandler2;
+    }
+
+    public ListeningExecutorService getExecutor() {
+
+        return executor;
+    }
+
+    public void suspend() {
+
+        isSupsended.set(Boolean.TRUE);
+    }
+
+    public void resume() {
+
+        isSupsended.set(Boolean.FALSE);
+    }
+
+    public Observable<ProtocolMessage> getMessagePublishSubject2() {
+
+        return publishSubject.subscribeOn(Schedulers.from(executor));
+    }
+
+    public Flowable<ProtocolMessage> getMessagePublishSubject() {
+
+        return Flowable.defer(new Callable<Publisher<? extends ProtocolMessage>>() {
+            @Override
+            public Publisher<? extends ProtocolMessage> call() throws Exception {
+AtomicInteger count = new AtomicInteger();
+                final AtomicLong processTime = new AtomicLong(0L);
+                return messagePublishSubject.toFlowable(BackpressureStrategy.MISSING)
+                                            .onBackpressureDrop(new Consumer<ProtocolMessage>() {
+                                                @Override
+                                                public void accept(final ProtocolMessage message) throws Exception {
+
+                                                    final int
+                                                        incrementAndGet
+                                                        = getDroppedMessagesCounter().incrementAndGet();
+                                                    final int messagesCount = getMessagesCounter().get();
+                                                    //Suspend Channel
+                                                    LOGGER.info("Suspend Channel, dropped Messages:{} all messages: {}",
+                                                                incrementAndGet,
+                                                                messagesCount);
+                                                    suspend();
+                                                }
+                                            })
+                                            .doOnNext(new Consumer<ProtocolMessage>() {
+                                                @Override
+                                                public void accept(final ProtocolMessage message) throws Exception {
+
+                                                    if (count.get() == 31) {
+                                                        processTime.set(System.currentTimeMillis());
+                                                        count.set(0);
+                                                    } else{
+
+                                                        count.incrementAndGet();
+                                                    }
+
+
+
+                                                    //  processTime.set(System.currentTimeMillis());
+                                                    //Process Timeout check!
+
+                                                }
+                                            })
+                                            .observeOn(Schedulers.from(getExecutor()))
+                                            .filter(new Predicate<ProtocolMessage>() {
+                                                @Override
+                                                public boolean test(final ProtocolMessage message) throws Exception {
+
+
+                                                    final boolean
+                                                        canProcessDroppableMessage
+                                                        = getMessageHandler2().canProcessDroppableMessage(message);
+                                                    if (!canProcessDroppableMessage) {
+
+
+                                                        LOGGER.warn(
+                                                            "Newer message already has arrived, current processing is"
+                                                            + " skipped <{}>",
+                                                            message);
+
+                                                    }
+
+                                                    return canProcessDroppableMessage;
+
+
+                                                }
+                                            })
+                                            .doOnNext(new Consumer<ProtocolMessage>() {
+                                                @Override
+                                                public void accept(final ProtocolMessage message) throws Exception {
+
+                                                    publishSubject.onNext(message);
+                                                    LOGGER.info(
+                                                        "-------------------------------------------------------> "
+                                                        + "Resume Channel");
+                                                    resume();
+                                                }
+                                            })
+                                            .doAfterNext(new Consumer<ProtocolMessage>() {
+                                                @Override
+                                                public void accept(final ProtocolMessage message) throws Exception {
+
+                                                    final long andSet = processTime.getAndSet(0L);
+
+                                                    if (andSet > 0L) {
+                                                        long executionTime = System.currentTimeMillis()
+                                                                             - andSet;
+                                                        LOGGER.warn("Execution takes too long: {}ms {}",
+                                                                    executionTime,
+                                                                    message);
+                                                    }
+
+
+                                                }
+                                            });
+
+            }
+        });
+    }
+
+    public void messageReceived(final ProtocolMessage msg) throws Exception {
+
+        if (isSupsended.get() == Boolean.TRUE) {
+            return;
+        }
+
+        messagesCounter.getAndIncrement();
+        messageHandler2.setCurrentDropableMessageTime(msg);
         messagePublishSubject.onNext(msg);
 
     }

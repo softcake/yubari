@@ -16,6 +16,10 @@
 
 package org.softcake.yubari.netty.client;
 
+import com.dukascopy.dds3.transport.msg.dfs.DFHistoryChangedMessage;
+import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
+import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
+
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -43,7 +47,7 @@ public class MessageCreator implements Runnable {
             if (count == Integer.MAX_VALUE) {
                 count = 0;
             }
-            final long nextLong = ThreadLocalRandom.current().nextLong(1000, 1500);
+            final long nextLong = ThreadLocalRandom.current().nextLong(500, 800);
             try {
                 Thread.sleep(nextLong);
             } catch (InterruptedException e) {
@@ -51,14 +55,31 @@ public class MessageCreator implements Runnable {
                 break;
             }
             try {
-                this.example.messageReceived(new Message("A",count));
-                this.example.messageReceived(new Message("B",count));
-                this.example.messageReceived(new Message("C",count));
+
+                sendMessage("EUR", "USD");
+                sendMessageNotDroppable("EUR","USD");
                 count++;
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
 
+    }
+
+    private void sendMessage(String primary, String secondary) throws Exception {
+
+        final CurrencyMarket currencyMarket = new CurrencyMarket();
+        currencyMarket.setCreationTimestamp(System.currentTimeMillis());
+        currencyMarket.setInstrumentPrimary(primary);
+        currencyMarket.setInstrumentSecondary(secondary);
+        this.example.messageReceived(currencyMarket);
+    }
+
+    private void sendMessageNotDroppable(String primary, String secondary) throws Exception {
+
+        final DFHistoryChangedMessage currencyMarket = new DFHistoryChangedMessage();
+        currencyMarket.setTimestamp(System.currentTimeMillis());
+        currencyMarket.setInstrument(primary + "/"+secondary);
+        this.example.messageReceived(currencyMarket);
     }
 }
