@@ -26,18 +26,21 @@ import org.softcake.yubari.netty.SslCompletionEvent;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.processors.HeartbeatProcessor;
 import org.softcake.yubari.netty.client.processors.StreamProcessor;
+import org.softcake.yubari.netty.client.tasks.AbstractEventExecutorChannelTask;
 import org.softcake.yubari.netty.client.tasks.AbstractEventExecutorTask;
 import org.softcake.yubari.netty.data.DroppableMessageHandler;
 import org.softcake.yubari.netty.data.DroppableMessageHandler2;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
+import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.TransportHelper;
 
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.BinaryPartMessage;
 import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
+import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.DisconnectRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HaloRequestMessage;
@@ -45,6 +48,7 @@ import com.dukascopy.dds4.transport.msg.system.HaloResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.JSonSerializableWrapper;
 import com.dukascopy.dds4.transport.msg.system.LoginRequestMessage;
+import com.dukascopy.dds4.transport.msg.system.MessageGroup;
 import com.dukascopy.dds4.transport.msg.system.OkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
@@ -123,6 +127,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     private IClientConnector clientConnector;
     private PublishSubject<ProtocolMessage> childPublishSubject = PublishSubject.create();
     private PublishSubject<ProtocolMessage> primaryPublishSubject = PublishSubject.create();
+    private Disposable unknow;
 
     public ClientProtocolHandler(final TransportClientSession session) {
 
@@ -192,14 +197,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                     });*/
                     handleAuthorization(clientConnector.getPrimaryChannel());
                 } else if (ClientConnector.ClientState.ONLINE == clientState) {
+                    LOGGER.info("State in ClientProtocolHandler {}",clientState.name());
                     fireAuthorized();
-                    /*getChildPublishSubject(this.getClass().getSimpleName()).subscribe(new Consumer<ProtocolMessage>() {
-                        @Override
-                        public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
-                            notifyListeners(protocolMessage);
-                        }
-                    });*/
                 } else if (ClientConnector.ClientState.DISCONNECTED == clientState) {
                     fireDisconnected();
                 }
@@ -217,6 +217,21 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
             }
         });
+    }
+
+    private void initPublis() {
+
+
+        if (this.unknow == null) {
+            this.unknow = getChildPublishSubject("unknow").subscribe(new Consumer<ProtocolMessage>() {
+                @Override
+                public void accept(final ProtocolMessage protocolMessage) throws Exception {
+
+                    notifyListeners(protocolMessage);
+                }
+            });
+        }
+
     }
 
     private void fireDisconnected() {
@@ -851,30 +866,32 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
 
     private void fireFeedbackMessageReceived(final ChannelHandlerContext ctx, final ProtocolMessage message) {
+     /*   initPublis();
 
         messageHandler2.setCurrentDroppableMessageTime(message);
 
 
         childPublishSubject.onNext(message);
-        primaryPublishSubject.onNext(message);
+        primaryPublishSubject.onNext(message);*/
 
 
 
 
-/*
         final long currentDropableMessageTime = this.droppableMessageHandler.getCurrentDropableMessageTime(message);
         if (message instanceof CurrencyMarket) {
             this.clientSession.tickReceived();
         }
 
+/*
 
-       *//* if ((message instanceof CurrencyMarket)) {
+        if ((message instanceof CurrencyMarket)) {
             final long timeMillis = System.currentTimeMillis();
             ((CurrencyMarket)  message).setCreationTimestamp(timeMillis);
             LOGGER.error("Timestamp seted: {}", timeMillis);
            LOGGER.error("Timestamp in ClientProtocoll: {}", ((CurrencyMarket)  message).getCreationTimestamp());
         }
-*//*
+*/
+
 
 
         final ISessionStats stats = this.clientSession.getSessionStats();
@@ -935,7 +952,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                 return clientSession.getConcurrencyPolicy().getConcurrentKey(this.message);
             }
         };
-        task.executeInExecutor(this.eventExecutor, stats);*/
+        task.executeInExecutor(this.eventExecutor, stats);
     }
 
     private void notifyListeners(final ProtocolMessage protocolMessage) {

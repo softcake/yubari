@@ -38,7 +38,7 @@ public interface IClientConnector   {
     Channel getChildChannel();
 
     void connect();
-
+ClientConnector.ClientState getClientState();
     void disconnect();
 
     void disconnect(ClientDisconnectReason reason);

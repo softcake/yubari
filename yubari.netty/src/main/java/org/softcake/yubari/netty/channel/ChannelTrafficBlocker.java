@@ -19,6 +19,7 @@ package org.softcake.yubari.netty.channel;
 import static org.softcake.yubari.netty.TransportAttributeKeys.MESSAGES_BUFFER;
 import static org.softcake.yubari.netty.TransportAttributeKeys.READ_SUSPENDED;
 
+import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
@@ -60,11 +61,11 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
 
     @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object msg) {
+        if (msg instanceof CurrencyMarket) {
+            final CurrencyMarket cmm = (CurrencyMarket) msg;
+            cmm.setCreationTimestamp(System.nanoTime());
+        }
 
-      /*  if (msg instanceof ProtocolMessage) {
-            final ProtocolMessage cmm = (ProtocolMessage) msg;
-            cmm.setTimestamp(System.nanoTime());
-        }*/
         if (isSuspended(ctx)
             && !(msg instanceof HeartbeatRequestMessage)
             && !(msg instanceof HeartbeatOkResponseMessage)) {

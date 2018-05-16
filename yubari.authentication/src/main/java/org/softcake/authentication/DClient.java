@@ -882,10 +882,10 @@ public int anInt;
             final long end = System.nanoTime();
             final long start = ((CurrencyMarket)  message).getCreationTimestamp();
 
-          //  LOGGER.error("Timestamp in DCClient: {} Execution in Netty Time: {}us", start , ((end-start)/1000) );
-            double diff = ((end-start)/1000L);
+           LOGGER.error("Timestamp in DCClient: {} Execution in Netty Time: {}us", start , ((end-start)/1000) );
+            double diff = ((end-start)/1000000L);
 
-            durchschnitt.add(diff/1000d);
+            durchschnitt.add(diff);
 
             double namesOfMaleMembersCollect = durchschnitt
                 .stream().mapToDouble(new ToDoubleFunction<Double>() {

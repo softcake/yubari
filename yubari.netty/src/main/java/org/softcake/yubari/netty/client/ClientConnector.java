@@ -529,7 +529,7 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
 
     }
 
-    private ClientState getClientState() {
+    public ClientState getClientState() {
 
         return this.sm.getState();
     }

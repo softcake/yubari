@@ -31,7 +31,6 @@ import com.dukascopy.dds4.transport.common.protocol.binary.RawObject.RawData;
 import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolDecoder;
 import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolEncoder;
 import com.dukascopy.dds4.transport.common.protocol.binary.codec.CodecFactoryAndCache;
-import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -212,7 +211,8 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
         final Attribute<Integer> firstMessageAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
         final Object firstMessage = firstMessageAttribute.get();
-        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
+            PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
         final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
 
 
