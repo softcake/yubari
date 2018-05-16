@@ -16,6 +16,7 @@
 
 package org.softcake.yubari.netty.data;
 
+import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.map.MapHelper;
 
@@ -38,8 +39,8 @@ public class DroppableMessageHandler2 {
 
     public DroppableMessageHandler2(final TransportClientSession clientSession) {
 
-        this.clientSession = null; //PreCheck.notNull(clientSession, "clientSession");
-        this.droppableMessagesClientTTL = 0L; //clientSession.getDroppableMessagesClientTTL();
+        this.clientSession = PreCheck.notNull(clientSession, "clientSession");
+        this.droppableMessagesClientTTL = clientSession.getDroppableMessagesClientTTL();
     }
 
     private DroppableMessageScheduling getDroppableScheduling(final ProtocolMessage message, final String instrument) {

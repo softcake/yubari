@@ -19,12 +19,13 @@ package org.softcake.yubari.netty.client;
 import org.softcake.yubari.netty.util.StrUtils;
 
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,34 +35,32 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class MessageTimeoutWarningChecker {
+public class MessageProcessTimeoutChecker {
 
 
     private static final long ERROR_TIME_OFFSET = 5000L;
     private static final int SHORT_MESSAGE_LENGTH = 100;
-    private static final Logger LOGGER = LoggerFactory.getLogger(MessageTimeoutWarningChecker.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MessageProcessTimeoutChecker.class);
     private final AtomicLong LAST_EXECUTION_WARNING_TIME = new AtomicLong(System.currentTimeMillis() - ThreadLocalRandom
         .current().nextLong(9999L, 49999L));
     private final AtomicLong LAST_EXECUTION_ERROR_TIME = new AtomicLong(System.currentTimeMillis() - ThreadLocalRandom
         .current().nextLong(9999L, 49999L));
     private final AtomicLong startTime = new AtomicLong(0L);
     private final String name;
-    private final RxPublishExample rxPublishExample;
+    private final Channel channel;
     private AtomicBoolean checkError = new AtomicBoolean(false);
     private AtomicBoolean isTimeOutReached = new AtomicBoolean(false);
     private Disposable observable;
-    private TransportClient session;
+    private TransportClientSession session;
     private ProtocolMessage message;
     private Disposable overFlow;
     private ObservableEmitter<ProtocolMessage> emitter;
 
-    public MessageTimeoutWarningChecker(String name, final RxPublishExample rxPublishExample) {
+    public MessageProcessTimeoutChecker( final TransportClientSession clientSession, final Channel ctx,String name) {
 
         this.name = name;
-        this.rxPublishExample = rxPublishExample;
-
-        session = new TransportClient();
-        this.overFlow = getOverFlowObservable();
+        session = clientSession;
+        this.channel = ctx;
     }
 
     private Disposable getOverFlowObservable() {
@@ -76,7 +75,7 @@ public class MessageTimeoutWarningChecker {
                              final long executionTime = currentTime - procStartTime.get();
 
                              if (executionTime > session.getEventExecutionErrorDelay()) {
-                                 rxPublishExample.suspend();
+                                 this.session.getChannelTrafficBlocker().suspend(this.channel);
                                  LOGGER.error(
                                      "[{}] Subscriber: [{}] Event executor queue overloaded, CRITICAL EXECUTION WAIT "
                                      + "TIME: {}ms, possible application problem or deadLock, message [{}]",
@@ -89,7 +88,7 @@ public class MessageTimeoutWarningChecker {
                                  procStartTime.set(currentTime);
                              }
 
-                         }, throwable -> rxPublishExample.resume());
+                         }, throwable ->  this.session.getChannelTrafficBlocker().resume(this.channel));
     }
 
     private void logIncompleteExecution(final boolean isError, final long startTime, final long now) {
@@ -219,7 +218,7 @@ public class MessageTimeoutWarningChecker {
 
     }
 
-    public void clean() {
+    private void clean() {
 
         if (observable != null) {
             observable.dispose();

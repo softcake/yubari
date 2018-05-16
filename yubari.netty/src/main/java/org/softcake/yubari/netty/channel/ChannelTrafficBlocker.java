@@ -21,6 +21,7 @@ import static org.softcake.yubari.netty.TransportAttributeKeys.READ_SUSPENDED;
 
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
+import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -42,9 +43,28 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
         this.transportName = transportName;
     }
 
+    public static boolean isSuspended(final Channel channel) {
+
+        Boolean suspended = channel.attr(READ_SUSPENDED).get();
+        if (suspended == null) {
+            suspended = Boolean.FALSE;
+            channel.attr(READ_SUSPENDED).set(suspended);
+        }
+        return suspended;
+    }
+
+    public static boolean isSuspended(final ChannelHandlerContext ctx) {
+
+        return isSuspended(ctx.channel());
+    }
+
     @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object msg) {
 
+      /*  if (msg instanceof ProtocolMessage) {
+            final ProtocolMessage cmm = (ProtocolMessage) msg;
+            cmm.setTimestamp(System.nanoTime());
+        }*/
         if (isSuspended(ctx)
             && !(msg instanceof HeartbeatRequestMessage)
             && !(msg instanceof HeartbeatOkResponseMessage)) {
@@ -98,23 +118,6 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
 
     }
 
-    public static boolean isSuspended(final Channel channel) {
-
-       Boolean suspended = channel.attr(READ_SUSPENDED).get();
-        if (suspended == null) {
-            suspended = Boolean.FALSE;
-            channel.attr(READ_SUSPENDED).set(suspended);
-        }
-        LOGGER.info("---------------------------------------< Channnel isSuspended?:{}", suspended);
-        return suspended;
-    }
-
-    public static boolean isSuspended(final ChannelHandlerContext ctx) {
-        boolean a = isSuspended(ctx.channel());
-        LOGGER.info("---------------------------------------< isSuspended?:{}", a);
-        return a;
-    }
-
     public void suspend(final ChannelHandlerContext ctx) {
 
         this.suspend(ctx.channel());
@@ -123,7 +126,7 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
     public void suspend(final Channel channel) {
 
         channel.attr(READ_SUSPENDED).set(Boolean.TRUE);
-       // channel.config().setAutoRead(false);
+        // channel.config().setAutoRead(false);
         LOGGER.trace("[{}] Reading suspended", this.transportName);
     }
 

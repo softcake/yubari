@@ -41,6 +41,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /**
  * @author René Neubert
@@ -70,22 +71,28 @@ public class RxPublishExample {
     DroppableMessageHandler2 messageHandler2 = new DroppableMessageHandler2(null);
     AtomicBoolean isSupsended = new AtomicBoolean(Boolean.FALSE);
     PublishSubject<ProtocolMessage> publishSubject = PublishSubject.create();
+    TransportClient session = new TransportClient();
     private PublishSubject<ProtocolMessage> messagePublishSubject = PublishSubject.create();
+    private static final ThreadLocal<int[]>
+        EVENT_EXECUTOR_MESSAGES_COUNTER_THREAD_LOCAL
+        = ThreadLocal.withInitial(new Supplier<int[]>() {
+        @Override
+        public int[] get() {
 
+            return new int[1];
+        }
+    });
     public static void main(String[] args) {
 
         RxPublishExample example = new RxPublishExample();
-        AtomicLong aLong = new AtomicLong(Long.MIN_VALUE);
 
-        // example.getMessagePublishSubject().subscribe();
-
-        example.getMessagePublishSubject().subscribe(new Consumer<ProtocolMessage>() {
+        example.getMessagePublishSubject("First").subscribe(new Consumer<ProtocolMessage>() {
             @Override
             public void accept(final ProtocolMessage message) throws Exception {
 
-                LOGGER.info("Message in first Consumer: {}", message);
+                // LOGGER.info("Message in first Consumer: {}", message);
 
-                final long nextLong = ThreadLocalRandom.current().nextLong(1000000, 2000000);
+                final long nextLong = ThreadLocalRandom.current().nextLong(50, 200);
                 try {
                     Thread.sleep(nextLong);
                 } catch (final InterruptedException e) {
@@ -95,27 +102,25 @@ public class RxPublishExample {
             }
         });
 
-       /* example.getMessagePublishSubject().subscribe(new Consumer<ProtocolMessage>() {
+        example.getMessagePublishSubject("Second").subscribe(new Consumer<ProtocolMessage>() {
             @Override
             public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
-                LOGGER.info("Message in second Consumer: {}", protocolMessage);
+                // LOGGER.info("Message in second Consumer: {}", protocolMessage);
+
+                final long nextLong = ThreadLocalRandom.current().nextLong(300, 400);
+                try {
+                    Thread.sleep(nextLong);
+                } catch (final InterruptedException e) {
+                    LOGGER.error("Error occurred in onNext for subscriber {}", "first", e);
+                }
             }
-        });*/
+        });
 
         example.startMessageCreator();
 
     }
 
-    public AtomicInteger getDroppedMessagesCounter() {
-
-        return droppedMessagesCounter;
-    }
-
-    public AtomicInteger getMessagesCounter() {
-
-        return messagesCounter;
-    }
 
     public DroppableMessageHandler2 getMessageHandler2() {
 
@@ -142,95 +147,91 @@ public class RxPublishExample {
         return publishSubject.subscribeOn(Schedulers.from(executor));
     }
 
-    public Flowable<ProtocolMessage> getMessagePublishSubject() {
+    public Flowable<ProtocolMessage> getMessagePublishSubject(String name) {
 
         return Flowable.defer(new Callable<Publisher<? extends ProtocolMessage>>() {
             @Override
             public Publisher<? extends ProtocolMessage> call() throws Exception {
 
-                MessageTimeoutWarningChecker checker = new MessageTimeoutWarningChecker();
-                final AtomicLong processTime = new AtomicLong(0L);
-                return messagePublishSubject.toFlowable(BackpressureStrategy.LATEST)
+                MessageTimeoutWarningChecker checker = new MessageTimeoutWarningChecker(name, RxPublishExample.this);
+
+                return messagePublishSubject.toFlowable(BackpressureStrategy.LATEST).subscribeOn(Schedulers.from(executor))
                                             .doOnNext(new Consumer<ProtocolMessage>() {
                                                 @Override
                                                 public void accept(final ProtocolMessage message) throws Exception {
+                                                    final int[] messagesCounter = EVENT_EXECUTOR_MESSAGES_COUNTER_THREAD_LOCAL.get();
+                                                    ++messagesCounter[0];
+                                                    final boolean checkError = session.getEventExecutionErrorDelay()
+                                                                               > 0L
+                                                                               && session
+                                                                                      .getEventExecutionDelayCheckEveryNTimesError()
+                                                                                  > 0
+                                                                               && messagesCounter[0]
+                                                                                  % session
+                                                                                      .getEventExecutionDelayCheckEveryNTimesError()
+                                                                                  == 0;
+                                                    final boolean checkWarn = session.getEventExecutionWarningDelay()
+                                                                              > 0L
+                                                                              && session
+                                                                                     .getEventExecutionDelayCheckEveryNTimesWarning()
+                                                                                 > 0
+                                                                              && messagesCounter[0]
+                                                                                 % session
+                                                                                     .getEventExecutionDelayCheckEveryNTimesWarning()
+                                                                                 == 0;
 
-                                                    checker.setMessageAndStartTime(message, System.currentTimeMillis());
-                                                    /*if (count.get() == 31) {
-                                                        processTime.set(System.currentTimeMillis());
-                                                        count.set(0);
-                                                    } else{
 
-                                                        count.incrementAndGet();
-                                                    }*/
-
-
-                                                    //  processTime.set(System.currentTimeMillis());
-                                                    //Process Timeout check!
+                                                    if (checkError) {
+                                                        checker.onStart(message,
+                                                                        System.currentTimeMillis(),
+                                                                        Boolean.TRUE);
+                                                    } else if (checkWarn) {
+                                                        checker.onStart(message,
+                                                                        System.currentTimeMillis(),
+                                                                        Boolean.FALSE);
+                                                    }
 
                                                 }
                                             })
                                             .onBackpressureDrop(new Consumer<ProtocolMessage>() {
                                                 @Override
                                                 public void accept(final ProtocolMessage message) throws Exception {
-                                                    checker.setComplete(message);
-                                                    final int
-                                                        incrementAndGet
-                                                        = getDroppedMessagesCounter().incrementAndGet();
-                                                    final int messagesCount = getMessagesCounter().get();
-                                                    //Suspend Channel
-                                                    LOGGER.info("Suspend Channel, dropped Messages:{} all messages: {} last message: {}",
-                                                                incrementAndGet,
-                                                                messagesCount , message);
-                                                    //suspend();
+
+                                                    checker.onOverflow(message);
+
                                                 }
                                             })
                                             .observeOn(Schedulers.from(getExecutor()))
-                                            .filter(new Predicate<ProtocolMessage>() {
-                                                @Override
-                                                public boolean test(final ProtocolMessage message) throws Exception {
+                                            .filter(message -> {
 
 
-                                                    final boolean
-                                                        canProcessDroppableMessage
-                                                        = getMessageHandler2().canProcessDroppableMessage(message);
-                                                    if (!canProcessDroppableMessage) {
+                                                final boolean
+                                                    canProcessDroppableMessage
+                                                    = getMessageHandler2().canProcessDroppableMessage(message);
+                                                if (!canProcessDroppableMessage) {
 
-                                                        checker.setComplete(message);
-                                                        LOGGER.warn(
-                                                            "Newer message already has arrived, current processing is"
-                                                            + " skipped <{}>",
-                                                            message);
-
-                                                    }
-
-                                                    return canProcessDroppableMessage;
-
+                                                    checker.onDroppable(message);
 
                                                 }
-                                            })
-                                            .doOnNext(new Consumer<ProtocolMessage>() {
+
+                                                return canProcessDroppableMessage;
+
+
+                                            }).doAfterNext(new Consumer<ProtocolMessage>() {
                                                 @Override
                                                 public void accept(final ProtocolMessage message) throws Exception {
 
-//                                                   // publishSubject.onNext(message);
-//                                                    LOGGER.info(
-//                                                        "-------------------------------------------------------> "
-//                                                        + "Resume Channel");
-//                                                    resume();
-                                                }
-                                            })
-                                            .doAfterNext(new Consumer<ProtocolMessage>() {
-                                                @Override
-                                                public void accept(final ProtocolMessage message) throws Exception {
-
-                                                    checker.setComplete(message);
-                                                    //checker.processComplete(message);
+                                                    checker.onComplete(message);
 
 
 
                                                 }
-                                            });
+                                            }).doOnError(new Consumer<Throwable>() {
+                        @Override
+                        public void accept(final Throwable throwable) throws Exception {
+                            checker.onError(throwable);
+                        }
+                    });
 
             }
         });
@@ -239,6 +240,7 @@ public class RxPublishExample {
     public void messageReceived(final ProtocolMessage msg) throws Exception {
 
         if (isSupsended.get() == Boolean.TRUE) {
+            LOGGER.info("Suspended");
             return;
         }
 

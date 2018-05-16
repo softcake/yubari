@@ -45,13 +45,13 @@ public class MessageCreator implements Runnable {
 
 
 
-            if (count == 132) {
+            if (count == 1000) {
                 count = 0;
                 break;
             }
 
 
-            final long nextLong = ThreadLocalRandom.current().nextLong(1000, 2000);
+            final long nextLong = ThreadLocalRandom.current().nextLong(200, 300);
             try {
                Thread.sleep(nextLong);
             } catch (InterruptedException e) {
@@ -60,7 +60,7 @@ public class MessageCreator implements Runnable {
             }
             try {
 
-                //sendMessage("EUR", "USD");
+                sendMessage("EUR", "USD");
                 sendMessageNotDroppable("EUR","USD");
                 count++;
             } catch (Exception e) {
@@ -84,12 +84,6 @@ public class MessageCreator implements Runnable {
         final DFHistoryChangedMessage currencyMarket = new DFHistoryChangedMessage();
         currencyMarket.setTimestamp(System.currentTimeMillis());
         currencyMarket.setInstrument(primary + "/"+secondary);
-        if (count >= 130 ) {
-            LOGGER.info("latest send message: {}", currencyMarket);
-        } else if(count <= 2){
-            LOGGER.info("first send message: {}", currencyMarket);
-        }
-
         this.example.messageReceived(currencyMarket);
     }
 }

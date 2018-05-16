@@ -31,6 +31,8 @@ import com.dukascopy.dds4.transport.common.protocol.binary.RawObject.RawData;
 import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolDecoder;
 import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolEncoder;
 import com.dukascopy.dds4.transport.common.protocol.binary.codec.CodecFactoryAndCache;
+import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
+import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
@@ -177,6 +179,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
                     final ClassMappingMessage cmm = (ClassMappingMessage) message;
                     sessionProtocolDecoder.classMappingReceived(protocolVersion, cmm);
                 } else {
+
                     ctx.fireChannelRead(message);
                 }
             }

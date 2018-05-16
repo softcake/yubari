@@ -53,14 +53,8 @@ import com.dukascopy.dds3.transport.msg.acc.AccountInfoMessagePack;
 import com.dukascopy.dds3.transport.msg.acc.PackedAccountInfoMessage;
 import com.dukascopy.dds3.transport.msg.ddsApi.InitRequestMessage;
 import com.dukascopy.dds3.transport.msg.ddsApi.QuitRequestMessage;
-import com.dukascopy.dds3.transport.msg.news.CalendarType;
-import com.dukascopy.dds3.transport.msg.news.NewsSubscribeRequest;
-import com.dukascopy.dds3.transport.msg.news.SubscribeRequestType;
+import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.dukascopy.dds4.transport.msg.types.EventCategory;
-import com.dukascopy.dds4.transport.msg.types.GeoRegion;
-import com.dukascopy.dds4.transport.msg.types.MarketSector;
-import com.dukascopy.dds4.transport.msg.types.StockIndex;
 import com.google.common.base.Strings;
 import io.reactivex.Single;
 import org.slf4j.Logger;
@@ -94,6 +88,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.ToDoubleFunction;
 import java.util.regex.Pattern;
 
 import javax.xml.parsers.DocumentBuilder;
@@ -862,10 +857,50 @@ public class DClient implements ClientListener {
         }*/
 
     }
+
+
+
+
+    List<Double> durchschnitt = new ArrayList<>(1000);
+    public static double roundAvoid(double value, int places) {
+        double scale = Math.pow(10, places);
+        return Math.round(value * scale) / scale;
+    }
 public int anInt;
     public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
 
+
         anInt++;
+
+        if (anInt <= 100) {
+            return;
+        }
+
+
+
+        if ((message instanceof CurrencyMarket)) {
+            final long end = System.nanoTime();
+            final long start = ((CurrencyMarket)  message).getCreationTimestamp();
+
+          //  LOGGER.error("Timestamp in DCClient: {} Execution in Netty Time: {}us", start , ((end-start)/1000) );
+            double diff = ((end-start)/1000L);
+
+            durchschnitt.add(diff/1000d);
+
+            double namesOfMaleMembersCollect = durchschnitt
+                .stream().mapToDouble(new ToDoubleFunction<Double>() {
+                    @Override
+                    public double applyAsDouble(final Double value) {
+
+                        return value;
+                    }
+                }).average().getAsDouble();
+            LOGGER.error("Average Execution in Netty Time: {}ms", roundAvoid(namesOfMaleMembersCollect,3) );
+
+
+
+        }
+  /*      anInt++;
 
         if (anInt == 20) {
             try {
@@ -876,7 +911,7 @@ public int anInt;
 
             }
         }
-LOGGER.info("retry");
+LOGGER.info("retry");*/
        /* if ((message instanceof CurrencyMarket)) {
             final long end = System.currentTimeMillis();
            final long start = ((CurrencyMarket)  message).getCreationTimestamp();
