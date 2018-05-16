@@ -18,7 +18,8 @@ package org.softcake.yubari.netty.client;
 
 import com.dukascopy.dds3.transport.msg.dfs.DFHistoryChangedMessage;
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
-import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -28,6 +29,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class MessageCreator implements Runnable {
     RxPublishExample example;
     int count = 0;
+    private static final Logger LOGGER = LoggerFactory.getLogger(MessageCreator.class);
 
     public MessageCreator(final RxPublishExample example) {
 
@@ -39,24 +41,26 @@ public class MessageCreator implements Runnable {
     public void run() {
 
         while (true) {
-            String msg = "message-" + count;
 
 
 
 
-            if (count == Integer.MAX_VALUE) {
+            if (count == 132) {
                 count = 0;
+                break;
             }
-            final long nextLong = ThreadLocalRandom.current().nextLong(500, 800);
+
+
+            final long nextLong = ThreadLocalRandom.current().nextLong(1000, 2000);
             try {
-                Thread.sleep(nextLong);
+               Thread.sleep(nextLong);
             } catch (InterruptedException e) {
                 e.printStackTrace();
                 break;
             }
             try {
 
-                sendMessage("EUR", "USD");
+                //sendMessage("EUR", "USD");
                 sendMessageNotDroppable("EUR","USD");
                 count++;
             } catch (Exception e) {
@@ -80,6 +84,12 @@ public class MessageCreator implements Runnable {
         final DFHistoryChangedMessage currencyMarket = new DFHistoryChangedMessage();
         currencyMarket.setTimestamp(System.currentTimeMillis());
         currencyMarket.setInstrument(primary + "/"+secondary);
+        if (count >= 130 ) {
+            LOGGER.info("latest send message: {}", currencyMarket);
+        } else if(count <= 2){
+            LOGGER.info("first send message: {}", currencyMarket);
+        }
+
         this.example.messageReceived(currencyMarket);
     }
 }

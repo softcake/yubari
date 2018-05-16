@@ -16,7 +16,6 @@
 
 package org.softcake.yubari.netty.data;
 
-import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.map.MapHelper;
 
@@ -65,85 +64,70 @@ public class DroppableMessageHandler2 {
         return lastScheduledMessageInfo;
     }
 
-    public void setCurrentDropableMessageTime(final ProtocolMessage message) {
-//TODO
+    public void setCurrentDroppableMessageTime(final ProtocolMessage message) {
+        //TODO
      /*   if (this.clientSession.isSkipDroppableMessages()) {
             return;
         }*/
-        this.checkAndRecordScheduleForDroppableMessage(message);
-    }
+        final String instrument = getInstrumentIfMessageIsDroppable(message);
+        if (instrument.isEmpty()) { return; }
 
-    private void checkAndRecordScheduleForDroppableMessage(final ProtocolMessage message) {
-
-        if (!(message instanceof InstrumentableLowMessage)) {
-            return;
-        }
-
-        final InstrumentableLowMessage instrumentable = (InstrumentableLowMessage) message;
-        final String instrument = instrumentable.getInstrument();
-
-        if (instrument == null || !instrumentable.isDropOnTimeout()) {
-            return;
-        }
-
-        final long currentInstrumentableMessageTime;
-        if (message instanceof CurrencyMarket) {
-            final CurrencyMarket cm = (CurrencyMarket) message;
-            currentInstrumentableMessageTime = cm.getCreationTimestamp();
-        } else {
-            final Long t = message.getTimestamp();
-            currentInstrumentableMessageTime = t == null ? 0L : t;
-        }
+        final Long currentInstrumentableMessageTime = getMessageCreationTime(message);
 
         if (currentInstrumentableMessageTime > 0L) {
             final DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
             scheduling.scheduled(currentInstrumentableMessageTime);
         }
     }
-    private long getCcurrentDropableMessageTime(final ProtocolMessage message) {
+
+
+    private String getInstrumentIfMessageIsDroppable(final ProtocolMessage message) {
 
         if (!(message instanceof InstrumentableLowMessage)) {
-            return 0L;
+            return "";
         }
 
         final InstrumentableLowMessage instrumentable = (InstrumentableLowMessage) message;
         final String instrument = instrumentable.getInstrument();
 
         if (instrument == null || !instrumentable.isDropOnTimeout()) {
-            return 0L;
+            return "";
         }
-
-        final long currentInstrumentableMessageTime;
-        if (message instanceof CurrencyMarket) {
-            final CurrencyMarket cm = (CurrencyMarket) message;
-            currentInstrumentableMessageTime = cm.getCreationTimestamp();
-        } else {
-            final Long t = message.getTimestamp();
-            currentInstrumentableMessageTime = t == null ? 0L : t;
-        }
-
-       return currentInstrumentableMessageTime;
+        return instrument;
     }
+
+    private long getMessageCreationTime(final ProtocolMessage message) {
+
+        final String instrument = getInstrumentIfMessageIsDroppable(message);
+        if (instrument.isEmpty()) { return 0L; }
+
+        return message instanceof CurrencyMarket
+               ? ((CurrencyMarket) message).getCreationTimestamp()
+               : message.getTimestamp();
+
+
+    }
+
     public boolean canProcessDroppableMessage(final ProtocolMessage message) {
+/*   if (this.clientSession.isSkipDroppableMessages()) {
+            return true;
+        }*/
+        final long inProcessMessageCreationTime = getMessageCreationTime(message);
+        if (inProcessMessageCreationTime <= 0L) {return true;}
 
-        final long currentDropableMessageTime = getCcurrentDropableMessageTime(message);
-        if (currentDropableMessageTime <= 0L || !(message instanceof InstrumentableLowMessage)) {return true;}
+
+        final InstrumentableLowMessage msg = (InstrumentableLowMessage) message;
+        final String instrument = msg.getInstrument();
 
 
-        final InstrumentableLowMessage instrumentable = (InstrumentableLowMessage) message;
-        final String instrument = instrumentable.getInstrument();
-
-        if (instrument != null) {
-            final DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
-            final long lastArrivedMessageTime = scheduling.getLastScheduledTime();
-            final int scheduledCount = scheduling.getScheduledCount();
-            scheduling.executed();
-
-            return lastArrivedMessageTime - currentDropableMessageTime <= this.droppableMessagesClientTTL
-                   || scheduledCount <= 1;
-        }
-
-        return true;
+        final DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
+        final long lastArrivedMessageTime = scheduling.getLastScheduledTime();
+        final int scheduledCount = scheduling.getScheduledCount();
+        scheduling.executed();
+        long diff = lastArrivedMessageTime - inProcessMessageCreationTime;
+        //long diff = inProcessMessageCreationTime - lastArrivedMessageTime;
+        return diff <= this.droppableMessagesClientTTL;
+             // || scheduledCount <= 1;
 
     }
 

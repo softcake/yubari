@@ -77,7 +77,7 @@ public class RxPublishExample {
         RxPublishExample example = new RxPublishExample();
         AtomicLong aLong = new AtomicLong(Long.MIN_VALUE);
 
-       // example.getMessagePublishSubject().subscribe();
+        // example.getMessagePublishSubject().subscribe();
 
         example.getMessagePublishSubject().subscribe(new Consumer<ProtocolMessage>() {
             @Override
@@ -85,7 +85,7 @@ public class RxPublishExample {
 
                 LOGGER.info("Message in first Consumer: {}", message);
 
-                final long nextLong = ThreadLocalRandom.current().nextLong(300, 800);
+                final long nextLong = ThreadLocalRandom.current().nextLong(1000000, 2000000);
                 try {
                     Thread.sleep(nextLong);
                 } catch (final InterruptedException e) {
@@ -95,13 +95,13 @@ public class RxPublishExample {
             }
         });
 
-        example.getMessagePublishSubject().subscribe(new Consumer<ProtocolMessage>() {
+       /* example.getMessagePublishSubject().subscribe(new Consumer<ProtocolMessage>() {
             @Override
             public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
                 LOGGER.info("Message in second Consumer: {}", protocolMessage);
             }
-        });
+        });*/
 
         example.startMessageCreator();
 
@@ -147,41 +147,42 @@ public class RxPublishExample {
         return Flowable.defer(new Callable<Publisher<? extends ProtocolMessage>>() {
             @Override
             public Publisher<? extends ProtocolMessage> call() throws Exception {
-AtomicInteger count = new AtomicInteger();
-                final AtomicLong processTime = new AtomicLong(0L);
-                return messagePublishSubject.toFlowable(BackpressureStrategy.MISSING)
-                                            .onBackpressureDrop(new Consumer<ProtocolMessage>() {
-                                                @Override
-                                                public void accept(final ProtocolMessage message) throws Exception {
 
-                                                    final int
-                                                        incrementAndGet
-                                                        = getDroppedMessagesCounter().incrementAndGet();
-                                                    final int messagesCount = getMessagesCounter().get();
-                                                    //Suspend Channel
-                                                    LOGGER.info("Suspend Channel, dropped Messages:{} all messages: {}",
-                                                                incrementAndGet,
-                                                                messagesCount);
-                                                    suspend();
-                                                }
-                                            })
+                MessageTimeoutWarningChecker checker = new MessageTimeoutWarningChecker();
+                final AtomicLong processTime = new AtomicLong(0L);
+                return messagePublishSubject.toFlowable(BackpressureStrategy.LATEST)
                                             .doOnNext(new Consumer<ProtocolMessage>() {
                                                 @Override
                                                 public void accept(final ProtocolMessage message) throws Exception {
 
-                                                    if (count.get() == 31) {
+                                                    checker.setMessageAndStartTime(message, System.currentTimeMillis());
+                                                    /*if (count.get() == 31) {
                                                         processTime.set(System.currentTimeMillis());
                                                         count.set(0);
                                                     } else{
 
                                                         count.incrementAndGet();
-                                                    }
-
+                                                    }*/
 
 
                                                     //  processTime.set(System.currentTimeMillis());
                                                     //Process Timeout check!
 
+                                                }
+                                            })
+                                            .onBackpressureDrop(new Consumer<ProtocolMessage>() {
+                                                @Override
+                                                public void accept(final ProtocolMessage message) throws Exception {
+                                                    checker.setComplete(message);
+                                                    final int
+                                                        incrementAndGet
+                                                        = getDroppedMessagesCounter().incrementAndGet();
+                                                    final int messagesCount = getMessagesCounter().get();
+                                                    //Suspend Channel
+                                                    LOGGER.info("Suspend Channel, dropped Messages:{} all messages: {} last message: {}",
+                                                                incrementAndGet,
+                                                                messagesCount , message);
+                                                    //suspend();
                                                 }
                                             })
                                             .observeOn(Schedulers.from(getExecutor()))
@@ -195,7 +196,7 @@ AtomicInteger count = new AtomicInteger();
                                                         = getMessageHandler2().canProcessDroppableMessage(message);
                                                     if (!canProcessDroppableMessage) {
 
-
+                                                        checker.setComplete(message);
                                                         LOGGER.warn(
                                                             "Newer message already has arrived, current processing is"
                                                             + " skipped <{}>",
@@ -212,26 +213,20 @@ AtomicInteger count = new AtomicInteger();
                                                 @Override
                                                 public void accept(final ProtocolMessage message) throws Exception {
 
-                                                    publishSubject.onNext(message);
-                                                    LOGGER.info(
-                                                        "-------------------------------------------------------> "
-                                                        + "Resume Channel");
-                                                    resume();
+//                                                   // publishSubject.onNext(message);
+//                                                    LOGGER.info(
+//                                                        "-------------------------------------------------------> "
+//                                                        + "Resume Channel");
+//                                                    resume();
                                                 }
                                             })
                                             .doAfterNext(new Consumer<ProtocolMessage>() {
                                                 @Override
                                                 public void accept(final ProtocolMessage message) throws Exception {
 
-                                                    final long andSet = processTime.getAndSet(0L);
+                                                    checker.setComplete(message);
+                                                    //checker.processComplete(message);
 
-                                                    if (andSet > 0L) {
-                                                        long executionTime = System.currentTimeMillis()
-                                                                             - andSet;
-                                                        LOGGER.warn("Execution takes too long: {}ms {}",
-                                                                    executionTime,
-                                                                    message);
-                                                    }
 
 
                                                 }
@@ -248,7 +243,7 @@ AtomicInteger count = new AtomicInteger();
         }
 
         messagesCounter.getAndIncrement();
-        messageHandler2.setCurrentDropableMessageTime(msg);
+        messageHandler2.setCurrentDroppableMessageTime(msg);
         messagePublishSubject.onNext(msg);
 
     }
