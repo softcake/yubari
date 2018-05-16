@@ -866,23 +866,23 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
 
     private void fireFeedbackMessageReceived(final ChannelHandlerContext ctx, final ProtocolMessage message) {
-     /*   initPublis();
+        initPublis();
 
         messageHandler2.setCurrentDroppableMessageTime(message);
 
 
         childPublishSubject.onNext(message);
-        primaryPublishSubject.onNext(message);*/
+       // primaryPublishSubject.onNext(message);
 
 
-
+/*
 
         final long currentDropableMessageTime = this.droppableMessageHandler.getCurrentDropableMessageTime(message);
         if (message instanceof CurrencyMarket) {
             this.clientSession.tickReceived();
         }
 
-/*
+*//*
 
         if ((message instanceof CurrencyMarket)) {
             final long timeMillis = System.currentTimeMillis();
@@ -890,7 +890,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             LOGGER.error("Timestamp seted: {}", timeMillis);
            LOGGER.error("Timestamp in ClientProtocoll: {}", ((CurrencyMarket)  message).getCreationTimestamp());
         }
-*/
+*//*
 
 
 
@@ -952,7 +952,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                 return clientSession.getConcurrencyPolicy().getConcurrentKey(this.message);
             }
         };
-        task.executeInExecutor(this.eventExecutor, stats);
+        task.executeInExecutor(this.eventExecutor, stats);*/
     }
 
     private void notifyListeners(final ProtocolMessage protocolMessage) {

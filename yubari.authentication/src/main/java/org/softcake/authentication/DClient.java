@@ -181,6 +181,8 @@ public class DClient implements ClientListener {
     }
 
     private final Map<UUID, Long> pluginIdMap = new HashMap();
+    public int anInt;
+    List<Double> durchschnitt = new ArrayList<>(1000);
     private DClient.ClientGUIListener clientGUIListener;
     //private volatile ISystemListenerExtended systemListener;
     private TransportClient transportClient;
@@ -284,6 +286,12 @@ public class DClient implements ClientListener {
         List<String> accountTypes = new ArrayList();
         Collections.addAll(accountTypes, result);
         return accountTypes;
+    }
+
+    public static double roundAvoid(double value, int places) {
+
+        double scale = Math.pow(10, places);
+        return Math.round(value * scale) / scale;
     }
 
     public synchronized void connect(String jnlpUrl, String username, String password) throws Exception {
@@ -505,6 +513,23 @@ public class DClient implements ClientListener {
         ////        }
         return null;
     }
+    //
+    //    private void nullifySession(LocalCacheManager localCAcheManager) {
+    //        if (localCAcheManager != null) {
+    //            localCAcheManager.shutdown();
+    //        }
+    //
+    //        this.newsFilters.clear();
+    //        this.instruments.clear();
+    //        this.captchaId = null;
+    //        this.lastAccountInfoMessage = null;
+    //        this.accountName = null;
+    //        this.internalIP = null;
+    //        this.sessionID = null;
+    //        this.live = false;
+    //        this.serverProperties = new Properties();
+    //        this.initialized = false;
+    //    }
 
     private String authenticate(Collection<URL> authServerUrls,
                                 String username,
@@ -587,7 +612,7 @@ public class DClient implements ClientListener {
 
                     this.authProvider.setUserAgent(userAgent);
                     if (this.transportClient == null) {
-                        System.setProperty("io.netty.tryReflectionSetAccessible","true");
+                        System.setProperty("io.netty.tryReflectionSetAccessible", "true");
                         TransportClientBuilder builder = TransportClient.builder();
                         builder.withStaticSessionDictionary(new StaticSessionDictionary())
                                .withTransportName("DDS2 Standalone Transport Client")
@@ -638,76 +663,6 @@ public class DClient implements ClientListener {
 
         if (this.transportClient != null && !this.transportClient.isOnline()) {
             this.transportClient.connect();
-        }
-
-    }
-
-    public synchronized void disconnect() {
-        //        Iterator var1 = this.getStartedStrategies().keySet().iterator();
-        //
-        //        while(var1.hasNext()) {
-        //            Long processId = (Long)var1.next();
-        //            this.stopStrategy(processId);
-        //        }
-
-        //        LocalCacheManager localCacheManager = null;
-        //        if (FeedDataProvider.getDefaultInstance() != null) {
-        //            localCacheManager = FeedDataProvider.getDefaultInstance().getLocalCacheManager();
-        //            FeedDataProvider.getDefaultInstance().close();
-        //        }
-
-        try {
-            TimeUnit.SECONDS.sleep(1L);
-        } catch (InterruptedException var4) {
-            ;
-        }
-
-        if (this.transportClient != null) {
-            if (this.transportClient.isOnline()) {
-                this.sendSynchronizedQuitMessage();
-            }
-
-          //  this.terminateTransportClient();
-        }
-
-        // this.nullifySession(localCacheManager);
-    }
-    //
-    //    private void nullifySession(LocalCacheManager localCAcheManager) {
-    //        if (localCAcheManager != null) {
-    //            localCAcheManager.shutdown();
-    //        }
-    //
-    //        this.newsFilters.clear();
-    //        this.instruments.clear();
-    //        this.captchaId = null;
-    //        this.lastAccountInfoMessage = null;
-    //        this.accountName = null;
-    //        this.internalIP = null;
-    //        this.sessionID = null;
-    //        this.live = false;
-    //        this.serverProperties = new Properties();
-    //        this.initialized = false;
-    //    }
-
-    private void sendSynchronizedQuitMessage() {
-
-        try {
-            Single<Boolean> listenableFuture = this.transportClient.sendMessageAsync(new QuitRequestMessage());
-            listenableFuture.subscribe();
-        } catch (Throwable var2) {
-            LOGGER.error(var2.getMessage(), var2);
-        }
-
-    }
-
-    private void terminateTransportClient() {
-
-        if (this.transportClient != null) {
-            this.transportClient.disconnect();
-            this.transportClient.terminate();
-            this.transportClient = null;
-            this.authProvider = null;
         }
 
     }
@@ -781,9 +736,35 @@ public class DClient implements ClientListener {
     //
     //    }
 
-    public boolean isConnected() {
+    public synchronized void disconnect() {
+        //        Iterator var1 = this.getStartedStrategies().keySet().iterator();
+        //
+        //        while(var1.hasNext()) {
+        //            Long processId = (Long)var1.next();
+        //            this.stopStrategy(processId);
+        //        }
 
-        return this.transportClient != null && this.transportClient.isOnline() && this.initialized;
+        //        LocalCacheManager localCacheManager = null;
+        //        if (FeedDataProvider.getDefaultInstance() != null) {
+        //            localCacheManager = FeedDataProvider.getDefaultInstance().getLocalCacheManager();
+        //            FeedDataProvider.getDefaultInstance().close();
+        //        }
+
+        try {
+            TimeUnit.SECONDS.sleep(1L);
+        } catch (InterruptedException var4) {
+            ;
+        }
+
+        if (this.transportClient != null) {
+            if (this.transportClient.isOnline()) {
+                this.sendSynchronizedQuitMessage();
+            }
+
+            //  this.terminateTransportClient();
+        }
+
+        // this.nullifySession(localCacheManager);
     }
 
     //   private void processPackedAccountInfoMessage(PackedAccountInfoMessage packedAccountInfoMessage,
@@ -819,6 +800,33 @@ public class DClient implements ClientListener {
     //
     //        taskManager.onOrderReceived(orderMessage);
     //    }
+
+    private void sendSynchronizedQuitMessage() {
+
+        try {
+            Single<Boolean> listenableFuture = this.transportClient.sendMessageAsync(new QuitRequestMessage());
+            listenableFuture.subscribe();
+        } catch (Throwable var2) {
+            LOGGER.error(var2.getMessage(), var2);
+        }
+
+    }
+
+    private void terminateTransportClient() {
+
+        if (this.transportClient != null) {
+            this.transportClient.disconnect();
+            this.transportClient.terminate();
+            this.transportClient = null;
+            this.authProvider = null;
+        }
+
+    }
+
+    public boolean isConnected() {
+
+        return this.transportClient != null && this.transportClient.isOnline() && this.initialized;
+    }
 
     private void connectedInit() {
 
@@ -858,15 +866,6 @@ public class DClient implements ClientListener {
 
     }
 
-
-
-
-    List<Double> durchschnitt = new ArrayList<>(1000);
-    public static double roundAvoid(double value, int places) {
-        double scale = Math.pow(10, places);
-        return Math.round(value * scale) / scale;
-    }
-public int anInt;
     public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
 
 
@@ -877,26 +876,31 @@ public int anInt;
         }
 
 
-
         if ((message instanceof CurrencyMarket)) {
             final long end = System.nanoTime();
-            final long start = ((CurrencyMarket)  message).getCreationTimestamp();
+            final long start = ((CurrencyMarket) message).getCreationTimestamp();
 
-           LOGGER.error("Timestamp in DCClient: {} Execution in Netty Time: {}us", start , ((end-start)/1000) );
-            double diff = ((end-start)/1000000L);
+           // LOGGER.error("Timestamp in DCClient: {} Execution in Netty Time: {}us", start, ((end - start) / 1000));
+            double diff = ((end - start) / 1000L);
+            synchronized (durchschnitt) {
 
-            durchschnitt.add(diff);
+                durchschnitt.add(diff);
+                if (durchschnitt.size() % 20 == 0) {
+                    double namesOfMaleMembersCollect = durchschnitt.stream()
+                                                                   .mapToDouble(new ToDoubleFunction<Double>() {
+                                                                       @Override
+                                                                       public double applyAsDouble(final Double value) {
 
-            double namesOfMaleMembersCollect = durchschnitt
-                .stream().mapToDouble(new ToDoubleFunction<Double>() {
-                    @Override
-                    public double applyAsDouble(final Double value) {
+                                                                           return value;
+                                                                       }
+                                                                   })
+                                                                   .average()
+                                                                   .getAsDouble();
 
-                        return value;
-                    }
-                }).average().getAsDouble();
-            LOGGER.error("Average Execution in Netty Time: {}ms", roundAvoid(namesOfMaleMembersCollect,3) );
+                    LOGGER.error("Average Execution in Netty Time: {}us", roundAvoid(namesOfMaleMembersCollect, 3));
 
+                }
+            }
 
 
         }
@@ -925,8 +929,8 @@ LOGGER.info("retry");*/
 
             LOGGER.info("----------------------------------: {}", msg.getCreationTimestamp());
         }*/
-//        TransportClient providedClient = TransportClient.class.cast(client);
-//        LOGGER.info(message.toString());
+        //        TransportClient providedClient = TransportClient.class.cast(client);
+        //        LOGGER.info(message.toString());
         //        if (providedClient == null || providedClient.isOnline() && !providedClient.isTerminated() &&
         // !ObjectUtils.isNullOrEmpty(this.transportClient) && ObjectUtils.isEqual(providedClient
         // .getTransportSessionId(), this.transportClient.getTransportSessionId())) {
