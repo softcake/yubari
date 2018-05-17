@@ -31,6 +31,7 @@ import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,6 +70,12 @@ public class InstrumentManager implements ClientListener {
             this.transport = (TransportClient) transportClient;
 
             this.transport.addListener(this);
+            this.transport.observeFeedbackMessages().subscribe(new Consumer<ProtocolMessage>() {
+                @Override
+                public void accept(final ProtocolMessage protocolMessage) throws Exception {
+                    feedbackMessageReceived(transport, protocolMessage);
+                }
+            });
             LOGGER.info("InstrumentManager created.");
         }
     }

@@ -57,6 +57,7 @@ import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.base.Strings;
 import io.reactivex.Single;
+import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -341,7 +342,12 @@ public class DClient implements ClientListener {
             //            FeedDataProvider.setPlatformTicket(ticket);
             this.initialized = true;
             this.transportClient.connect();
-
+            this.transportClient.observeFeedbackMessages().subscribe(new Consumer<ProtocolMessage>() {
+                @Override
+                public void accept(final ProtocolMessage protocolMessage) throws Exception {
+                    feedbackMessageReceived2( protocolMessage);
+                }
+            });
             this.connectToHistoryServer(username, true);
             //            FeedDataProvider.getDefaultInstance().setInstrumentsSubscribed(FeedDataProvider
             // .createInstrumentMapMappedWithSaveInCacheOption(this.instruments, true));
@@ -366,11 +372,49 @@ public class DClient implements ClientListener {
             //            FeedDataProvider.setPlatformTicket(ticket);
             //            FeedDataProvider.getDefaultInstance().getFeedCommissionManager().clear();
             this.transportClient.connect();
+            this.transportClient.observeFeedbackMessages().subscribe(new Consumer<ProtocolMessage>() {
+                @Override
+                public void accept(final ProtocolMessage protocolMessage) throws Exception {
+                    feedbackMessageReceived2( protocolMessage);
+                }
+            });
             // this.connectToHistoryServer(username, true);
             //            InstrumentTradability.clean();
             //            InstrumentTradability.getInstance();
         }
 
+    }
+
+    private void feedbackMessageReceived2(final ProtocolMessage message) {
+
+        if ((message instanceof CurrencyMarket)) {
+            final long end = System.nanoTime();
+            final long start = ((CurrencyMarket) message).getCreationTimestamp();
+
+            // LOGGER.error("Timestamp in DCClient: {} Execution in Netty Time: {}us", start, ((end - start) / 1000));
+            double diff = ((end - start) / 1000L);
+            synchronized (durchschnitt) {
+
+                durchschnitt.add(diff);
+                if (durchschnitt.size() % 20 == 0) {
+                    double namesOfMaleMembersCollect = durchschnitt.stream()
+                                                                   .mapToDouble(new ToDoubleFunction<Double>() {
+                                                                       @Override
+                                                                       public double applyAsDouble(final Double value) {
+
+                                                                           return value;
+                                                                       }
+                                                                   })
+                                                                   .average()
+                                                                   .getAsDouble();
+
+                    LOGGER.error("Average Execution in Netty Time: {}us", roundAvoid(namesOfMaleMembersCollect, 3));
+
+                }
+            }
+
+
+        }
     }
 
     public synchronized void connect(Collection<String> authServerUrls,
@@ -867,7 +911,7 @@ public class DClient implements ClientListener {
     }
 
     public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
-
+/*
 
         anInt++;
 
@@ -903,7 +947,7 @@ public class DClient implements ClientListener {
             }
 
 
-        }
+        }*/
   /*      anInt++;
 
         if (anInt == 20) {

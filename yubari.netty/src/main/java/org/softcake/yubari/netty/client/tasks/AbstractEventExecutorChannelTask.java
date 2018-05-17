@@ -16,12 +16,13 @@
 
 package org.softcake.yubari.netty.client.tasks;
 
+import org.softcake.yubari.netty.OrderedThreadPoolExecutor;
 import org.softcake.yubari.netty.client.ClientProtocolHandler;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.util.StrUtils;
 
-import com.dukascopy.dds4.common.orderedExecutor.OrderedThreadPoolExecutor;
+
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.ListenableFuture;

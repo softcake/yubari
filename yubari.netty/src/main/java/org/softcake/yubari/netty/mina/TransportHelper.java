@@ -16,24 +16,13 @@
 
 package org.softcake.yubari.netty.mina;
 
-import com.dukascopy.dds4.common.orderedExecutor.ListeningOrderedThreadPoolExecutor;
-import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolDecoder;
-import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolEncoder;
-import com.dukascopy.dds4.transport.msg.system.InvocationRequest;
-import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+
+import org.softcake.yubari.netty.ListeningOrderedThreadPoolExecutor;
+
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ThreadFactory;
@@ -161,25 +150,19 @@ public class TransportHelper {
                               true);
     }
 
-    public static void safeShutdown(final int timeout, final TimeUnit unit, final ListeningExecutorService... executors) {
 
-        if (executors != null) {
-            for (int i = 0; i < executors.length; ++i) {
-                final ListeningExecutorService executor = executors[i];
-                safeShutdown(executor, timeout, unit);
-            }
-
-        }
-    }
-
-    private static void safeShutdown(final ListeningExecutorService executor, final int timeout, final TimeUnit unit) {
+    public static void shutdown(final ListeningExecutorService executor,
+                          final long waitTime,
+                          final TimeUnit waitTimeUnit) {
 
         executor.shutdown();
 
         try {
-            executor.awaitTermination((long) timeout, unit);
-        } catch (final InterruptedException var4) {
-
+            if (!executor.awaitTermination(waitTime, waitTimeUnit)) {
+                executor.shutdownNow();
+            }
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
 
     }

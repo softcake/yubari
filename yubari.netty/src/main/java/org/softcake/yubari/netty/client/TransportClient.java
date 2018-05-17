@@ -93,6 +93,7 @@ import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSession
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
+import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.Single;
 import org.slf4j.Logger;
@@ -1313,5 +1314,18 @@ public class TransportClient implements ITransportClient {
     public void setAddress(final ServerAddress address) {
 
         this.address = address;
+    }
+
+    public Flowable<ProtocolMessage> observeFeedbackMessages() {
+        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        if (transportClientSessionLocal != null) {
+            return transportClientSessionLocal.observeFeedbackMessages();
+        } else {
+            final String exMessage = String.format("[%s] TransportClient not connected.",
+                                                   this.transportName);
+
+            return Flowable.error(new ConnectException(exMessage));
+        }
+
     }
 }

@@ -16,10 +16,11 @@
 
 package org.softcake.yubari.netty.client.tasks;
 
+import org.softcake.yubari.netty.OrderedThreadPoolExecutor;
 import org.softcake.yubari.netty.client.ClientProtocolHandler;
 import org.softcake.yubari.netty.client.TransportClientSession;
 
-import com.dukascopy.dds4.common.orderedExecutor.OrderedThreadPoolExecutor.OrderedRunnable;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +28,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
-public abstract class AbstractEventExecutorTask implements OrderedRunnable {
+public abstract class AbstractEventExecutorTask implements OrderedThreadPoolExecutor.OrderedRunnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(AbstractEventExecutorTask.class);
     private final TransportClientSession clientSession;
     private final ClientProtocolHandler clientProtocolHandler;

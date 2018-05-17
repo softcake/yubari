@@ -21,6 +21,7 @@ import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMEN
 import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.AbstractConnectingCompletionEvent;
 import org.softcake.yubari.netty.AuthorizationCompletionEvent;
+import org.softcake.yubari.netty.OrderedThreadPoolExecutor;
 import org.softcake.yubari.netty.ProtocolVersionNegotiationCompletionEvent;
 import org.softcake.yubari.netty.SslCompletionEvent;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
@@ -74,7 +75,6 @@ import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
-import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,7 +82,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -125,8 +124,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     DroppableMessageHandler2 messageHandler2;
     private HeartbeatProcessor heartbeatProcessor;
     private IClientConnector clientConnector;
-    private PublishSubject<ProtocolMessage> childPublishSubject = PublishSubject.create();
-    private PublishSubject<ProtocolMessage> primaryPublishSubject = PublishSubject.create();
+    private PublishSubject<MessageChannelHolder> eventPublisher = PublishSubject.create();
+    private PublishSubject<MessageChannelHolder> authEventPublisher = PublishSubject.create();
     private Disposable unknow;
 
     public ClientProtocolHandler(final TransportClientSession session) {
@@ -185,19 +184,14 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
             @Override
             public void onNext(final ClientConnector.ClientState clientState) {
+
                 if (ClientConnector.ClientState.SSL_HANDSHAKE == clientState) {
 
                 } else if (ClientConnector.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
-                   /* getPrimaryPublishSubject(this.getClass().getSimpleName()).subscribe(new Consumer<ProtocolMessage>() {
-                        @Override
-                        public void accept(final ProtocolMessage protocolMessage) throws Exception {
-
-                            notifyListeners(protocolMessage);
-                        }
-                    });*/
                     handleAuthorization(clientConnector.getPrimaryChannel());
                 } else if (ClientConnector.ClientState.ONLINE == clientState) {
-                    LOGGER.info("State in ClientProtocolHandler {}",clientState.name());
+                    LOGGER.info("State in ClientProtocolHandler {}", clientState.name());
+                    initPublis();
                     fireAuthorized();
 
                 } else if (ClientConnector.ClientState.DISCONNECTED == clientState) {
@@ -223,7 +217,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
 
 
         if (this.unknow == null) {
-            this.unknow = getChildPublishSubject("unknow").subscribe(new Consumer<ProtocolMessage>() {
+            this.unknow = observeFeedbackMessages("unknow").subscribe(new Consumer<ProtocolMessage>() {
                 @Override
                 public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
@@ -314,34 +308,18 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
     void terminate() {
 
         this.streamProcessor.terminateStreams();
-        this.shutdown(this.eventExecutor,
+        TransportHelper.shutdown(this.eventExecutor,
                       this.clientSession.getEventPoolTerminationTimeUnitCount(),
                       this.clientSession.getEventPoolTerminationTimeUnit());
-        this.shutdown(this.authEventExecutor,
+        TransportHelper.shutdown(this.authEventExecutor,
                       this.clientSession.getAuthEventPoolTerminationTimeUnitCount(),
                       this.clientSession.getAuthEventPoolTerminationTimeUnit());
-        this.shutdown(this.streamProcessingExecutor,
+        TransportHelper.shutdown(this.streamProcessingExecutor,
                       this.clientSession.getStreamProcessingPoolTerminationTimeUnitCount(),
                       this.clientSession.getStreamProcessingPoolTerminationTimeUnit());
-        this.shutdown(this.syncRequestProcessingExecutor,
+        TransportHelper.shutdown(this.syncRequestProcessingExecutor,
                       this.clientSession.getSyncRequestProcessingPoolTerminationTimeUnitCount(),
                       this.clientSession.getSyncRequestProcessingPoolTerminationTimeUnit());
-    }
-
-    private void shutdown(final ListeningExecutorService executor,
-                          final long waitTimeUnitCount,
-                          final TimeUnit waitTimeUnit) {
-
-        executor.shutdown();
-
-        try {
-            if (!executor.awaitTermination(waitTimeUnitCount, waitTimeUnit)) {
-                executor.shutdownNow();
-            }
-        } catch (final InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
     }
 
     //TODO RXJava
@@ -355,8 +333,6 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
                      this.clientSession.getTransportName(),
                      msg,
                      attachment.isPrimaryConnection());
-
-
 
 
         attachment.setLastReadIoTime(System.currentTimeMillis());
@@ -713,176 +689,91 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
         final SynchRequestProcessor synchRequestProcessor = this.clientSession.getSynchRequestProcessor();
         return synchRequestProcessor.processRequest(message);
     }
-    public Flowable<ProtocolMessage> getPrimaryPublishSubject(String name) {
+    public Flowable<ProtocolMessage> observeAuthorization(String name) {
 
-        return Flowable.defer(new Callable<Publisher<? extends ProtocolMessage>>() {
-            @Override
-            public Publisher<? extends ProtocolMessage> call() throws Exception {
+        return Flowable.defer(() -> {
 
-                MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(clientSession,
-                                                                                        clientConnector.getPrimaryChannel(),
-                                                                                        name);
+            final MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(clientSession,
+                                                                                          name);
 
-                return primaryPublishSubject.toFlowable(BackpressureStrategy.LATEST).subscribeOn(Schedulers.from(
-                    eventExecutor)).doOnNext(new Consumer<ProtocolMessage>() {
-                    @Override
-                    public void accept(final ProtocolMessage message) throws Exception {
+            return authEventPublisher.toFlowable(BackpressureStrategy.LATEST)
+                                 .subscribeOn(Schedulers.from(authEventExecutor))
+                                 .doOnNext(message -> checker.onStart(message.getMessage(),
+                                                                      System.currentTimeMillis(),
+                                                                      sentMessagesCounterIncrementAndGet()))
+                                 .onBackpressureDrop(holder -> checker.onOverflow(holder.getMessage(),
+                                                                                  holder.getChannel()))
+                                 .map(MessageChannelHolder::getMessage)
+                                 .observeOn(Schedulers.from(authEventExecutor))
+                                 .filter(message -> {
+                                     final boolean
+                                         canProcessDroppableMessage
+                                         = messageHandler2.canProcessDroppableMessage(message);
+                                     if (!canProcessDroppableMessage) {
+                                         checker.onDroppable(message);
 
-                        final int messagesCounter = sentMessagesCounterIncrementAndGet();
-                        final boolean checkError = clientSession.getEventExecutionErrorDelay() > 0L
-                                                   && clientSession.getEventExecutionDelayCheckEveryNTimesError() > 0
-                                                   && messagesCounter
-                                                      % clientSession.getEventExecutionDelayCheckEveryNTimesError()
-                                                      == 0;
-                        final boolean checkWarn = clientSession.getEventExecutionWarningDelay() > 0L
-                                                  && clientSession.getEventExecutionDelayCheckEveryNTimesWarning() > 0
-                                                  && messagesCounter
-                                                     % clientSession.getEventExecutionDelayCheckEveryNTimesWarning()
-                                                     == 0;
+                                     }
+                                     return canProcessDroppableMessage;
 
+                                 })
+                                 .doAfterNext(checker::onComplete)
+                                 .doOnError(checker::onError);
 
-                        if (checkError) {
-                            checker.onStart(message, System.currentTimeMillis(), Boolean.TRUE);
-                        } else if (checkWarn) {
-                            checker.onStart(message, System.currentTimeMillis(), Boolean.FALSE);
-                        }
-
-                    }
-                }).onBackpressureDrop(new Consumer<ProtocolMessage>() {
-                    @Override
-                    public void accept(final ProtocolMessage message) throws Exception {
-
-                        checker.onOverflow(message);
-
-                    }
-                }).observeOn(Schedulers.from(eventExecutor)).filter(message -> {
-
-
-                    final boolean canProcessDroppableMessage = messageHandler2.canProcessDroppableMessage(message);
-                    if (!canProcessDroppableMessage) {
-
-                        checker.onDroppable(message);
-
-                    }
-
-                    return canProcessDroppableMessage;
-
-
-                }).doAfterNext(new Consumer<ProtocolMessage>() {
-                    @Override
-                    public void accept(final ProtocolMessage message) throws Exception {
-
-                        checker.onComplete(message);
-
-
-                    }
-                }).doOnError(new Consumer<Throwable>() {
-                    @Override
-                    public void accept(final Throwable throwable) throws Exception {
-
-                        checker.onError(throwable);
-                    }
-                });
-
-            }
         });
     }
 
+    public Flowable<ProtocolMessage> observeFeedbackMessages(String name) {
 
-    public Flowable<ProtocolMessage> getChildPublishSubject(String name) {
+        return Flowable.defer(() -> {
 
-        return Flowable.defer(new Callable<Publisher<? extends ProtocolMessage>>() {
-            @Override
-            public Publisher<? extends ProtocolMessage> call() throws Exception {
+            final MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(clientSession,
+                                                                                          name);
 
-                MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(clientSession,
-                                                                                        clientConnector.getChildChannel(),
-                                                                                        name);
+            return eventPublisher.toFlowable(BackpressureStrategy.LATEST)
+                                 .subscribeOn(Schedulers.from(eventExecutor))
+                                 .doOnNext(message -> checker.onStart(message.getMessage(),
+                                                                           System.currentTimeMillis(),
+                                                                           sentMessagesCounterIncrementAndGet()))
+                                 .onBackpressureDrop(holder -> checker.onOverflow(holder.getMessage(),
+                                                                               holder.getChannel()))
+                                 .map(MessageChannelHolder::getMessage)
+                                 .observeOn(Schedulers.from(eventExecutor))
+                                 .filter(message -> {
+                                          final boolean
+                                              canProcessDroppableMessage
+                                              = messageHandler2.canProcessDroppableMessage(message);
+                                          if (!canProcessDroppableMessage) {
+                                              checker.onDroppable(message);
 
-                return childPublishSubject.toFlowable(BackpressureStrategy.LATEST).subscribeOn(Schedulers.from(
-                    eventExecutor)).doOnNext(new Consumer<ProtocolMessage>() {
-                    @Override
-                    public void accept(final ProtocolMessage message) throws Exception {
+                                          }
+                                          return canProcessDroppableMessage;
 
-                        final int messagesCounter = sentMessagesCounterIncrementAndGet();
-                        final boolean checkError = clientSession.getEventExecutionErrorDelay() > 0L
-                                                   && clientSession.getEventExecutionDelayCheckEveryNTimesError() > 0
-                                                   && messagesCounter
-                                                      % clientSession.getEventExecutionDelayCheckEveryNTimesError()
-                                                      == 0;
-                        final boolean checkWarn = clientSession.getEventExecutionWarningDelay() > 0L
-                                                  && clientSession.getEventExecutionDelayCheckEveryNTimesWarning() > 0
-                                                  && messagesCounter
-                                                     % clientSession.getEventExecutionDelayCheckEveryNTimesWarning()
-                                                     == 0;
+                                      })
+                                 .doAfterNext(checker::onComplete)
+                                 .doOnError(checker::onError);
 
-
-                        if (checkError) {
-                            checker.onStart(message, System.currentTimeMillis(), Boolean.TRUE);
-                        } else if (checkWarn) {
-                            checker.onStart(message, System.currentTimeMillis(), Boolean.FALSE);
-                        }
-
-                    }
-                }).onBackpressureDrop(new Consumer<ProtocolMessage>() {
-                    @Override
-                    public void accept(final ProtocolMessage message) throws Exception {
-
-                        checker.onOverflow(message);
-
-                    }
-                }).observeOn(Schedulers.from(eventExecutor)).filter(message -> {
-
-
-                    final boolean canProcessDroppableMessage = messageHandler2.canProcessDroppableMessage(message);
-                    if (!canProcessDroppableMessage) {
-
-                        checker.onDroppable(message);
-
-                    }
-
-                    return canProcessDroppableMessage;
-
-
-                }).doAfterNext(new Consumer<ProtocolMessage>() {
-                    @Override
-                    public void accept(final ProtocolMessage message) throws Exception {
-
-                        checker.onComplete(message);
-
-
-                    }
-                }).doOnError(new Consumer<Throwable>() {
-                    @Override
-                    public void accept(final Throwable throwable) throws Exception {
-
-                        checker.onError(throwable);
-                    }
-                });
-
-            }
         });
     }
 
 
     private void fireFeedbackMessageReceived(final ChannelHandlerContext ctx, final ProtocolMessage message) {
-        initPublis();
-
-        messageHandler2.setCurrentDroppableMessageTime(message);
 
 
-        childPublishSubject.onNext(message);
-       // primaryPublishSubject.onNext(message);
+
+      //  messageHandler2.setCurrentDroppableMessageTime(message);
 
 
+        eventPublisher.onNext(new MessageChannelHolder(message, ctx.channel()));
+        // primaryPublishSubject.onNext(message);
 /*
+
 
         final long currentDropableMessageTime = this.droppableMessageHandler.getCurrentDropableMessageTime(message);
         if (message instanceof CurrencyMarket) {
             this.clientSession.tickReceived();
         }
 
-*//*
+
 
         if ((message instanceof CurrencyMarket)) {
             final long timeMillis = System.currentTimeMillis();
@@ -890,7 +781,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<BinaryPro
             LOGGER.error("Timestamp seted: {}", timeMillis);
            LOGGER.error("Timestamp in ClientProtocoll: {}", ((CurrencyMarket)  message).getCreationTimestamp());
         }
-*//*
+
 
 
 

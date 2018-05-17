@@ -25,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.function.Consumer;
 
 public class DisconnectedEvent extends EventTask {
     private static final Logger LOGGER = LoggerFactory.getLogger(DisconnectedEvent.class);
@@ -63,7 +64,13 @@ public class DisconnectedEvent extends EventTask {
         } catch (InterruptedException var3) {
 
         }
-        this.listeners.forEach(clientListener -> LOGGER.debug("Disconnecting: {}", clientListener));
+        this.listeners.forEach(new Consumer<ClientListener>() {
+            @Override
+            public void accept(final ClientListener clientListener) {
+
+                LOGGER.debug("Disconnecting: {}", clientListener);
+            }
+        });
     }
 
     public DisconnectReason getReason() {

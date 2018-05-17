@@ -48,6 +48,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslHandler;
+import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.Single;
 import io.reactivex.functions.Consumer;
@@ -916,5 +917,11 @@ public class TransportClientSession {
     public IPingListener getPingListener() {
 
         return this.pingListener;
+    }
+
+    public Flowable<ProtocolMessage> observeFeedbackMessages() {
+
+        return this.protocolHandler.observeFeedbackMessages("TransportClientSession");
+
     }
 }
