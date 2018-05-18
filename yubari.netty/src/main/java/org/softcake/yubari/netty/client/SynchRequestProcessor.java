@@ -16,9 +16,16 @@
 
 package org.softcake.yubari.netty.client;
 
+import org.softcake.yubari.netty.ProtocolVersionNegotiationCompletionEvent;
+import org.softcake.yubari.netty.SslCompletionEvent;
+
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.RequestInProcessMessage;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.reactivex.Observable;
 import io.reactivex.Single;
 
@@ -31,7 +38,8 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * @author René Neubert
  */
-public class SynchRequestProcessor {
+@ChannelHandler.Sharable
+public class SynchRequestProcessor extends SimpleChannelInboundHandler<ProtocolMessage> {
     private final Map<Long, RequestHandler> syncRequests = new ConcurrentHashMap<>();
     private final TransportClientSession session;
     private final ClientProtocolHandler protocolHandler;
@@ -82,6 +90,7 @@ public class SynchRequestProcessor {
 
         final RequestHandler handler = new RequestHandler(syncRequestId, scheduledExecutorService);
         final Observable<ProtocolMessage> request = handler.sendRequest(booleanSingle,
+                                                                        message,
                                                                         doNotRestartTimerOnInProcessResponse,
                                                                         timeout,
                                                                         timeoutUnits,
@@ -89,14 +98,20 @@ public class SynchRequestProcessor {
         return request.doOnSubscribe(disposable -> syncRequests.put(syncRequestId, handler));
     }
 
+    /**
+     * @param message
+     * @return
+     */
     public boolean processRequest(final ProtocolMessage message) {
 
-        if (message.getSynchRequestId() == null) {
+        final Long requestId = message.getSynchRequestId();
+
+        if (requestId == null) {
             return false;
         }
 
-        final RequestHandler handler = this.syncRequests.get(message.getSynchRequestId());
-        final boolean result;
+        final RequestHandler handler = this.syncRequests.get(requestId);
+
         if (handler == null) {
             return false;
         }
@@ -107,8 +122,17 @@ public class SynchRequestProcessor {
             return true;
         } else {
             handler.onResponse(message);
+            this.syncRequests.remove(requestId);
             return !this.session.isDuplicateSyncMessagesToClientListeners();
         }
 
+    }
+
+    @Override
+    protected void channelRead0(final ChannelHandlerContext ctx, final ProtocolMessage msg) throws Exception {
+
+        if (!processRequest(msg)) {
+            ctx.fireChannelRead(msg);
+        }
     }
 }

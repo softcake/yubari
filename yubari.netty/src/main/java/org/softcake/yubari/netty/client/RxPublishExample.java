@@ -68,7 +68,7 @@ public class RxPublishExample {
                                                                                      true);
     AtomicInteger messagesCounter = new AtomicInteger(0);
     AtomicInteger droppedMessagesCounter = new AtomicInteger(0);
-    DroppableMessageHandler2 messageHandler2 = new DroppableMessageHandler2(null);
+    DroppableMessageHandler2 messageHandler2 = null; //new DroppableMessageHandler2(null);
     AtomicBoolean isSupsended = new AtomicBoolean(Boolean.FALSE);
     PublishSubject<ProtocolMessage> publishSubject = PublishSubject.create();
     TransportClient session = new TransportClient();

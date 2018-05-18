@@ -609,13 +609,13 @@ this.isProcessConnecting = true;
 
         this.processPrimarySocketAuthAcceptorMessage();
         //clientSession.getProtocolHandler().getHeartbeatProcessor().sendPing(Boolean.TRUE);
-        clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingPrimary();
+        clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingPrimary( this.clientSession.getPrimaryConnectionPingInterval());
 
         if (!this.clientSession.isUseFeederSocket() || this.childSocketAuthAcceptorMessage == null) {return true;}
 
         if (this.childChannel != null && this.childChannel.isActive()) {
             //clientSession.getProtocolHandler().getHeartbeatProcessor().sendPing(Boolean.FALSE);
-            clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingChild();
+            clientSession.getProtocolHandler().getHeartbeatProcessor().startSendPingChild(this.clientSession.getChildConnectionPingInterval());
             if (this.canResetChildChannelReconnectAttempts()) {
 
                 this.childSessionChannelAttachment.setReconnectAttempt(0);

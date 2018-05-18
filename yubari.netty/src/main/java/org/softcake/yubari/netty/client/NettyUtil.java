@@ -19,12 +19,44 @@ package org.softcake.yubari.netty.client;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ConnectTimeoutException;
+import io.reactivex.CompletableEmitter;
 import io.reactivex.SingleEmitter;
 import io.reactivex.functions.Function;
 
 import java.util.concurrent.CancellationException;
 
 public class NettyUtil {
+
+    public static ChannelFutureListener getDefaultChannelFutureListener(final SingleEmitter<ChannelFuture> emitter) {
+
+
+        return new ChannelFutureListener() {
+            @Override
+            public void operationComplete(final ChannelFuture cf) throws Exception {
+
+                if (cf.isSuccess() && cf.isDone()) {
+                    // Completed successfully
+                    emitter.onSuccess(cf);
+                } else if (cf.isCancelled() && cf.isDone()) {
+                    // Completed by cancellation
+                    emitter.onError(new CancellationException("cancelled before completed"));
+                } else if (cf.isDone() && cf.cause() != null) {
+                    // Completed with failure
+                    emitter.onError(cf.cause());
+                } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
+                    // Uncompleted
+                    emitter.onError(new ConnectTimeoutException());
+                } else {
+                    emitter.onError(new Exception("Unexpected ChannelFuture state"));
+                }
+            }
+        };
+    }
+
+
+
+
+
     public static <R> ChannelFutureListener getDefaultChannelFutureListener(final SingleEmitter<R> e, final Function<ChannelFuture, R> function) {
 
 

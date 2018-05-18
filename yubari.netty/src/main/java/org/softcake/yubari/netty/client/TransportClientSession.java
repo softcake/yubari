@@ -338,11 +338,12 @@ public class TransportClientSession {
             }
         });
         this.protocolHandler = new ClientProtocolHandler(this);
-        this.clientConnector = new ClientConnector(this.address,
-                                                   this.channelBootstrap,
-                                                   this);
+        this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this);
 
         this.protocolHandler.setClientConnector(this.clientConnector);
+        this.synchRequestProcessor = new SynchRequestProcessor(this,
+                                                               this.protocolHandler,
+                                                               this.scheduledExecutorService);
         final Consumer<SecurityExceptionEvent> subscriber = clientConnector.observeSslSecurity();
         this.channelBootstrap.handler(new ChannelInitializer<SocketChannel>() {
             protected void initChannel(final SocketChannel ch) throws Exception {
@@ -353,9 +354,11 @@ public class TransportClientSession {
                                                      ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS
                                                      : enabledSslProtocols;
 
-                    final SSLContext sslContext = SSLContextFactory.getInstance(false, subscriber, address.getHostName());
-//TODO
-                   // SSLContextFactory.observeSecurity();
+                    final SSLContext sslContext = SSLContextFactory.getInstance(false,
+                                                                                subscriber,
+                                                                                address.getHostName());
+                    //TODO
+                    // SSLContextFactory.observeSecurity();
 
 
                     final SSLEngine engine = sslContext.createSSLEngine();
@@ -373,14 +376,15 @@ public class TransportClientSession {
                                  new LengthFieldBasedFrameDecoder(maxMessageSizeBytes, 0, 4, 0, 4, true));
                 pipeline.addLast("frame_encoder", new LengthFieldPrepender(4, false));
                 pipeline.addLast("protocol_encoder_decoder", protocolEncoderDecoder);
+                pipeline.addLast("connector_handler", clientConnector);
                 pipeline.addLast("traffic_blocker", channelTrafficBlocker);
+                pipeline.addLast("sync_request_handler", synchRequestProcessor);
+
                 pipeline.addLast("handler", protocolHandler);
             }
         });
 
-        this.synchRequestProcessor = new SynchRequestProcessor(this,
-                                                               this.protocolHandler,
-                                                               this.scheduledExecutorService);
+
     }
 
     private String[] cleanUpCipherSuites(final String[] enabledCipherSuites) {
@@ -422,7 +426,7 @@ public class TransportClientSession {
 
         LOGGER.debug("[{}] Terminating client session", this.transportName);
         if (this.clientConnector != null) {
-           this.clientConnector.terminate();
+            this.clientConnector.terminate();
         }
 
         if (this.channelBootstrap != null) {
@@ -694,12 +698,12 @@ public class TransportClientSession {
         return this.sendCompletionErrorDelay;
     }
 
-    int getSendCompletionDelayCheckEveryNTimesWarning() {
+    public int getSendCompletionDelayCheckEveryNTimesWarning() {
 
         return this.sendCompletionDelayCheckEveryNTimesWarning;
     }
 
-    int getSendCompletionDelayCheckEveryNTimesError() {
+    public int getSendCompletionDelayCheckEveryNTimesError() {
 
         return this.sendCompletionDelayCheckEveryNTimesError;
     }

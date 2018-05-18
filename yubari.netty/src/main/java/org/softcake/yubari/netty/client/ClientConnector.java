@@ -30,19 +30,32 @@ import org.softcake.yubari.netty.mina.TransportHelper;
 import org.softcake.yubari.netty.ssl.SecurityExceptionEvent;
 
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
+import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
+import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
+import com.dukascopy.dds4.transport.msg.system.HaloResponseMessage;
+import com.dukascopy.dds4.transport.msg.system.LoginRequestMessage;
+import com.dukascopy.dds4.transport.msg.system.OkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandler;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.Single;
+import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
 import io.reactivex.functions.Consumer;
+import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,7 +75,9 @@ import java.util.concurrent.TimeUnit;
 /**
  * @author René Neubert
  */
-public class ClientConnector implements SateMachineClient, IClientConnector {
+@ChannelHandler.Sharable
+public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage>
+implements SateMachineClient, IClientConnector {
     private static final int DEFAULT_EVENT_POOL_SIZE = 2;
     private static final long DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL = 0L;
     private static final int DEFAULT_CRITICAL_EVENT_QUEUE_SIZE = 50;
@@ -111,6 +126,27 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
         this.protocolHandler.observeAuthorizationEvent(this.executor).subscribe(this::processCompletionEvent);
     }
 
+    private static boolean isChannelInActive(final Channel channel) {
+
+        return channel == null || !channel.isActive();
+    }
+
+    private static void shutdown(final ListeningExecutorService executor,
+                                 final long waitTimeUnitCount,
+                                 final TimeUnit waitTimeUnit) {
+
+        executor.shutdown();
+
+        try {
+            if (!executor.awaitTermination(waitTimeUnitCount, waitTimeUnit)) {
+                executor.shutdownNow();
+            }
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+    }
+
     private void processCompletionEvent(final AbstractConnectingCompletionEvent authorizationEvent) {
 
         if (authorizationEvent instanceof SslCompletionEvent) {
@@ -135,7 +171,7 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
         }
         this.disconnect(new ClientDisconnectReason(DisconnectReason.AUTHORIZATION_FAILED,
                                                    String.format("Authorization failed, reason [%s]",
-                                                            authorizationEvent.cause().getMessage())));
+                                                                 authorizationEvent.cause().getMessage())));
 
     }
 
@@ -149,7 +185,7 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
         }
         this.disconnect(new ClientDisconnectReason(DisconnectReason.UNKNOWN,
                                                    String.format("Protocol version negotiation failed, reason [%s]",
-                                                            authorizationEvent.cause().getMessage())));
+                                                                 authorizationEvent.cause().getMessage())));
 
     }
 
@@ -163,14 +199,8 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
         }
         this.disconnect(new ClientDisconnectReason(DisconnectReason.UNKNOWN,
                                                    String.format("SSL handshake failed, reason [%s]",
-                                                            authorizationEvent.cause().getMessage())));
+                                                                 authorizationEvent.cause().getMessage())));
 
-    }
-
-
-    private static boolean isChannelInActive(final Channel channel) {
-
-        return channel == null || !channel.isActive();
     }
 
     @Override
@@ -178,7 +208,6 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
 
         return this.disconnectReason;
     }
-
 
     @Override
     public void onClientStateEnter(final ClientState state) {
@@ -226,7 +255,6 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
 
     }
 
-
     private void createChannelAttachments() {
 
         this.primaryChannelAttachment = new ChannelAttachment(Boolean.TRUE);
@@ -264,7 +292,8 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
             }
         } else {
             this.processSocketAuthAcceptorMessage(this.childSocketAuthAcceptorMessage).subscribe();
-            this.protocolHandler.getHeartbeatProcessor().startSendPingChild();
+            this.protocolHandler.getHeartbeatProcessor()
+                                .startSendPingChild(this.clientSession.getChildConnectionPingInterval());
             this.childChannelAttachment.resetReconnectAttemptsIfValid(this.clientSession
                                                                           .getChildConnectionReconnectsResetDelay(),
                                                                       System.currentTimeMillis());
@@ -282,7 +311,8 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
 
         } else {
             this.processSocketAuthAcceptorMessage(this.primarySocketAuthAcceptorMessage).subscribe();
-            this.protocolHandler.getHeartbeatProcessor().startSendPingPrimary();
+            this.protocolHandler.getHeartbeatProcessor()
+                                .startSendPingPrimary(this.clientSession.getPrimaryConnectionPingInterval());
         }
     }
 
@@ -444,16 +474,29 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
 
     private Single<Channel> processConnectingAndGetFuture() {
 
-        return Single.create((SingleOnSubscribe<Channel>) e -> this.channelBootstrap.connect(this.address)
-                                                                                    .addListener(NettyUtil
-                                                                                                     .getDefaultChannelFutureListener(
+        return Single.create(new SingleOnSubscribe<Channel>() {
+            @Override
+            public void subscribe(final SingleEmitter<Channel> e) throws Exception {
 
-                                                                                                         e,
-                                                                                                         ChannelFuture::channel)))
+                ClientConnector.this.channelBootstrap.connect(ClientConnector.this.address)
+                                                     .addListener(NettyUtil.getDefaultChannelFutureListener(
+
+                                                         e, new Function<ChannelFuture, Channel>() {
+                                                             @Override
+                                                             public Channel apply(final ChannelFuture channelFuture)
+                                                                 throws Exception {
+
+                                                                 return channelFuture.channel();
+                                                             }
+                                                         }));
+            }
+        })
                      .doOnSubscribe(disposable -> LOGGER.debug("[{}] Connecting to [{}]",
-                                                               this.clientSession.getTransportName(), this.address))
+                                                               this.clientSession.getTransportName(),
+                                                               this.address))
                      .doOnSuccess(aBoolean -> LOGGER.debug("[{}] Successfully connected to [{}]",
-                                                           this.clientSession.getTransportName(), this.address))
+                                                           this.clientSession.getTransportName(),
+                                                           this.address))
                      .timeout(this.clientSession.getConnectionTimeout(), TimeUnit.MILLISECONDS)
                      .doOnError(cause -> LOGGER.error("[{}] Connect failed because of {}: {}",
                                                       this.clientSession.getTransportName(),
@@ -461,7 +504,6 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
                                                       cause.getMessage()));
 
     }
-
 
     private void processSslHandShakeWaiting() {
 
@@ -478,7 +520,6 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
                .subscribe();
     }
 
-
     private void processProtocolVersionNegotiationWaiting() {
 
         this.sm.observe()
@@ -494,7 +535,6 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
                .subscribe();
 
     }
-
 
     @Override
     public Channel getPrimaryChannel() {
@@ -564,11 +604,8 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
         }
 
         final StringBuilder builder = new StringBuilder();
-        builder.append("Disconnect now, reason [")
-               .append(reason.getDisconnectReason())
-               .append("], comments [")
-               .append(reason.getDisconnectComments())
-               .append("]");
+        builder.append("Disconnect now, reason [").append(reason.getDisconnectReason()).append("], comments [").append(
+            reason.getDisconnectComments()).append("]");
         if (this.clientSession != null) {
             builder.append(", server address [")
                    .append(this.clientSession.getAddress())
@@ -612,7 +649,6 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
                || state == ClientState.AUTHORIZING;
     }
 
-
     @Override
     public Consumer<SecurityExceptionEvent> observeSslSecurity() {
 
@@ -643,22 +679,50 @@ public class ClientConnector implements SateMachineClient, IClientConnector {
         }
     }
 
-    private static void shutdown(final ListeningExecutorService executor,
-                                 final long waitTimeUnitCount,
-                                 final TimeUnit waitTimeUnit) {
+    @Override
+    protected void channelRead0(final ChannelHandlerContext ctx, final ProtocolMessage msg) throws Exception {
 
-        executor.shutdown();
-
-        try {
-            if (!executor.awaitTermination(waitTimeUnitCount, waitTimeUnit)) {
-                executor.shutdownNow();
-            }
-        } catch (final InterruptedException e) {
-            Thread.currentThread().interrupt();
+        if (msg instanceof PrimarySocketAuthAcceptorMessage) {
+            LOGGER.info("CURRENT STATE: ----------------------------------------------------------------{}",getClientState().name());
+            setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage) msg);
+        } else if (msg instanceof ChildSocketAuthAcceptorMessage) {
+            setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) msg);
+        } else {
+            ctx.fireChannelRead(msg);
         }
-
     }
 
+    private void processAuthorizationMessage(final ChannelHandlerContext ctx,
+                                             final BinaryProtocolMessage protocolMessage) {
+
+        LOGGER.debug("[{}] Sending message [{}] to authorization provider",
+                     this.clientSession.getTransportName(),
+                     protocolMessage);
+
+        if (protocolMessage instanceof OkResponseMessage) {
+            LOGGER.debug(
+                "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",
+                this.clientSession.getTransportName(),
+                this.clientSession.getAuthorizationProvider().getSessionId(),
+                this.clientSession.getAuthorizationProvider().getLogin());
+            this.clientSession.setServerSessionId(this.clientSession.getAuthorizationProvider().getSessionId());
+            //authorizationEvent.onNext(AuthorizationCompletionEvent.success());
+        } else if (protocolMessage instanceof ErrorResponseMessage) {
+
+            final String errorReason = ((ErrorResponseMessage) protocolMessage).getReason();
+            LOGGER.error("[{}] Received AUTHORIZATION_ERROR notification from the authorization provider, reason: [{}]",
+                         this.clientSession.getTransportName(),
+                         errorReason);
+           // authorizationEvent.onNext(AuthorizationCompletionEvent.failed(new Exception(errorReason)));
+
+        } else if (protocolMessage instanceof HaloResponseMessage) {
+            final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
+            loginRequestMessage.setUsername(this.clientSession.getAuthorizationProvider().getLogin());
+            loginRequestMessage.setTicket(this.clientSession.getAuthorizationProvider().getTicket());
+            loginRequestMessage.setSessionId(this.clientSession.getAuthorizationProvider().getSessionId());
+           // writeMessage(ctx.channel(), loginRequestMessage).subscribe();
+        }
+    }
     public enum ClientState {
         IDLE,
         CONNECTING,

@@ -22,13 +22,14 @@ import org.softcake.yubari.netty.ssl.SecurityExceptionEvent;
 import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelInboundHandler;
 import io.reactivex.Observer;
 import io.reactivex.functions.Consumer;
 
 /**
  * @author René Neubert
  */
-public interface IClientConnector   {
+public interface IClientConnector extends ChannelInboundHandler  {
     ClientDisconnectReason getDisconnectReason();
 
     Channel getPrimaryChannel();

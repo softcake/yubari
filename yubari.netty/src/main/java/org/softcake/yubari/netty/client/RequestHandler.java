@@ -66,16 +66,18 @@ public class RequestHandler {
     }
 
     public Observable<ProtocolMessage> sendRequest(final Single<Boolean> requestMessage,
+                                                   final ProtocolMessage message,
                                                    final boolean doNotRestartTimerOnInProcessResponse,
                                                    final long timeout,
                                                    final TimeUnit timeoutUnits) {
 
-        return sendRequest(requestMessage, doNotRestartTimerOnInProcessResponse, timeout, timeoutUnits, aBoolean -> {});
+        return sendRequest(requestMessage, message, doNotRestartTimerOnInProcessResponse, timeout, timeoutUnits, aBoolean -> {});
 
 
     }
 
     public Observable<ProtocolMessage> sendRequest(final Single<Boolean> requestMessage,
+                                                   final ProtocolMessage message,
                                                    final boolean doNotRestartTimerOnInProcessResponse,
                                                    final long timeout,
                                                    final TimeUnit timeoutUnits,
@@ -84,29 +86,35 @@ public class RequestHandler {
         PreCheck.parameterNotNull(requestMessage, "requestMessage");
         PreCheck.parameterNotNull(timeoutUnits, "timeoutUnits");
         PreCheck.parameterNotNull(requestSent, "requestSent");
-        return Observable.defer(() -> {
-            return Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
-                @Override
-                public void subscribe(final ObservableEmitter<ProtocolMessage> e) throws Exception {
 
-                    emitter = e;
+        return Observable.defer(() -> Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
+            @Override
+            public void subscribe(final ObservableEmitter<ProtocolMessage> e) throws Exception {
 
-                    requestMessage.doOnSuccess((Boolean aBoolean) -> {
+                emitter = e;
+                requestMessage.doOnSuccess(new Consumer<Boolean>() {
+                    @Override
+                    public void accept(final Boolean aBoolean) throws Exception {
+
                         RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
                                                            timeoutUnits,
                                                            doNotRestartTimerOnInProcessResponse).subscribe();
-                    }).subscribe(new Consumer<Boolean>() {
-                        @Override
-                        public void accept(final Boolean t) throws Exception {
+                    }
+                }).subscribe(new Consumer<Boolean>() {
+                    @Override
+                    public void accept(final Boolean t) throws Exception {
 
-                            requestSent.accept(t);
-                        }
-                    });
-                }
-            });
-        });
+                        requestSent.accept(t);
+                    }
+                } );
+            }
+        }).doOnError(new Consumer<Throwable>() {
+            @Override
+            public void accept(final Throwable throwable) throws Exception {
+                LOGGER.error("Error... while waiting for response for message: {}",message, throwable);
 
-
+            }
+        }));
     }
 
     private Observable<Long> observeTimeout(final long timeout,
@@ -115,45 +123,44 @@ public class RequestHandler {
 
         return Observable.timer(timeout, timeoutUnits, Schedulers.from(scheduledExecutorService)).repeatWhen(
             objectObservable -> {
-
                 final AtomicLong scheduledTime = new AtomicLong(Long.MIN_VALUE);
-
-
-                return objectObservable.takeWhile(o -> {
-
-                    if (isResponse.get()) {
-                        return false;
-                    } else if (doNotRestartTimerOnInProcessResponse) {
-                        emitter.onError(new TimeoutException("Timeout while waiting for " + "response"));
-
-                    } else if (inProcessResponseLastTime + timeout <= System.currentTimeMillis()) {
-                        emitter.onError(new TimeoutException("Timeout while waiting for response with retry timeout"));
-
-                    } else {
-
-
-                        scheduledTime.set(inProcessResponseLastTime + timeout - System.currentTimeMillis());
-                        if (scheduledTime.get() > 0L) {
-                            LOGGER.info("Retrying {}", scheduledTime.get());
-                            return true;
-
-                        }
-
-                        emitter.onError(new TimeoutException("Unexpecte timeout"));
-
-
-                    }
-                    return false;
-                }).flatMap((Function<Object, ObservableSource<?>>) o -> Observable.timer(scheduledTime.get(),
-                                                                                         TimeUnit.MILLISECONDS,
-                                                                                         Schedulers.from(
-                                                                                             scheduledExecutorService)));
+                return objectObservable.takeWhile(o -> shouldRestartTimer(doNotRestartTimerOnInProcessResponse,
+                                                                          timeout,
+                                                                          scheduledTime))
+                                       .flatMap((Function<Object, ObservableSource<?>>) o -> Observable.timer(
+                                           scheduledTime.get(),
+                                           TimeUnit.MILLISECONDS,
+                                           Schedulers.from(scheduledExecutorService)));
             });
+    }
+
+    private boolean shouldRestartTimer(final boolean doNotRestartTimerOnInProcessResponse,
+                                       final long timeout,
+                                       final AtomicLong scheduledTime) {
+
+        if (isResponse.get()) {
+            return false;
+        } else if (doNotRestartTimerOnInProcessResponse) {
+            emitter.onError(new TimeoutException("Timeout while waiting for " + "response"));
+
+        } else if (inProcessResponseLastTime + timeout <= System.currentTimeMillis()) {
+            emitter.onError(new TimeoutException("Timeout while waiting for response with retry " + "timeout"));
+
+        } else {
+            scheduledTime.set(inProcessResponseLastTime + timeout - System.currentTimeMillis());
+            if (scheduledTime.get() > 0L) {
+                LOGGER.info("Retrying {}", scheduledTime.get());
+                return true;
+            }
+            emitter.onError(new TimeoutException("Unexpected timeout"));
+        }
+        return false;
     }
 
     public void onResponse(final ProtocolMessage message) {
 
         PreCheck.parameterNotNull(message, "message");
+
         if (this.syncRequestId.equals(message.getSynchRequestId())) {
             isResponse.set(true);
             emitter.onNext(message);

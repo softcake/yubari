@@ -154,10 +154,10 @@ public class HeartbeatProcessor {
             this.childPing.dispose();
         }
     }
-    public void startSendPingPrimary() {
+    public void startSendPingPrimary(long pingInterval) {
 
         if (this.primaryPing == null || this.primaryPing.isDisposed()) {
-            this.primaryPing = Observable.interval(3333L, this.clientSession.getPrimaryConnectionPingInterval(), TimeUnit.MILLISECONDS)
+            this.primaryPing = Observable.interval(3333L,pingInterval, TimeUnit.MILLISECONDS)
                                          .doOnError(new Consumer<Throwable>() {
                                              @Override
                                              public void accept(final Throwable throwable) throws Exception {
@@ -177,10 +177,10 @@ public class HeartbeatProcessor {
 
 
     }
-    public void startSendPingChild() {
+    public void startSendPingChild(long pingInterval) {
 
         if (this.childPing == null || this.childPing.isDisposed()) {
-            this.childPing = Observable.interval(this.clientSession.getChildConnectionPingInterval(), TimeUnit.MILLISECONDS)
+            this.childPing = Observable.interval(pingInterval, TimeUnit.MILLISECONDS)
                                          .doOnError(new Consumer<Throwable>() {
                                              @Override
                                              public void accept(final Throwable throwable) throws Exception {
@@ -194,11 +194,6 @@ public class HeartbeatProcessor {
                     }
                 });
         }
-
-
-
-
-
     }
 
     public void sendPing(final Boolean isPrimary) {
@@ -287,20 +282,19 @@ public class HeartbeatProcessor {
                                                                                  Boolean.TRUE,
                                                                                  messageSentListener);
 
-        LOGGER.debug("[{}] Sending {} connection ping request: {}",
-                     this.clientSession.getTransportName(),
-                     (isPrimary ? PRIMARY : CHILD).toLowerCase(),
-                     pingRequestMessage);
+
         future.subscribe(new Observer<ProtocolMessage>() {
             @Override
             public void onSubscribe(final Disposable d) {
-
+                LOGGER.debug("[{}] Sending {} connection ping request: {}",
+                             clientSession.getTransportName(),
+                             (isPrimary ? PRIMARY : CHILD).toLowerCase(),
+                             pingRequestMessage);
             }
 
             @Override
             public void onNext(final ProtocolMessage protocolMessage) {
 
-                LOGGER.info("HeartbeatProcessor Thread1: {}", Thread.currentThread().getName());
                 final long now = System.currentTimeMillis();
 
                 try {
@@ -355,7 +349,7 @@ public class HeartbeatProcessor {
 
             @Override
             public void onError(final Throwable e) {
-
+                LOGGER.error("Error while waiting for response for message: {}",pingRequestMessage, e);
             }
 
             @Override

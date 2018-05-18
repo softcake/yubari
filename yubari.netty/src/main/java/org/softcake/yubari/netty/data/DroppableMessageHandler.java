@@ -34,13 +34,12 @@ public class DroppableMessageHandler {
     private final Map<Class<?>, Map<String, DroppableMessageScheduling>>
         lastScheduledDropableMessages
         = new ConcurrentHashMap<>();
-    private final TransportClientSession clientSession;
     private final long droppableMessagesClientTTL;
 
-    public DroppableMessageHandler(final TransportClientSession clientSession) {
+    public DroppableMessageHandler(final long droppableMessagesClientTTL) {
 
-        this.clientSession = PreCheck.notNull(clientSession, "clientSession");
-        this.droppableMessagesClientTTL = clientSession.getDroppableMessagesClientTTL();
+
+        this.droppableMessagesClientTTL = droppableMessagesClientTTL;
     }
 
     private DroppableMessageScheduling getDroppableScheduling(final ProtocolMessage message, final String instrument) {
@@ -67,9 +66,8 @@ public class DroppableMessageHandler {
 
     public long getCurrentDropableMessageTime(final ProtocolMessage message) {
 
-        return this.clientSession.isSkipDroppableMessages()
-               ? this.checkAndRecordScheduleForDroppableMessage(message)
-               : 0L;
+        return this.checkAndRecordScheduleForDroppableMessage(message);
+
     }
 
     private long checkAndRecordScheduleForDroppableMessage(final ProtocolMessage message) {

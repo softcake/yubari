@@ -34,13 +34,11 @@ public class DroppableMessageHandler2 {
     private final Map<Class<?>, Map<String, DroppableMessageScheduling>>
         lastScheduledDropableMessages
         = new ConcurrentHashMap<>();
-    private final TransportClientSession clientSession;
     private final long droppableMessagesClientTTL;
 
-    public DroppableMessageHandler2(final TransportClientSession clientSession) {
+    public DroppableMessageHandler2(final long droppableMessagesClientTTL) {
 
-        this.clientSession = PreCheck.notNull(clientSession, "clientSession");
-        this.droppableMessagesClientTTL = clientSession.getDroppableMessagesClientTTL();
+        this.droppableMessagesClientTTL = droppableMessagesClientTTL;
     }
 
     private DroppableMessageScheduling getDroppableScheduling(final ProtocolMessage message, final String instrument) {
