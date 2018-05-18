@@ -19,7 +19,6 @@ package org.softcake.yubari.netty;
 import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
 
 import org.softcake.yubari.netty.channel.ChannelAttachment;
-import org.softcake.yubari.netty.client.NettyUtil;
 import org.softcake.yubari.netty.client.TransportClientSession;
 
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
@@ -27,15 +26,12 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ConnectTimeoutException;
-import io.reactivex.Completable;
 import io.reactivex.CompletableEmitter;
 import io.reactivex.Observable;
 import io.reactivex.Single;
-import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
-import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +40,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -87,190 +84,103 @@ public class DefaultChannelWriter {
         ca.messageWritten();
     }
 
-    public Single<Boolean> writeMessage2(final Channel channel, final BinaryProtocolMessage responseMessage) {
-
-        final int messagesCounter = sentMessagesCounterIncrementAndGet();
-
-        return Single.create(new SingleOnSubscribe<Boolean>() {
-            @Override
-            public void subscribe(final SingleEmitter<Boolean> e) throws Exception {
-                //clientSession.getChannelTrafficBlocker().suspend(channel);
-                // Observable.just(true).delay(2000L, TimeUnit.MILLISECONDS).subscribe(aBoolean -> clientSession
-                // .getChannelTrafficBlocker().resume(channel));
-                final ChannelFuture future = channel.writeAndFlush(responseMessage);
-                final long procStartTime = System.currentTimeMillis();
-                checkSendingErrorOnNotWritableChannel(channel,
-                                                      future,
-                                                      procStartTime).subscribe(TransportClientSession::terminate);
-
-                if (isTimeToCheckError(messagesCounter)) {
-                    checkSendError(procStartTime, future);
-                } else if (isTimeToCheckWarning(messagesCounter)) {
-                    checkSendingWarning(procStartTime, future);
-                }
-
-                future.addListener(NettyUtil.getDefaultChannelFutureListener(e, channelFuture -> Boolean.TRUE));
-            }
-        })
-                     .doOnSuccess(aBoolean -> updateChannelAttachment(channel, System.currentTimeMillis()))
-                     .doOnError(cause -> LOGGER.error("[{}] Message send failed because of {}: {}",
-                                                      clientSession.getTransportName(),
-                                                      cause.getClass().getSimpleName(),
-                                                      cause.getMessage()));
-    }
 
     public Single<ChannelFuture> writeMessageAndCheckTimeout(final Channel channel,
-                                                             final BinaryProtocolMessage responseMessage,final long timeOut, final boolean checkErrorTimeout) {
+                                                             final BinaryProtocolMessage responseMessage,
+                                                             final long timeOut,
+                                                             final boolean checkErrorTimeout) {
 
         AtomicReference<ChannelFuture> reference = new AtomicReference<>();
         AtomicInteger msgCount = new AtomicInteger(0);
+        AtomicLong processStartTime = new AtomicLong(0L);
+
         AtomicBoolean isTimeOut = new AtomicBoolean(Boolean.FALSE);
+        return Single.create((SingleOnSubscribe<ChannelFuture>) emitter -> {
+            processStartTime.set(System.currentTimeMillis());
+            final ChannelFuture future = channel.writeAndFlush(responseMessage);
+            final Disposable disposable = getTimeoutObservable(future,
+                                                               timeOut,
+                                                               isTimeOut,
+                                                               checkErrorTimeout,
+                                                               processStartTime).subscribe(aLong -> {
 
+            }, throwable -> emitter.onError(new Exception("Unexpected error while timeout checking")));
 
-        return Single.create(new SingleOnSubscribe<ChannelFuture>() {
-            @Override
-            public void subscribe(final SingleEmitter<ChannelFuture> emitter) throws Exception {
-                final long processStartTime = System.currentTimeMillis();
-                final ChannelFuture future = channel.writeAndFlush(responseMessage);
-                final Disposable subscribe = Observable.timer(timeOut, TimeUnit.MILLISECONDS)
-                                                       .subscribe(new Consumer<Long>() {
-                                                           @Override
-                                                           public void accept(final Long aLong) throws Exception {
+            future.addListener((ChannelFutureListener) cf -> {
 
-                                                               isTimeOut.set(Boolean.TRUE);
-
-                                                               if (!future.isDone()) {
-
-                                                                   if (checkErrorTimeout) {
-                                                                       LOGGER.error(
-                                                                           "[{}] Message was not sent in timeout time {}ms and is still "
-
-                                                                           + "waiting it's turn, CRITICAL SEND TIME: "
-                                                                           + "{}ms, possible "
-                                                                           + "network problem",
-                                                                           clientSession.getTransportName(),
-                                                                           clientSession.getSendCompletionErrorDelay(),
-                                                                           System.currentTimeMillis() - processStartTime);
-                                                                   }else {
-                                                                       LOGGER.warn(
-                                                                           "[{}] Message sending takes too long time to complete: {}ms and is still waiting it's turn"
-
-                                                                           + ". Timeout time: {}ms, possible network "
-                                                                           + "problem",
-                                                                           clientSession.getTransportName(),
-                                                                           System.currentTimeMillis() - processStartTime,
-                                                                           clientSession.getSendCompletionWarningDelay());
-                                                                   }
-                                                               }
-                                                           }
-                                                       });
-
-               future.addListener(new ChannelFutureListener() {
-                    @Override
-                    public void operationComplete(final ChannelFuture cf) throws Exception {
-
-                        if (cf.isSuccess() && cf.isDone()) {
-                            emitter.onSuccess(cf);
-                            if (isTimeOut.get()) {
-
-                                if (checkErrorTimeout) {
-                                    LOGGER.error(
-                                        "[{}] Message sending took {}ms, critical timeout time {}ms, possible network "
-                                        + "problem",
-                                        clientSession.getTransportName(),
-                                        System.currentTimeMillis() - processStartTime,
-                                        clientSession.getSendCompletionErrorDelay());
-                                }else{
-                                    LOGGER.warn("[{}] Message sending took {}ms, timeout time {}ms, possible network "
-                                                + "problem",
-                                                clientSession.getTransportName(),
-                                                System.currentTimeMillis() - processStartTime,
-                                                clientSession.getSendCompletionWarningDelay());
-                                }
-                            }
-
-
-                        } else if (cf.isCancelled() && cf.isDone()) {
-                            // Completed by cancellation
-                            emitter.onError(new CancellationException("cancelled before completed"));
-                        } else if (cf.isDone() && cf.cause() != null) {
-                            // Completed with failure
-                            emitter.onError(cf.cause());
-                        } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
-                            // Uncompleted
-                            emitter.onError(new ConnectTimeoutException());
-                        } else {
-                            emitter.onError(new Exception("Unexpected ChannelFuture state"));
-                        }
-                        subscribe.dispose();
-                    }
-                });
-
-
-
-
-                msgCount.set(sentMessagesCounterIncrementAndGet());
-                reference.set(channel.writeAndFlush(responseMessage)
-                                     .addListener(NettyUtil.getDefaultChannelFutureListener(emitter)));
-            }
-        });
+                if (cf.isSuccess() && cf.isDone()) {
+                    emitter.onSuccess(cf);
+                } else if (cf.isCancelled() && cf.isDone()) {
+                    // Completed by cancellation
+                    emitter.onError(new CancellationException("cancelled before completed"));
+                } else if (cf.isDone() && cf.cause() != null) {
+                    // Completed with failure
+                    emitter.onError(cf.cause());
+                } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
+                    // Uncompleted
+                    emitter.onError(new ConnectTimeoutException());
+                } else {
+                    emitter.onError(new Exception("Unexpected ChannelFuture state"));
+                }
+                disposable.dispose();
+            });
+        }).doOnSuccess(channelFuture -> logSendingExecutionWarningOrError(isTimeOut,
+                                                                          checkErrorTimeout,
+                                                                          processStartTime));
 
 
     }
 
-    public Completable writeMessageWithWarningCheck(final Channel channel,
-                                                    final BinaryProtocolMessage responseMessage) {
+    private Observable<Long> getTimeoutObservable(final ChannelFuture future,
+                                                  final long timeOut,
+                                                  final AtomicBoolean isTimeOut,
+                                                  final boolean checkErrorTimeout,
+                                                  final AtomicLong processStartTime) {
 
-
-        Observable.just(channel.writeAndFlush(responseMessage)).map(new Function<ChannelFuture, ChannelFuture>() {
-            @Override
-            public ChannelFuture apply(final ChannelFuture channelFuture) throws Exception {
-
-                AtomicBoolean isTimeOut = new AtomicBoolean(Boolean.FALSE);
-                final Disposable subscribe = Observable.timer(1000L, TimeUnit.MILLISECONDS)
-                                                       .subscribe(new Consumer<Long>() {
-                                                           @Override
-                                                           public void accept(final Long aLong) throws Exception {
-                                                               "[{}] Message sending takes too long time to complete: {}ms and is still waiting it's turn"
-                                                               + ". Timeout time: {}ms, possible network problem";
-                                                               isTimeOut.set(Boolean.TRUE);
-                                                           }
-                                                       });
-                final ChannelFuture future = channelFuture.addListener(new ChannelFutureListener() {
-                    @Override
-                    public void operationComplete(final ChannelFuture cf) throws Exception {
-
-
-                        if (cf.isSuccess() && cf.isDone()) {
-                            if (isTimeOut.get()) {
-                                final String timeout = "Timeout";
-                            } else {
-                                     subscribe.dispose();
-                            }
-                            return Observable.just(cf);
-                        } else if (cf.isCancelled() && cf.isDone()) {
-                            // Completed by cancellation
-                            emitter.onError(new CancellationException("cancelled before completed"));
-                        } else if (cf.isDone() && cf.cause() != null) {
-                            // Completed with failure
-                            emitter.onError(cf.cause());
-                        } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
-                            // Uncompleted
-                            emitter.onError(new ConnectTimeoutException());
-                        } else {
-                            emitter.onError(new Exception("Unexpected ChannelFuture state"));
-                        }
-                    }
-                });
-                return null;
-            }
-        }) writeMessage(channel, responseMessage).delay(clientSession.getSendCompletionWarningDelay(),
-                                                        TimeUnit.MILLISECONDS,
-                                                        Schedulers.from(clientSession.getScheduledExecutorService()));
-
-
-        return null;
+        return Observable.timer(timeOut, TimeUnit.MILLISECONDS).doOnNext(aLong -> isTimeOut.set(Boolean.TRUE)).filter(
+            aLong -> !future.isDone()).doOnNext(aLong -> logStillInExecutionWarningOrError(checkErrorTimeout,
+                                                                                           processStartTime));
     }
+
+    private void logStillInExecutionWarningOrError(final boolean checkErrorTimeout, final AtomicLong processStartTime) {
+
+        if (checkErrorTimeout) {
+            LOGGER.error("[{}] Message was not sent in timeout time {}ms and is still "
+
+                         + "waiting it's turn, CRITICAL SEND TIME: " + "{}ms, possible " + "network problem",
+                         clientSession.getTransportName(),
+                         clientSession.getSendCompletionErrorDelay(),
+                         System.currentTimeMillis() - processStartTime.get());
+        } else {
+            LOGGER.warn("[{}] Message sending takes too long time to complete: {}ms and is still waiting it's turn"
+
+                        + ". Timeout time: {}ms, possible network " + "problem",
+                        clientSession.getTransportName(),
+                        System.currentTimeMillis() - processStartTime.get(),
+                        clientSession.getSendCompletionWarningDelay());
+        }
+    }
+
+    private void logSendingExecutionWarningOrError(final AtomicBoolean isTimeOut,
+                                                   final boolean checkErrorTimeout,
+                                                   final AtomicLong processStartTime) {
+
+        if (isTimeOut.get()) {
+            if (checkErrorTimeout) {
+                LOGGER.error("[{}] Message sending took {}ms, critical timeout time {}ms, possible network "
+                             + "problem",
+                             clientSession.getTransportName(),
+                             System.currentTimeMillis() - processStartTime.get(),
+                             clientSession.getSendCompletionErrorDelay());
+            } else {
+                LOGGER.warn("[{}] Message sending took {}ms, timeout time {}ms, possible network " + "problem",
+                            clientSession.getTransportName(),
+                            System.currentTimeMillis() - processStartTime.get(),
+                            clientSession.getSendCompletionWarningDelay());
+            }
+        }
+    }
+
 
     private void writeAndCheckTimeout(final Channel channel,
                                       final BinaryProtocolMessage responseMessage,
@@ -293,7 +203,7 @@ public class DefaultChannelWriter {
         if (isTimeToCheckError(messagesCounter)) {
             checkSendError(procStartTime, future);
         } else if (isTimeToCheckWarning(messagesCounter)) {
-            checkSendingWarning(procStartTime, future);
+            //  checkSendingWarning(procStartTime, future);
         }
     }
 
