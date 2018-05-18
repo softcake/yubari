@@ -120,23 +120,98 @@ public class DefaultChannelWriter {
     }
 
     public Single<ChannelFuture> writeMessageAndCheckTimeout(final Channel channel,
-                                                             final BinaryProtocolMessage responseMessage) {
+                                                             final BinaryProtocolMessage responseMessage,final long timeOut, final boolean checkErrorTimeout) {
 
         AtomicReference<ChannelFuture> reference = new AtomicReference<>();
         AtomicInteger msgCount = new AtomicInteger(0);
+        AtomicBoolean isTimeOut = new AtomicBoolean(Boolean.FALSE);
+
+
         return Single.create(new SingleOnSubscribe<ChannelFuture>() {
             @Override
             public void subscribe(final SingleEmitter<ChannelFuture> emitter) throws Exception {
+                final long processStartTime = System.currentTimeMillis();
+                final ChannelFuture future = channel.writeAndFlush(responseMessage);
+                final Disposable subscribe = Observable.timer(timeOut, TimeUnit.MILLISECONDS)
+                                                       .subscribe(new Consumer<Long>() {
+                                                           @Override
+                                                           public void accept(final Long aLong) throws Exception {
+
+                                                               isTimeOut.set(Boolean.TRUE);
+
+                                                               if (!future.isDone()) {
+
+                                                                   if (checkErrorTimeout) {
+                                                                       LOGGER.error(
+                                                                           "[{}] Message was not sent in timeout time {}ms and is still "
+
+                                                                           + "waiting it's turn, CRITICAL SEND TIME: "
+                                                                           + "{}ms, possible "
+                                                                           + "network problem",
+                                                                           clientSession.getTransportName(),
+                                                                           clientSession.getSendCompletionErrorDelay(),
+                                                                           System.currentTimeMillis() - processStartTime);
+                                                                   }else {
+                                                                       LOGGER.warn(
+                                                                           "[{}] Message sending takes too long time to complete: {}ms and is still waiting it's turn"
+
+                                                                           + ". Timeout time: {}ms, possible network "
+                                                                           + "problem",
+                                                                           clientSession.getTransportName(),
+                                                                           System.currentTimeMillis() - processStartTime,
+                                                                           clientSession.getSendCompletionWarningDelay());
+                                                                   }
+                                                               }
+                                                           }
+                                                       });
+
+               future.addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(final ChannelFuture cf) throws Exception {
+
+                        if (cf.isSuccess() && cf.isDone()) {
+                            emitter.onSuccess(cf);
+                            if (isTimeOut.get()) {
+
+                                if (checkErrorTimeout) {
+                                    LOGGER.error(
+                                        "[{}] Message sending took {}ms, critical timeout time {}ms, possible network "
+                                        + "problem",
+                                        clientSession.getTransportName(),
+                                        System.currentTimeMillis() - processStartTime,
+                                        clientSession.getSendCompletionErrorDelay());
+                                }else{
+                                    LOGGER.warn("[{}] Message sending took {}ms, timeout time {}ms, possible network "
+                                                + "problem",
+                                                clientSession.getTransportName(),
+                                                System.currentTimeMillis() - processStartTime,
+                                                clientSession.getSendCompletionWarningDelay());
+                                }
+                            }
+
+
+                        } else if (cf.isCancelled() && cf.isDone()) {
+                            // Completed by cancellation
+                            emitter.onError(new CancellationException("cancelled before completed"));
+                        } else if (cf.isDone() && cf.cause() != null) {
+                            // Completed with failure
+                            emitter.onError(cf.cause());
+                        } else if (!cf.isDone() && !cf.isSuccess() && !cf.isCancelled() && cf.cause() == null) {
+                            // Uncompleted
+                            emitter.onError(new ConnectTimeoutException());
+                        } else {
+                            emitter.onError(new Exception("Unexpected ChannelFuture state"));
+                        }
+                        subscribe.dispose();
+                    }
+                });
+
+
+
 
                 msgCount.set(sentMessagesCounterIncrementAndGet());
                 reference.set(channel.writeAndFlush(responseMessage)
                                      .addListener(NettyUtil.getDefaultChannelFutureListener(emitter)));
-            }
-        }).doOnSubscribe(new Consumer<Disposable>() {
-            @Override
-            public void accept(final Disposable disposable) throws Exception {
-
-                checkSendingWarning(System.currentTimeMillis(), reference.get(), msgCount.get());
             }
         });
 
