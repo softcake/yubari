@@ -20,6 +20,7 @@ package org.softcake.yubari.netty.client;
 import org.softcake.yubari.netty.mina.ClientListener;
 
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import io.reactivex.Completable;
 import io.reactivex.Observable;
 import io.reactivex.Single;
 
@@ -34,7 +35,7 @@ public interface ITransportClient  {
 
     boolean sendMessageNaive(ProtocolMessage var1);
 
-   Single<Boolean> sendMessageAsync(ProtocolMessage var1);
+    Completable sendMessageAsync(ProtocolMessage var1);
 
   //  <V> void sendMessageAsync(ProtocolMessage var1, FutureCallback<V> var2);
 

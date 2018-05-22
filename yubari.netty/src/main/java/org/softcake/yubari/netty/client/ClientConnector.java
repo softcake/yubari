@@ -49,11 +49,13 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.reactivex.Completable;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.Single;
 import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
+import io.reactivex.functions.Action;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
@@ -370,17 +372,16 @@ implements SateMachineClient, IClientConnector {
         this.childSocketAuthAcceptorMessage = PreCheck.notNull(acceptorMessage, "ChildSocketAuthAcceptorMessage");
     }
 
-    private Single<Boolean> processSocketAuthAcceptorMessage(final ProtocolMessage msg) {
+    private Completable processSocketAuthAcceptorMessage(final ProtocolMessage msg) {
 
         if (msg instanceof PrimarySocketAuthAcceptorMessage) {
 
             return this.primarySocketAuthAcceptorMessageSent || this.primarySocketAuthAcceptorMessage == null
-                   ? Single.just(false)
+                   ? Completable.complete()
                    : this.writeSocketAuthAcceptorMessage(msg, Boolean.TRUE);
 
         } else if (msg instanceof ChildSocketAuthAcceptorMessage) {
-            return this.childSocketAuthAcceptorMessageSent || this.childSocketAuthAcceptorMessage == null ? Single.just(
-                false) : this.writeSocketAuthAcceptorMessage(msg, Boolean.FALSE);
+            return this.childSocketAuthAcceptorMessageSent || this.childSocketAuthAcceptorMessage == null ? Completable.complete() : this.writeSocketAuthAcceptorMessage(msg, Boolean.FALSE);
 
         } else {
             throw new IllegalArgumentException(
@@ -389,7 +390,7 @@ implements SateMachineClient, IClientConnector {
 
     }
 
-    private Single<Boolean> writeSocketAuthAcceptorMessage(final ProtocolMessage msg, final boolean isPrimary) {
+    private Completable writeSocketAuthAcceptorMessage(final ProtocolMessage msg, final boolean isPrimary) {
 
         final Channel channel = isPrimary ? this.primaryChannel : this.childChannel;
 
@@ -402,7 +403,7 @@ implements SateMachineClient, IClientConnector {
                                                                      isPrimary ? "Primary" : "Child",
                                                                      msg),
                                                        t));
-        }).doOnSuccess(aBoolean -> this.socketAuthAcceptormessageSent(isPrimary)
+        }).doOnComplete(() -> socketAuthAcceptormessageSent(isPrimary)
 
 
         );

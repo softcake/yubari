@@ -70,7 +70,7 @@ public class InstrumentManager implements ClientListener {
             this.transport = (TransportClient) transportClient;
 
             this.transport.addListener(this);
-            this.transport.observeFeedbackMessages().subscribe(new Consumer<ProtocolMessage>() {
+            this.transport.observeMessagesReceived().subscribe(new Consumer<ProtocolMessage>() {
                 @Override
                 public void accept(final ProtocolMessage protocolMessage) throws Exception {
                     feedbackMessageReceived(transport, protocolMessage);

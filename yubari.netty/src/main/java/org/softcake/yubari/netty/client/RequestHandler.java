@@ -19,11 +19,13 @@ package org.softcake.yubari.netty.client;
 import org.softcake.cherry.core.base.PreCheck;
 
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import io.reactivex.Completable;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.ObservableSource;
 import io.reactivex.Single;
+import io.reactivex.functions.Action;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
@@ -65,7 +67,7 @@ public class RequestHandler {
         return responseMessage;
     }
 
-    public Observable<ProtocolMessage> sendRequest(final Single<Boolean> requestMessage,
+    public Observable<ProtocolMessage> sendRequest(final Completable requestMessage,
                                                    final ProtocolMessage message,
                                                    final boolean doNotRestartTimerOnInProcessResponse,
                                                    final long timeout,
@@ -76,7 +78,7 @@ public class RequestHandler {
 
     }
 
-    public Observable<ProtocolMessage> sendRequest(final Single<Boolean> requestMessage,
+    public Observable<ProtocolMessage> sendRequest(final Completable requestMessage,
                                                    final ProtocolMessage message,
                                                    final boolean doNotRestartTimerOnInProcessResponse,
                                                    final long timeout,
@@ -92,21 +94,19 @@ public class RequestHandler {
             public void subscribe(final ObservableEmitter<ProtocolMessage> e) throws Exception {
 
                 emitter = e;
-                requestMessage.doOnSuccess(new Consumer<Boolean>() {
+                requestMessage.doOnComplete(new Action() {
                     @Override
-                    public void accept(final Boolean aBoolean) throws Exception {
-
+                    public void run() throws Exception {
                         RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
                                                            timeoutUnits,
                                                            doNotRestartTimerOnInProcessResponse).subscribe();
                     }
-                }).subscribe(new Consumer<Boolean>() {
+                }).subscribe(new Action() {
                     @Override
-                    public void accept(final Boolean t) throws Exception {
-
-                        requestSent.accept(t);
+                    public void run() throws Exception {
+                        requestSent.accept(true);
                     }
-                } );
+                });
             }
         }).doOnError(new Consumer<Throwable>() {
             @Override

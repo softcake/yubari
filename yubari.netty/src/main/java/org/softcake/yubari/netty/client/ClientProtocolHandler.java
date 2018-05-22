@@ -21,6 +21,8 @@ import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMEN
 import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.AbstractConnectingCompletionEvent;
 import org.softcake.yubari.netty.AuthorizationCompletionEvent;
+import org.softcake.yubari.netty.DefaultChannelWriter;
+import org.softcake.yubari.netty.EventTimeoutChecker;
 import org.softcake.yubari.netty.ProtocolVersionNegotiationCompletionEvent;
 import org.softcake.yubari.netty.SslCompletionEvent;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
@@ -52,21 +54,16 @@ import com.dukascopy.dds4.transport.msg.system.StreamHeaderMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamingStatus;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.util.Attribute;
-import io.netty.util.ReferenceCountUtil;
 import io.reactivex.BackpressureStrategy;
+import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
-import io.reactivex.Single;
-import io.reactivex.SingleEmitter;
-import io.reactivex.SingleOnSubscribe;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
@@ -81,7 +78,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
@@ -120,8 +116,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
     DroppableMessageHandler2 messageHandler2;
     private HeartbeatProcessor heartbeatProcessor;
     private IClientConnector clientConnector;
-    private PublishSubject<MessageChannelHolder> eventPublisher = PublishSubject.create();
-    private PublishSubject<MessageChannelHolder> authEventPublisher = PublishSubject.create();
+    private PublishSubject<MessageChannelHolder> transportMessageSubject = PublishSubject.create();
+    private PublishSubject<Long> authEventPublisher = PublishSubject.create();
+    private PublishSubject<DisconnectedEvent> disconnectedEventPublisher = PublishSubject.create();
     private Disposable unknow;
 
     public ClientProtocolHandler(final TransportClientSession session) {
@@ -183,10 +180,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                 } else if (ClientConnector.ClientState.ONLINE == clientState) {
                     LOGGER.info("State in ClientProtocolHandler {}", clientState.name());
                     initPublis();
-                    fireAuthorized();
+                   fireAuthorized();
 
                 } else if (ClientConnector.ClientState.DISCONNECTED == clientState) {
                     fireDisconnected();
+
                 }
 
             }
@@ -236,9 +234,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                                                                           disconnectReason.getDisconnectHint(),
                                                                           disconnectReason.getError(),
                                                                           disconnectReason.getDisconnectComments());
-        listeners.forEach(clientListener -> this.fireDisconnectedEvent(clientListener,
+        disconnectedEventPublisher.onNext(disconnectedEvent);
+
+       /* listeners.forEach(clientListener -> this.fireDisconnectedEvent(clientListener,
                                                                        clientSession.getTransportClient(),
-                                                                       disconnectedEvent));
+                                                                       disconnectedEvent));*/
 
         this.clientSession.terminate();
     }
@@ -325,7 +325,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                      msg,
                      attachment.isPrimaryConnection());
 
-      //  ctx.fireChannelRead(msg);
+        //  ctx.fireChannelRead(msg);
         attachment.setLastReadIoTime(System.currentTimeMillis());
         this.processControlRequest(ctx, msg, attachment);
 
@@ -419,9 +419,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
     public void fireAuthorized() {
 
         final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
-
-        listeners.forEach(clientListener -> this.fireAuthorizedEvent(clientListener,
-                                                                     this.clientSession.getTransportClient()));
+        authEventPublisher.onNext(System.currentTimeMillis());
+       /* listeners.forEach(clientListener -> this.fireAuthorizedEvent(clientListener,
+                                                                     this.clientSession.getTransportClient()));*/
 
         LOGGER.info("Authorize in queue, server address [{}], transport name [{}]",
                     this.clientSession.getAddress(),
@@ -488,126 +488,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
         task.executeInExecutor(this.authEventExecutor);
     }
 
+    public Completable writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
 
-    public Single<Boolean> writeMessage2(final Channel channel, final BinaryProtocolMessage responseMessage) {
-
-        final int messagesCounter = sentMessagesCounterIncrementAndGet();
-
-        return Single.create(new SingleOnSubscribe<Boolean>() {
-            @Override
-            public void subscribe(final SingleEmitter<Boolean> e) throws Exception {
-                //clientSession.getChannelTrafficBlocker().suspend(channel);
-                // Observable.just(true).delay(2000L, TimeUnit.MILLISECONDS).subscribe(aBoolean -> clientSession
-                // .getChannelTrafficBlocker().resume(channel));
-                final ChannelFuture future = channel.writeAndFlush(responseMessage);
-                final long procStartTime = System.currentTimeMillis();
-                ClientProtocolHandler.this.checkSendingErrorOnNotWritableChannel(channel, future, procStartTime)
-                                          .subscribe(TransportClientSession::terminate);
-
-                if (ClientProtocolHandler.this.isTimeToCheckError(messagesCounter)) {
-                    ClientProtocolHandler.this.checkSendError(procStartTime, future);
-                } else if (ClientProtocolHandler.this.isTimeToCheckWarning(messagesCounter)) {
-                    ClientProtocolHandler.this.checkSendingWarning(procStartTime, future);
-                }
-
-                future.addListener(NettyUtil.getDefaultChannelFutureListener(e, channelFuture -> Boolean.TRUE));
-            }
-        })
-                     .doOnSuccess(aBoolean -> ClientProtocolHandler.this.updateChannelAttachment(channel,
-                                                                                                 System
-                                                                                                     .currentTimeMillis()))
-                     .doOnError(cause -> LOGGER.error("[{}] Message send failed because of {}: {}",
-                                                      clientSession.getTransportName(),
-                                                      cause.getClass().getSimpleName(),
-                                                      cause.getMessage()));
-    }
-    public Single<Boolean> writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
-
-        final int messagesCounter = sentMessagesCounterIncrementAndGet();
-Observable.just(channel.writeAndFlush(responseMessage)).subscribe();
-        return Single.just(Boolean.TRUE);
-    }
-    private Observable<TransportClientSession> checkSendingErrorOnNotWritableChannel(final Channel channel,
-                                                                                     final ChannelFuture future,
-                                                                                     final long procStartTime) {
-
-        return Observable.just(future)
-                         .filter(channelFuture -> !channel.isWritable())
-                         .doOnNext(channelFuture -> {
-
-                             if (clientSession.getSendCompletionErrorDelay() > 0L) {
-                                 checkSendError(procStartTime, future);
-                             }
-                         })
-                         .delay(clientSession.getPrimaryConnectionPingTimeout(),
-                                TimeUnit.MILLISECONDS,
-                                Schedulers.from(clientSession.getScheduledExecutorService()))
-                         .filter(channelFuture -> !channelFuture.isDone())
-                         .map(channelFuture -> clientSession)
-                         .doOnNext(session -> LOGGER.error(
-                             "[{}] Failed to send message in timeout time {}ms, disconnecting",
-                             session.getTransportName(),
-                             session.getPrimaryConnectionPingTimeout()));
-
-    }
-
-    private void checkSendError(final long procStartTime, final ChannelFuture future) {
-
-        Observable.just(future)
-                  .delay(clientSession.getSendCompletionErrorDelay(),
-                         TimeUnit.MILLISECONDS,
-                         Schedulers.from(clientSession.getScheduledExecutorService()))
-                  .filter(channelFuture -> !channelFuture.isDone())
-                  .doOnNext(channelFuture -> LOGGER.error("[{}] Message was not sent in timeout time {}ms and is still "
-                                                          + "waiting it's turn, CRITICAL SEND TIME: {}ms, possible "
-                                                          + "network problem",
-                                                          clientSession.getTransportName(),
-                                                          clientSession.getSendCompletionErrorDelay(),
-                                                          System.currentTimeMillis() - procStartTime))
-                  .subscribe(channelFuture -> {
-                      channelFuture.addListener((ChannelFutureListener) future1 -> {
-
-                          if (future1.isSuccess()) {
-                              LOGGER.error(
-                                  "[{}] Message sending took {}ms, critical timeout time {}ms, possible network "
-                                  + "problem",
-                                  clientSession.getTransportName(),
-                                  System.currentTimeMillis() - procStartTime,
-                                  clientSession.getSendCompletionErrorDelay());
-                          }
-                      });
-
-                  });
-    }
-
-    private void checkSendingWarning(final long procStartTime, final ChannelFuture future) {
-
-        Observable.just(future)
-                  .subscribeOn(Schedulers.from(clientSession.getScheduledExecutorService()))
-                  .delay(clientSession.getSendCompletionWarningDelay(),
-                         TimeUnit.MILLISECONDS,
-                         Schedulers.from(clientSession.getScheduledExecutorService()))
-
-                  .filter(channelFuture -> !channelFuture.isDone())
-                  .doOnNext(channelFuture -> LOGGER.warn(
-                      "[{}] Message sending takes too long time to complete: {}ms and is still waiting it's turn"
-                      + ". Timeout time: {}ms, possible network problem",
-                      clientSession.getTransportName(),
-                      System.currentTimeMillis() - procStartTime,
-                      clientSession.getSendCompletionWarningDelay()))
-                  .subscribeOn(Schedulers.from(clientSession.getScheduledExecutorService()))
-                  .subscribe(channelFuture -> {
-
-                      channelFuture.addListener((ChannelFutureListener) future1 -> {
-                          if (future1.isSuccess()) {
-                              LOGGER.warn("[{}] Message sending took {}ms, timeout time {}ms, possible network "
-                                          + "problem",
-                                          clientSession.getTransportName(),
-                                          System.currentTimeMillis() - procStartTime,
-                                          clientSession.getSendCompletionWarningDelay());
-                          }
-                      });
-                  });
+        return DefaultChannelWriter.writeMessage(clientSession, channel, responseMessage);
     }
 
     private void updateChannelAttachment(final Channel channel, final long lastWriteIoTime) {
@@ -615,21 +498,6 @@ Observable.just(channel.writeAndFlush(responseMessage)).subscribe();
         final ChannelAttachment ca = channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
         ca.setLastWriteIoTime(lastWriteIoTime);
         ca.messageWritten();
-    }
-
-
-    private boolean isTimeToCheckWarning(final int i) {
-
-        return this.clientSession.getSendCompletionWarningDelay() > 0L
-               && this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() > 0
-               && i % this.clientSession.getSendCompletionDelayCheckEveryNTimesWarning() == 0;
-    }
-
-    private boolean isTimeToCheckError(final int i) {
-
-        return this.clientSession.getSendCompletionErrorDelay() > 0L
-               && this.clientSession.getSendCompletionDelayCheckEveryNTimesError() > 0
-               && i % this.clientSession.getSendCompletionDelayCheckEveryNTimesError() == 0;
     }
 
 
@@ -652,9 +520,10 @@ Observable.just(channel.writeAndFlush(responseMessage)).subscribe();
         } else if (requestMessage instanceof DisconnectRequestMessage) {
             this.proccessDisconnectRequestMessage((DisconnectRequestMessage) requestMessage);
         } else if (requestMessage instanceof PrimarySocketAuthAcceptorMessage) {
-           // this.clientConnector.setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage) requestMessage);
+            // this.clientConnector.setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage)
+            // requestMessage);
         } else if (requestMessage instanceof ChildSocketAuthAcceptorMessage) {
-           // this.clientConnector.setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) requestMessage);
+            // this.clientConnector.setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) requestMessage);
         } else if (requestMessage instanceof JSonSerializableWrapper) {
             throw new UnsupportedOperationException("Do you really need this?");
         } else if (msg instanceof BinaryPartMessage
@@ -688,34 +557,34 @@ Observable.just(channel.writeAndFlush(responseMessage)).subscribe();
         return synchRequestProcessor.processRequest(message);
     }
 
-    public Flowable<ProtocolMessage> observeAuthorization(String name) {
+    public Flowable<Long> observeAuthorizedEvent(final String name) {
 
         return Flowable.defer(() -> {
 
-            final MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(clientSession, name);
+            EventTimeoutChecker<Long> checker = new EventTimeoutChecker<>(clientSession, name);
 
-            return authEventPublisher.toFlowable(BackpressureStrategy.LATEST)
-                                     .subscribeOn(Schedulers.from(authEventExecutor))
-                                     .doOnNext(message -> checker.onStart(message.getMessage(),
-                                                                          System.currentTimeMillis(),
-                                                                          sentMessagesCounterIncrementAndGet()))
-                                     .onBackpressureDrop(holder -> checker.onOverflow(holder.getMessage(),
-                                                                                      holder.getChannel()))
-                                     .map(MessageChannelHolder::getMessage)
-                                     .observeOn(Schedulers.from(authEventExecutor))
-                                     .filter(message -> {
-                                         final boolean
-                                             canProcessDroppableMessage
-                                             = messageHandler2.canProcessDroppableMessage(message);
-                                         if (!canProcessDroppableMessage) {
-                                             checker.onDroppable(message);
+            return authEventPublisher.toFlowable(BackpressureStrategy.LATEST).subscribeOn(Schedulers.from(
+                authEventExecutor)).doOnNext(new Consumer<Long>() {
+                @Override
+                public void accept(final Long o) throws Exception {
 
+                    checker.onStart(o, System.currentTimeMillis(), sentMessagesCounterIncrementAndGet());
+                }
+            })
+
+                                     .onBackpressureDrop(new Consumer<Long>() {
+                                         @Override
+                                         public void accept(final Long o) throws Exception {
+
+                                             checker.onOverflow(o);
                                          }
-                                         return canProcessDroppableMessage;
+                                     }).observeOn(Schedulers.from(authEventExecutor)).doAfterNext(new Consumer<Long>() {
+                    @Override
+                    public void accept(final Long msg) throws Exception {
 
-                                     })
-                                     .doAfterNext(checker::onComplete)
-                                     .doOnError(checker::onError);
+                        checker.onComplete(msg);
+                    }
+                }).doOnError(checker::onError);
 
         });
     }
@@ -724,30 +593,36 @@ Observable.just(channel.writeAndFlush(responseMessage)).subscribe();
 
         return Flowable.defer(() -> {
 
-            final MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(clientSession, name);
+            final EventTimeoutChecker<ProtocolMessage> checker = new EventTimeoutChecker(clientSession, name);
 
-            return eventPublisher.toFlowable(BackpressureStrategy.LATEST)
-                                 .subscribeOn(Schedulers.from(eventExecutor))
-                                 .doOnNext(message -> checker.onStart(message.getMessage(),
-                                                                      System.currentTimeMillis(),
-                                                                      sentMessagesCounterIncrementAndGet()))
-                                 .onBackpressureDrop(holder -> checker.onOverflow(holder.getMessage(),
-                                                                                  holder.getChannel()))
-                                 .map(MessageChannelHolder::getMessage)
-                                 .observeOn(Schedulers.from(eventExecutor))
-                                 .filter(message -> {
-                                     final boolean
-                                         canProcessDroppableMessage
-                                         = messageHandler2.canProcessDroppableMessage(message);
-                                     if (!canProcessDroppableMessage) {
-                                         checker.onDroppable(message);
+            return transportMessageSubject.toFlowable(BackpressureStrategy.LATEST)
+                                          .subscribeOn(Schedulers.from(eventExecutor))
+                                          .doOnNext(message -> checker.onStart(message.getMessage(),
+                                                                               System.currentTimeMillis(),
+                                                                               sentMessagesCounterIncrementAndGet()))
+                                          .onBackpressureDrop(new Consumer<MessageChannelHolder>() {
+                                              @Override
+                                              public void accept(final MessageChannelHolder holder)
+                                                  throws Exception {
 
-                                     }
-                                     return canProcessDroppableMessage;
+                                                  checker.onOverflow(holder.getMessage(), holder.getChannel());
+                                              }
+                                          })
+                                          .map(MessageChannelHolder::getMessage)
+                                          .observeOn(Schedulers.from(eventExecutor))
+                                          .filter(message -> {
+                                              final boolean
+                                                  canProcessDroppableMessage
+                                                  = messageHandler2.canProcessDroppableMessage(message);
+                                              if (!canProcessDroppableMessage) {
+                                                  checker.onDroppable(message);
 
-                                 })
-                                 .doAfterNext(checker::onComplete)
-                                 .doOnError(checker::onError);
+                                              }
+                                              return canProcessDroppableMessage;
+
+                                          })
+                                          .doAfterNext(checker::onComplete)
+                                          .doOnError(checker::onError);
 
         });
     }
@@ -759,7 +634,7 @@ Observable.just(channel.writeAndFlush(responseMessage)).subscribe();
         //  messageHandler2.setCurrentDroppableMessageTime(message);
 
 
-        eventPublisher.onNext(new MessageChannelHolder(message, ctx.channel()));
+        transportMessageSubject.onNext(new MessageChannelHolder(message, ctx.channel()));
         // primaryPublishSubject.onNext(message);
 /*
 
@@ -875,6 +750,39 @@ Observable.just(channel.writeAndFlush(responseMessage)).subscribe();
                         System.currentTimeMillis() - before);
         }
     }
+
+    public Flowable<DisconnectedEvent> observeDisconnectedEvent(final String name) {
+
+        return Flowable.defer(() -> {
+
+            EventTimeoutChecker<DisconnectedEvent> checker = new EventTimeoutChecker<>(clientSession, name);
+
+            return disconnectedEventPublisher.toFlowable(BackpressureStrategy.LATEST).subscribeOn(Schedulers.from(
+                authEventExecutor)).doOnNext(new Consumer<DisconnectedEvent>() {
+                @Override
+                public void accept(final DisconnectedEvent o) throws Exception {
+
+                    checker.onStart(o, System.currentTimeMillis(), sentMessagesCounterIncrementAndGet());
+                }
+            })
+
+                                     .onBackpressureDrop(new Consumer<DisconnectedEvent>() {
+                                         @Override
+                                         public void accept(final DisconnectedEvent o) throws Exception {
+
+                                             checker.onOverflow(o);
+                                         }
+                                     }).observeOn(Schedulers.from(authEventExecutor)).doAfterNext(new Consumer<DisconnectedEvent>() {
+                    @Override
+                    public void accept(final DisconnectedEvent msg) throws Exception {
+
+                        checker.onComplete(msg);
+                    }
+                }).doOnError(checker::onError);
+
+        });
+    }
+
 
 
 }

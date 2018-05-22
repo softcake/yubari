@@ -21,6 +21,7 @@ package org.softcake.authentication;
 
 import org.softcake.yubari.connect.authorization.AuthorizationPropertiesFactory;
 import org.softcake.yubari.netty.SessionHandler;
+import org.softcake.yubari.netty.TransportMessage;
 import org.softcake.yubari.netty.authorization.GreedClientAuthorizationProvider;
 import org.softcake.yubari.netty.client.ITransportClient;
 import org.softcake.yubari.netty.client.TransportClient;
@@ -56,7 +57,7 @@ import com.dukascopy.dds3.transport.msg.ddsApi.QuitRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.base.Strings;
-import io.reactivex.Single;
+import io.reactivex.Completable;
 import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -342,10 +343,18 @@ public class DClient implements ClientListener {
             //            FeedDataProvider.setPlatformTicket(ticket);
             this.initialized = true;
             this.transportClient.connect();
-            this.transportClient.observeFeedbackMessages().subscribe(new Consumer<ProtocolMessage>() {
+            this.transportClient.observeMessagesReceived2().subscribe(this::feedbackMessageReceived2);
+
+            this.transportClient.observeAuthorizedEvent().subscribe(new Consumer<ITransportClient>() {
                 @Override
-                public void accept(final ProtocolMessage protocolMessage) throws Exception {
-                    feedbackMessageReceived2( protocolMessage);
+                public void accept(final ITransportClient iTransportClient) throws Exception {
+                    authorized(iTransportClient);
+                }
+            });
+            this.transportClient.observeDisconnectedEvent().subscribe(new Consumer<DisconnectedEvent>() {
+                @Override
+                public void accept(final DisconnectedEvent event) throws Exception {
+                    disconnected(transportClient,event);
                 }
             });
             this.connectToHistoryServer(username, true);
@@ -372,10 +381,22 @@ public class DClient implements ClientListener {
             //            FeedDataProvider.setPlatformTicket(ticket);
             //            FeedDataProvider.getDefaultInstance().getFeedCommissionManager().clear();
             this.transportClient.connect();
-            this.transportClient.observeFeedbackMessages().subscribe(new Consumer<ProtocolMessage>() {
+            this.transportClient.observeMessagesReceived2().subscribe(new Consumer<ProtocolMessage>() {
                 @Override
                 public void accept(final ProtocolMessage protocolMessage) throws Exception {
-                    feedbackMessageReceived2( protocolMessage);
+                    feedbackMessageReceived2(protocolMessage);
+                }
+            });
+            this.transportClient.observeAuthorizedEvent().subscribe(new Consumer<ITransportClient>() {
+                @Override
+                public void accept(final ITransportClient iTransportClient) throws Exception {
+                    authorized(iTransportClient);
+                }
+            });
+            this.transportClient.observeDisconnectedEvent().subscribe(new Consumer<DisconnectedEvent>() {
+                @Override
+                public void accept(final DisconnectedEvent event) throws Exception {
+                    LOGGER.info("DISCONNECTED");
                 }
             });
             // this.connectToHistoryServer(username, true);
@@ -848,7 +869,7 @@ public class DClient implements ClientListener {
     private void sendSynchronizedQuitMessage() {
 
         try {
-            Single<Boolean> listenableFuture = this.transportClient.sendMessageAsync(new QuitRequestMessage());
+            Completable listenableFuture = this.transportClient.sendMessageAsync(new QuitRequestMessage());
             listenableFuture.subscribe();
         } catch (Throwable var2) {
             LOGGER.error(var2.getMessage(), var2);

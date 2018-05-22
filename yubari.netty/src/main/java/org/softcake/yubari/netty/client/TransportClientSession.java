@@ -23,6 +23,7 @@ import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.channel.ChannelTrafficBlocker;
 import org.softcake.yubari.netty.mina.ClientListener;
+import org.softcake.yubari.netty.mina.DisconnectedEvent;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
@@ -48,9 +49,9 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslHandler;
+import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
-import io.reactivex.Single;
 import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -449,10 +450,9 @@ public class TransportClientSession {
     boolean sendMessageNaive(final ProtocolMessage message) {
 
         if (this.isOnline()) {
-            Single<Boolean>
-                booleanObservable
-                = this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
-            booleanObservable.subscribe();
+
+                this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message).subscribe();
+
             return true;
         } else {
             LOGGER.error("[{}] TransportClient not connected, message: {}", this.transportName, message);
@@ -497,12 +497,12 @@ public class TransportClientSession {
     }
 
 
-    Single<Boolean> sendMessageAsync(final ProtocolMessage message) {
+    Completable sendMessageAsync(final ProtocolMessage message) {
 
         if (this.isOnline()) {
             return this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
         } else {
-            return Single.error(new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
+            return Completable.error(new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
                                                                    this.transportName,
                                                                    message.toString(400))));
         }
@@ -923,9 +923,19 @@ public class TransportClientSession {
         return this.pingListener;
     }
 
-    public Flowable<ProtocolMessage> observeFeedbackMessages() {
+    public Flowable<ProtocolMessage> observeMessagesReceived() {
 
         return this.protocolHandler.observeFeedbackMessages("TransportClientSession");
 
+    }
+    public Flowable<DisconnectedEvent> observeDisconnectedEvent() {
+
+        return this.protocolHandler.observeDisconnectedEvent("TransportClientSession");
+
+    }
+
+    public Flowable<Long> observeAuthorizedEvent() {
+
+        return this.protocolHandler.observeAuthorizedEvent("TransportClientSession");
     }
 }

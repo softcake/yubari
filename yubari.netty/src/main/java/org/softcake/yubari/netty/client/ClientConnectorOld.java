@@ -30,9 +30,11 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.util.Attribute;
+import io.reactivex.Completable;
 import io.reactivex.Single;
 import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
+import io.reactivex.functions.Action;
 import io.reactivex.functions.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -701,9 +703,9 @@ this.isProcessConnecting = true;
         Channel channel = channelSingle.blockingGet();
         childChannel = channel;
         channel.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(childSessionChannelAttachment);
-        final Single<Boolean> observable = protocolHandler.writeMessage(childChannel,
+        final Completable observable = protocolHandler.writeMessage(childChannel,
                                                                         childSocketAuthAcceptorMessage);
-        Single<Boolean> booleanSingle = observable.doOnError(new io.reactivex.functions.Consumer<Throwable>() {
+       Completable booleanSingle = observable.doOnError(new io.reactivex.functions.Consumer<Throwable>() {
             @Override
             public void accept(final Throwable e) throws Exception {
 
@@ -746,12 +748,11 @@ this.isProcessConnecting = true;
         if (this.primarySocketAuthAcceptorMessageSent || this.primarySocketAuthAcceptorMessage == null) {return;}
 
 
-        final Single<Boolean> channelFuture = this.protocolHandler.writeMessage(this.primaryChannel,
+        final Completable channelFuture = this.protocolHandler.writeMessage(this.primaryChannel,
                                                                                 this.primarySocketAuthAcceptorMessage);
-        channelFuture.subscribe(new io.reactivex.functions.Consumer<Boolean>() {
+        channelFuture.subscribe(new Action() {
             @Override
-            public void accept(final Boolean cf) throws Exception {
-
+            public void run() throws Exception {
 
             }
         }, new io.reactivex.functions.Consumer<Throwable>() {

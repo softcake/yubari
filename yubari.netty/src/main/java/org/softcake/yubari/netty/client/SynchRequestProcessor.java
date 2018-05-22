@@ -16,18 +16,14 @@
 
 package org.softcake.yubari.netty.client;
 
-import org.softcake.yubari.netty.ProtocolVersionNegotiationCompletionEvent;
-import org.softcake.yubari.netty.SslCompletionEvent;
-
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.RequestInProcessMessage;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.ssl.SslHandshakeCompletionEvent;
+import io.reactivex.Completable;
 import io.reactivex.Observable;
-import io.reactivex.Single;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -86,7 +82,7 @@ public class SynchRequestProcessor extends SimpleChannelInboundHandler<ProtocolM
 
         final Long syncRequestId = this.getNextRequestId();
         message.setSynchRequestId(syncRequestId);
-        final Single<Boolean> booleanSingle = protocolHandler.writeMessage(channel, message);
+        final Completable booleanSingle = protocolHandler.writeMessage(channel, message);
 
         final RequestHandler handler = new RequestHandler(syncRequestId, scheduledExecutorService);
         final Observable<ProtocolMessage> request = handler.sendRequest(booleanSingle,
