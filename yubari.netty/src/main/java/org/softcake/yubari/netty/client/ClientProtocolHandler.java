@@ -19,56 +19,34 @@ package org.softcake.yubari.netty.client;
 import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
 
 import org.softcake.cherry.core.base.PreCheck;
-import org.softcake.yubari.netty.AbstractConnectingCompletionEvent;
-import org.softcake.yubari.netty.AuthorizationCompletionEvent;
 import org.softcake.yubari.netty.DefaultChannelWriter;
-import org.softcake.yubari.netty.EventTimeoutChecker;
-import org.softcake.yubari.netty.ProtocolVersionNegotiationCompletionEvent;
-import org.softcake.yubari.netty.SslCompletionEvent;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.processors.HeartbeatProcessor;
 import org.softcake.yubari.netty.client.processors.StreamProcessor;
-import org.softcake.yubari.netty.client.tasks.AbstractEventExecutorTask;
-import org.softcake.yubari.netty.data.DroppableMessageHandler;
 import org.softcake.yubari.netty.data.DroppableMessageHandler2;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
-import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
 import org.softcake.yubari.netty.mina.TransportHelper;
 
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.BinaryPartMessage;
-import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.DisconnectRequestMessage;
-import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HaloRequestMessage;
-import com.dukascopy.dds4.transport.msg.system.HaloResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.JSonSerializableWrapper;
-import com.dukascopy.dds4.transport.msg.system.LoginRequestMessage;
-import com.dukascopy.dds4.transport.msg.system.OkResponseMessage;
-import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamHeaderMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamingStatus;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandler.Sharable;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.util.Attribute;
-import io.reactivex.BackpressureStrategy;
 import io.reactivex.Completable;
-import io.reactivex.Flowable;
-import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
-import io.reactivex.functions.Predicate;
-import io.reactivex.schedulers.Schedulers;
-import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,34 +54,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
 
-@Sharable
+@ChannelHandler.Sharable
 public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ClientProtocolHandler.class);
-    private static final ThreadLocal<int[]>
-        SENT_MESSAGES_COUNTER_THREAD_LOCAL
-        = ThreadLocal.withInitial(new Supplier<int[]>() {
-        @Override
-        public int[] get() {
-
-            return new int[1];
-        }
-    });
-    private static final ThreadLocal<int[]>
-        EVENT_EXECUTOR_MESSAGES_COUNTER_THREAD_LOCAL
-        = ThreadLocal.withInitial(new Supplier<int[]>() {
-        @Override
-        public int[] get() {
-
-            return new int[1];
-        }
-    });
-    private final PublishSubject<AbstractConnectingCompletionEvent> authorizationEvent;
     private final TransportClientSession clientSession;
     private final ListeningExecutorService eventExecutor;
     private final ListeningExecutorService authEventExecutor;
@@ -113,20 +69,14 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
     private final boolean logSkippedDroppableMessages;
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
     private final StreamProcessor streamProcessor;
-    private final DroppableMessageHandler droppableMessageHandler;
-    DroppableMessageHandler2 messageHandler2;
-    private HeartbeatProcessor heartbeatProcessor;
+    private final DroppableMessageHandler2 messageHandler2;
+    private final HeartbeatProcessor heartbeatProcessor;
     private IClientConnector clientConnector;
-    private PublishSubject<MessageChannelHolder> transportMessageSubject = PublishSubject.create();
-    private PublishSubject<Long> authEventPublisher = PublishSubject.create();
-    private PublishSubject<DisconnectedEvent> disconnectedEventPublisher = PublishSubject.create();
-    private Disposable unknow;
 
     public ClientProtocolHandler(final TransportClientSession session) {
 
         this.clientSession = PreCheck.notNull(session, "session");
         this.messageHandler2 = new DroppableMessageHandler2(clientSession.getDroppableMessagesClientTTL());
-        this.droppableMessageHandler = new DroppableMessageHandler(clientSession.getDroppableMessagesClientTTL());
         this.logSkippedDroppableMessages = session.isLogSkippedDroppableMessages();
         this.logEventPoolThreadDumpsOnLongExecution = session.getLogEventPoolThreadDumpsOnLongExecution();
         this.eventExecutor = this.initEventExecutor();
@@ -136,26 +86,13 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
         this.streamProcessor = new StreamProcessor(clientSession, this.streamProcessingExecutor);
         this.heartbeatProcessor = new HeartbeatProcessor(clientSession);
 
-        authorizationEvent = PublishSubject.create();
-
     }
 
-    public static int sentMessagesCounterIncrementAndGet() {
+    public DroppableMessageHandler2 getMessageHandler() {
 
-        final int[] ints = SENT_MESSAGES_COUNTER_THREAD_LOCAL.get();
-        return ++ints[0];
+        return messageHandler2;
     }
 
-    public static int eventExecutorMessagesCounterIncrementAndGet() {
-
-        final int[] ints = EVENT_EXECUTOR_MESSAGES_COUNTER_THREAD_LOCAL.get();
-        return ++ints[0];
-    }
-
-    public Observable<AbstractConnectingCompletionEvent> observeAuthorizationEvent(Executor executor) {
-
-        return authorizationEvent.subscribeOn(Schedulers.from(executor));
-    }
 
     public HeartbeatProcessor getHeartbeatProcessor() {
 
@@ -165,35 +102,29 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
     public void setClientConnector(final IClientConnector clientConnector) {
 
         this.clientConnector = clientConnector;
-        this.clientConnector.observe(new Observer<ClientConnector.ClientState>() {
+        this.clientConnector.observeClientState().subscribe(new Observer<ClientConnector.ClientState>() {
             @Override
-            public void onSubscribe(final Disposable d) {
+            public void onSubscribe(final Disposable disposable) {
 
             }
 
             @Override
             public void onNext(final ClientConnector.ClientState clientState) {
 
-                if (ClientConnector.ClientState.SSL_HANDSHAKE == clientState) {
-
-                } else if (ClientConnector.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
+                if (ClientConnector.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
                     handleAuthorization();
                 } else if (ClientConnector.ClientState.ONLINE == clientState) {
-                    LOGGER.info("State in ClientProtocolHandler {}", clientState.name());
-                    initPublis();
                     fireAuthorized();
-
                 } else if (ClientConnector.ClientState.DISCONNECTED == clientState) {
-                    fireDisconnected();
-
+                    fireDisconnected(new Exception("DISCONNECTED"));
                 }
 
             }
 
             @Override
-            public void onError(final Throwable e) {
+            public void onError(final Throwable throwable) {
 
-                fireDisconnected();
+                fireDisconnected(throwable);
             }
 
             @Override
@@ -203,40 +134,31 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
         });
     }
 
-    private void initPublis() {
-
-
-        if (this.unknow == null) {
-            this.unknow = observeFeedbackMessages("unknow").subscribe(this::notifyListeners);
-        }
-
-    }
-
-    private void fireDisconnected() {
+    private void fireDisconnected(final Throwable throwable) {
 
         ClientDisconnectReason disconnectReason = clientConnector.getDisconnectReason();
         this.clientSession.disconnected();
 
         if (disconnectReason == null) {
             disconnectReason = new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
-                                                          "Unknown connection problem");
+                                                          "Unknown connection problem",
+                                                          throwable);
         }
-
-        final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
-
         final DisconnectedEvent disconnectedEvent = new DisconnectedEvent(this.clientSession.getTransportClient(),
                                                                           disconnectReason.getDisconnectReason(),
                                                                           disconnectReason.getDisconnectHint(),
                                                                           disconnectReason.getError(),
                                                                           disconnectReason.getDisconnectComments());
+        try {
 
-        this.clientSession.onDisconnected(disconnectedEvent);
-
-        //disconnectedEventPublisher.onNext(disconnectedEvent);
-
-       /* listeners.forEach(clientListener -> this.fireDisconnectedEvent(clientListener,
-                                                                       clientSession.getTransportClient(),
-                                                                       disconnectedEvent));*/
+            this.clientSession.onDisconnected(disconnectedEvent);
+        } catch (final Exception e) {
+            LOGGER.error("[{}] ", clientSession.getTransportName(), e);
+            clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
+                                                                  String.format("Exception caught while onDisconnected "
+                                                                                + "called %s", e.getMessage()),
+                                                                  e));
+        }
 
         this.clientSession.terminate();
     }
@@ -311,7 +233,6 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                                  this.clientSession.getSyncRequestProcessingPoolTerminationTimeUnit());
     }
 
-    //TODO RXJava
     protected void channelRead0(final ChannelHandlerContext ctx, final ProtocolMessage msg) throws Exception {
 
         final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel().attr(
@@ -323,12 +244,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                      msg,
                      attachment.isPrimaryConnection());
 
-        //  ctx.fireChannelRead(msg);
         attachment.setLastReadIoTime(System.currentTimeMillis());
         this.processControlRequest(ctx, msg, attachment);
-
-
-        //ReferenceCountUtil.release(msg);
     }
 
     @Override
@@ -349,16 +266,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
 
     @Override
     public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
-
         super.userEventTriggered(ctx, evt);
-
-        if (evt instanceof SslHandshakeCompletionEvent) {
-            authorizationEvent.onNext(((SslHandshakeCompletionEvent) evt).isSuccess()
-                                      ? SslCompletionEvent.success()
-                                      : SslCompletionEvent.failed(((SslHandshakeCompletionEvent) evt).cause()));
-        } else if (evt instanceof ProtocolVersionNegotiationCompletionEvent) {
-            authorizationEvent.onNext((ProtocolVersionNegotiationCompletionEvent) evt);
-        }
     }
 
     @Override
@@ -381,104 +289,18 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
         writeMessage(clientConnector.getPrimaryChannel(), haloRequestMessage).subscribe();
     }
 
-    private void processAuthorizationMessage(final ChannelHandlerContext ctx,
-                                             final BinaryProtocolMessage protocolMessage) {
-
-        LOGGER.debug("[{}] Sending message [{}] to authorization provider",
-                     this.clientSession.getTransportName(),
-                     protocolMessage);
-
-        if (protocolMessage instanceof OkResponseMessage) {
-            LOGGER.debug(
-                "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",
-                this.clientSession.getTransportName(),
-                this.clientSession.getAuthorizationProvider().getSessionId(),
-                this.clientSession.getAuthorizationProvider().getLogin());
-            this.clientSession.setServerSessionId(this.clientSession.getAuthorizationProvider().getSessionId());
-            authorizationEvent.onNext(AuthorizationCompletionEvent.success());
-        } else if (protocolMessage instanceof ErrorResponseMessage) {
-
-            final String errorReason = ((ErrorResponseMessage) protocolMessage).getReason();
-            LOGGER.error("[{}] Received AUTHORIZATION_ERROR notification from the authorization provider, reason: [{}]",
-                         this.clientSession.getTransportName(),
-                         errorReason);
-            authorizationEvent.onNext(AuthorizationCompletionEvent.failed(new Exception(errorReason)));
-
-        } else if (protocolMessage instanceof HaloResponseMessage) {
-            final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
-            loginRequestMessage.setUsername(this.clientSession.getAuthorizationProvider().getLogin());
-            loginRequestMessage.setTicket(this.clientSession.getAuthorizationProvider().getTicket());
-            loginRequestMessage.setSessionId(this.clientSession.getAuthorizationProvider().getSessionId());
-            writeMessage(ctx.channel(), loginRequestMessage).subscribe();
-        }
-    }
-
     public void fireAuthorized() {
 
-        final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
-        //authEventPublisher.onNext(System.currentTimeMillis());
-        this.clientSession.onOnline();
-    }
+        try {
+            this.clientSession.onOnline();
+        } catch (final Exception e) {
+            LOGGER.error("[{}] ", clientSession.getTransportName(), e);
+            clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
+                                                                  String.format("Exception caught while authorized "
+                                                                                + "called %s", e.getMessage()),
+                                                                  e));
+        }
 
-
-    void fireAuthorizedEvent(final ClientListener clientListener, final ITransportClient transportClient) {
-
-
-        final AbstractEventExecutorTask task = new AbstractEventExecutorTask(this.clientSession, this) {
-            @Override
-            public void run() {
-
-                try {
-                    clientListener.authorized(transportClient);
-                } catch (final Exception e) {
-                    LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                    clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
-                                                                          String.format(
-                                                                              "Exception caught while authorized "
-                                                                              + "called %s",
-                                                                              e.getMessage()),
-                                                                          e));
-                }
-
-            }
-
-            public Object getOrderKey() {
-
-                return "";
-            }
-        };
-        task.executeInExecutor(this.authEventExecutor);
-    }
-
-    void fireDisconnectedEvent(final ClientListener clientListener,
-                               final ITransportClient transportClient,
-                               final DisconnectedEvent disconnectedEvent) {
-
-        final AbstractEventExecutorTask task = new AbstractEventExecutorTask(this.clientSession, this) {
-            @Override
-            public void run() {
-
-                try {
-
-                    clientListener.disconnected(transportClient, disconnectedEvent);
-                } catch (final Exception e) {
-                    LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-                    clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
-                                                                          String.format(
-                                                                              "Exception caught while onDisconnected "
-                                                                              + "called %s",
-                                                                              e.getMessage()),
-                                                                          e));
-                }
-
-            }
-
-            public Object getOrderKey() {
-
-                return "";
-            }
-        };
-        task.executeInExecutor(this.authEventExecutor);
     }
 
     public Completable writeMessage(final Channel channel, final BinaryProtocolMessage responseMessage) {
@@ -493,8 +315,6 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
         ca.messageWritten();
     }
 
-
-    //TODO RxJava
     void processControlRequest(final ChannelHandlerContext ctx,
                                final ProtocolMessage msg,
                                final ChannelAttachment attachment) {
@@ -504,19 +324,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
         }
 
         final ProtocolMessage requestMessage = (ProtocolMessage) msg;
-       /* if (this.processSyncResponse(requestMessage)) {
-            return;
-        }*/
 
         if (requestMessage instanceof HeartbeatRequestMessage) {
             this.heartbeatProcessor.process(ctx, attachment, (HeartbeatRequestMessage) requestMessage);
         } else if (requestMessage instanceof DisconnectRequestMessage) {
             this.proccessDisconnectRequestMessage((DisconnectRequestMessage) requestMessage);
-        } else if (requestMessage instanceof PrimarySocketAuthAcceptorMessage) {
-            // this.clientConnector.setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage)
-            // requestMessage);
-        } else if (requestMessage instanceof ChildSocketAuthAcceptorMessage) {
-            // this.clientConnector.setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) requestMessage);
         } else if (requestMessage instanceof JSonSerializableWrapper) {
             throw new UnsupportedOperationException("Do you really need this?");
         } else if (msg instanceof BinaryPartMessage
@@ -525,14 +337,10 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
             this.streamProcessor.process(ctx, msg);
             throw new UnsupportedOperationException("Do you really need this?");
         } else if (this.clientConnector.isConnecting()) {
-           // this.processAuthorizationMessage(ctx, msg);
+            // this.processAuthorizationMessage(ctx, msg);
         } else {
-
-
             this.fireFeedbackMessageReceived(ctx, requestMessage);
         }
-
-
     }
 
     private void proccessDisconnectRequestMessage(final DisconnectRequestMessage requestMessage) {
@@ -546,212 +354,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                                                                    "Disconnect request received"));
     }
 
-    private boolean processSyncResponse(final ProtocolMessage message) {
-
-        final SynchRequestProcessor synchRequestProcessor = this.clientSession.getSynchRequestProcessor();
-        return synchRequestProcessor.processRequest(message);
-    }
-
-    public Flowable<Long> observeAuthorizedEvent(final String name) {
-
-        return Flowable.defer(() -> {
-
-            EventTimeoutChecker<Long> checker = new EventTimeoutChecker<>(clientSession, name);
-
-            return authEventPublisher.toFlowable(BackpressureStrategy.LATEST).subscribeOn(Schedulers.from(
-                authEventExecutor)).doOnNext(new Consumer<Long>() {
-                @Override
-                public void accept(final Long o) throws Exception {
-
-                    checker.onStart(o, System.currentTimeMillis(), sentMessagesCounterIncrementAndGet());
-                }
-            })
-
-                                     .onBackpressureDrop(checker::onOverflow).observeOn(Schedulers.from(authEventExecutor)).doAfterNext(
-
-
-                    checker::onComplete).doOnError(checker::onError);
-
-        });
-    }
-
-   public Flowable<ProtocolMessage> observeFeedbackMessages2(String name) {
-
-         return Flowable.defer(() -> {
-
-             final MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(clientSession, name);
-
-             return transportMessageSubject.toFlowable(BackpressureStrategy.LATEST)
-                                           .subscribeOn(Schedulers.from(eventExecutor))
-                                           .doOnNext(message -> checker.onStart(message.getMessage(),
-                                                                                System.currentTimeMillis(),
-                                                                                sentMessagesCounterIncrementAndGet()))
-                                           .onBackpressureDrop(new Consumer<MessageChannelHolder>() {
-                                               @Override
-                                               public void accept(final MessageChannelHolder holder)
-                                                   throws Exception {
- //transportMessageSubject.onNext(holder);
-                                                   checker.onOverflow(holder.getMessage(), holder.getCtx().channel());
-                                               }
-                                           })
-                                           .map(MessageChannelHolder::getMessage)
-                                           .observeOn(Schedulers.from(eventExecutor))
-                                           .filter(message -> {
-                                               final boolean
-                                                   canProcessDroppableMessage
-                                                   = messageHandler2.canProcessDroppableMessage(message);
-                                               if (!canProcessDroppableMessage) {
-                                                   checker.onDroppable(message);
-
-                                               }
-                                               return canProcessDroppableMessage;
-
-                                           })
-                                           .doAfterNext(checker::onComplete)
-                                           .doOnError(checker::onError);
-
-         });
-     }
-    public Flowable<ProtocolMessage> observeFeedbackMessages(String name) {
-
-        return Flowable.defer(() -> {
-
-
-            //transportMessageSubject.onNext(holder);
-            return transportMessageSubject
-                .toFlowable(BackpressureStrategy.LATEST)
-                .doOnNext(MessageChannelHolder::onStart)
-                .subscribeOn(Schedulers.from(
-                eventExecutor))
-
-                .onBackpressureDrop(MessageChannelHolder::onOverflow)
-                .observeOn(Schedulers.from(eventExecutor))
-                .filter(new Predicate<MessageChannelHolder>() {
-                @Override
-                public boolean test(final MessageChannelHolder holder) throws Exception {
-
-                    final boolean
-                        canProcessDroppableMessage
-                        = messageHandler2.canProcessDroppableMessage(holder.getMessage());
-                    if (!canProcessDroppableMessage) {
-                        holder.onDroppable();
-
-                    }
-                    return canProcessDroppableMessage;
-
-                }
-            }).doAfterNext(MessageChannelHolder::onComplete)
-                .doOnError(new Consumer<Throwable>() {
-                @Override
-                public void accept(final Throwable throwable) throws Exception {
-
-                }
-            }).map(MessageChannelHolder::getMessage);
-
-        });
-    }
-
-
     private void fireFeedbackMessageReceived(final ChannelHandlerContext ctx, final ProtocolMessage message) {
 
+        messageHandler2.setCurrentDroppableMessageTime(message);
+        clientSession.onMessageReceived(message);
 
-        //  messageHandler2.setCurrentDroppableMessageTime(message);
-
-clientSession.onMessageReceived(message);
-     //   transportMessageSubject.onNext(new MessageChannelHolder(clientSession, message, ctx));
-        // primaryPublishSubject.onNext(message);
-/*
-
-
-        final long currentDropableMessageTime = this.droppableMessageHandler.getCurrentDropableMessageTime(message);
-        if (message instanceof CurrencyMarket) {
-            this.clientSession.tickReceived();
-        }
-
-
-
-        if ((message instanceof CurrencyMarket)) {
-            final long timeMillis = System.currentTimeMillis();
-            ((CurrencyMarket)  message).setCreationTimestamp(timeMillis);
-            LOGGER.error("Timestamp seted: {}", timeMillis);
-           LOGGER.error("Timestamp in ClientProtocoll: {}", ((CurrencyMarket)  message).getCreationTimestamp());
-        }
-
-
-
-
-        final ISessionStats stats = this.clientSession.getSessionStats();
-        final long creationTime;
-        if (stats != null) {
-            creationTime = System.currentTimeMillis();
-            stats.messageInExecutionQueue(creationTime, message);
-        } else {
-            creationTime = 0L;
-        }
-
-        final AbstractEventExecutorChannelTask task = new AbstractEventExecutorChannelTask(ctx,
-                                                                                           this.clientSession,
-                                                                                           message,
-                                                                                           currentDropableMessageTime) {
-            public void run() {
-
-                final boolean
-                    canProcessCurrentDroppable
-                    = droppableMessageHandler.canProcessDroppableMessage(this.message, this.currentDropableMessageTime);
-                if (!canProcessCurrentDroppable) {
-                    clientSession.getDroppedMessageCounter().incrementAndGet();
-                    if (logSkippedDroppableMessages) {
-                        LOGGER.warn("Newer message already has arrived, current processing is skipped <{}>",
-                                    this.message);
-                    }
-
-                    if (stats != null) {
-                        final long droppedTime = System.currentTimeMillis();
-                        stats.messageDropped(droppedTime, droppedTime - creationTime, this.message);
-                    }
-
-                    return;
-                }
-
-                long beforeExecution = 0L;
-
-                if (stats != null) {
-                    beforeExecution = System.currentTimeMillis();
-                    stats.messageExecutionStarted(beforeExecution, beforeExecution - creationTime, this.message);
-                }
-
-                if (this.message instanceof MessageGroup) {
-                    ((MessageGroup) this.message).getMessages().forEach(ClientProtocolHandler.this::notifyListeners);
-                } else {
-                    notifyListeners(this.message);
-                }
-
-                if (stats != null) {
-                    final long afterExecutionx = System.currentTimeMillis();
-                    stats.messageExecutionFinished(afterExecutionx, afterExecutionx - beforeExecution, this.message);
-                }
-
-            }
-
-            public Object getOrderKey() {
-
-                return clientSession.getConcurrencyPolicy().getConcurrentKey(this.message);
-            }
-        };
-        task.executeInExecutor(this.eventExecutor, stats);*/
-    }
-
-    private void notifyListeners(final ProtocolMessage protocolMessage) {
-
-        final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
-        for (final ClientListener listener : listeners) {
-            try {
-                listener.feedbackMessageReceived(clientSession.getTransportClient(), protocolMessage);
-            } catch (final Exception e) {
-                LOGGER.error("[{}] ", clientSession.getTransportName(), e);
-
-            }
-        }
     }
 
     public void checkAndLogEventPoolThreadDumps() {
@@ -774,32 +381,4 @@ clientSession.onMessageReceived(message);
                         System.currentTimeMillis() - before);
         }
     }
-
-    public Flowable<DisconnectedEvent> observeDisconnectedEvent(final String name) {
-
-        return Flowable.defer(() -> {
-
-            EventTimeoutChecker<DisconnectedEvent> checker = new EventTimeoutChecker<>(clientSession, name);
-
-            return disconnectedEventPublisher.toFlowable(BackpressureStrategy.LATEST)
-                                             .subscribeOn(Schedulers.from(authEventExecutor))
-                                             .doOnNext(new Consumer<DisconnectedEvent>() {
-                                                 @Override
-                                                 public void accept(final DisconnectedEvent o) throws Exception {
-
-                                                     checker.onStart(o,
-                                                                     System.currentTimeMillis(),
-                                                                     sentMessagesCounterIncrementAndGet());
-                                                 }
-                                             })
-
-                                             .onBackpressureDrop(checker::onOverflow)
-                                             .observeOn(Schedulers.from(authEventExecutor))
-                                             .doAfterNext(checker::onComplete)
-                                             .doOnError(checker::onError);
-
-        });
-    }
-
-
 }

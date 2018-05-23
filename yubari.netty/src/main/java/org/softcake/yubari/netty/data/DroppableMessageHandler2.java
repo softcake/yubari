@@ -16,21 +16,26 @@
 
 package org.softcake.yubari.netty.data;
 
-import org.softcake.cherry.core.base.PreCheck;
-import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.map.MapHelper;
 
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.InstrumentableLowMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
 
 /**
  * @author The softcake authors
  */
 public class DroppableMessageHandler2 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DroppableMessageHandler2.class);
     private final Map<Class<?>, Map<String, DroppableMessageScheduling>>
         lastScheduledDropableMessages
         = new ConcurrentHashMap<>();
@@ -123,11 +128,21 @@ public class DroppableMessageHandler2 {
         final long lastArrivedMessageTime = scheduling.getLastScheduledTime();
         final int scheduledCount = scheduling.getScheduledCount();
         scheduling.executed();
+
+
+       // LOGGER.info("Aktuelleste Message Zeit: {}   inProcess Message Zeit: {}",millsToLocalDateTime(lastArrivedMessageTime), millsToLocalDateTime(inProcessMessageCreationTime));
+
+
+
         long diff = lastArrivedMessageTime - inProcessMessageCreationTime;
-        //long diff = inProcessMessageCreationTime - lastArrivedMessageTime;
+      //  long diff = inProcessMessageCreationTime - lastArrivedMessageTime;
         return diff <= this.droppableMessagesClientTTL;
              // || scheduledCount <= 1;
 
     }
-
+    public static LocalDateTime millsToLocalDateTime(long millis) {
+        Instant instant = Instant.ofEpochMilli(millis);
+        LocalDateTime date = instant.atZone(ZoneId.systemDefault()).toLocalDateTime();
+        return date;
+    }
 }

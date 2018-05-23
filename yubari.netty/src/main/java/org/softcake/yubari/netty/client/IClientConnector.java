@@ -23,7 +23,7 @@ import com.dukascopy.dds4.transport.msg.system.ChildSocketAuthAcceptorMessage;
 import com.dukascopy.dds4.transport.msg.system.PrimarySocketAuthAcceptorMessage;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInboundHandler;
-import io.reactivex.Observer;
+import io.reactivex.Observable;
 import io.reactivex.functions.Consumer;
 
 /**
@@ -48,7 +48,7 @@ ClientConnector.ClientState getClientState();
 
     void terminate();
 
-    void observe(Observer<ClientConnector.ClientState> observer);
+    Observable<ClientConnector.ClientState> observeClientState();
 
     void primaryChannelDisconnected();
 

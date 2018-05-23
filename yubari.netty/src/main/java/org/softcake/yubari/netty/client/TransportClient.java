@@ -108,12 +108,12 @@ import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSession
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
-import io.reactivex.BackpressureStrategy;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Predicate;
+import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
@@ -135,6 +135,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -192,7 +193,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
     private final long droppableMessageClientTTL;
     private final AtomicLong requestId = new AtomicLong(0L);
     private final AtomicInteger ticksCounter = new AtomicInteger();
-    private final PublishSubject<ProtocolMessage> transportMessagePublishSubject = PublishSubject.create();
+    private final PublishProcessor<ProtocolMessage> transportMessagePublishSubject = PublishProcessor.create();
     private final PublishSubject<DisconnectedEvent> transportDisconnectedPublishSubject = PublishSubject.create();
     /*
         public Observable<ProtocolMessage> observeMessagesReceived() {
@@ -259,6 +260,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
     private IPingListener pingListener;
     private PublishSubject<ITransportClient> transportAuthorizedPublishSubject = PublishSubject.create();
     private PublishSubject<ITransportClient> transportOnlinePublishSubject = PublishSubject.create();
+    private PublishSubject<ProtocolMessage> transportMessagePublishSubjectFast = PublishSubject.create();
 
     public TransportClient() {
 
@@ -1399,64 +1401,179 @@ public class TransportClient implements ITransportClient, IClientEvent {
     public Flowable<ProtocolMessage> observeMessagesReceived() {
 
         MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.transportClientSession, "TC");
+
+        return transportMessagePublishSubject.onBackpressureLatest()
+                                             .subscribeOn(Schedulers.from(transportClientSession.getProtocolHandler()
+                                                                                                .getEventExecutor()))
+                                             .doOnNext(new Consumer<ProtocolMessage>() {
+                                                 @Override
+                                                 public void accept(final ProtocolMessage protocolMessage)
+                                                     throws Exception {
+
+                                                     checker.onStart(protocolMessage,
+                                                                     System.currentTimeMillis(),
+                                                                     messageCount.getAndIncrement());
+                                                 }
+                                             })
+                                             .onBackpressureDrop(new Consumer<ProtocolMessage>() {
+                                                 @Override
+                                                 public void accept(final ProtocolMessage message) throws Exception {
+                                                     transportMessagePublishSubject.onNext(message);
+                                                     checker.onOverflow(message);
+                                                     LOGGER.info("Overflow {}", messageCount.get());
+                                                 }
+                                             })
+                                             .observeOn(Schedulers.from(transportClientSession.getProtocolHandler()
+                                                                                              .getEventExecutor()))
+                                             .filter(new Predicate<ProtocolMessage>() {
+                                                 @Override
+                                                 public boolean test(final ProtocolMessage holder) throws Exception {
+
+                                                     final boolean
+                                                         canProcessDroppableMessage
+                                                         = transportClientSession.getProtocolHandler()
+                                                         .getMessageHandler().canProcessDroppableMessage(
+                                                         holder);
+                                                     if (!canProcessDroppableMessage) {
+                                                         checker.onDroppable(holder);
+                                                         LOGGER.warn(
+                                                             "[{}] Newer message already has arrived, current "
+                                                             + "processing is skipped [{}]",
+                                                             transportClientSession.getTransportName(),
+                                                             holder);
+                                                     }
+                                                     return canProcessDroppableMessage;
+
+                                                 }
+                                             })
+                                             .doAfterNext(new Consumer<ProtocolMessage>() {
+                                                 @Override
+                                                 public void accept(final ProtocolMessage holder) throws Exception {
+
+                                                     checker.onComplete(holder);
+                                                 }
+                                             })
+                                             .doOnError(new Consumer<Throwable>() {
+                                                 @Override
+                                                 public void accept(final Throwable throwable) throws Exception {
+
+                                                     checker.onError(throwable);
+                                                 }
+                                             });
+
+
+    }
+    public Observable<ProtocolMessage> observeMessagesReceivedFast() {
+
+
+
+        return transportMessagePublishSubjectFast.observeOn(Schedulers.from(Executors.newSingleThreadExecutor()));
+
+
+    }
+
+    /* public Observable<ProtocolMessage> observeMessagesReceived1() {
+
+         MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.transportClientSession, "TC");
+         return Observable.defer(() -> {
+
+
+             //transportMessageSubject.onNext(holder);
+             return transportMessagePublishSubject
+                 .subscribeOn(Schedulers.from(transportClientSession
+                                                  .getProtocolHandler()
+                                                  .getEventExecutor
+                                                      ()))
+                 .doOnNext(new Consumer<ProtocolMessage>() {
+                     @Override
+                     public void accept(final ProtocolMessage protocolMessage)
+                         throws Exception {
+
+                         checker.onStart(protocolMessage,
+                                         System.currentTimeMillis(),
+                                         messageCount.getAndIncrement());
+                     }
+                 })
+
+                 .filter(new Predicate<ProtocolMessage>() {
+                     @Override
+                     public boolean test(final ProtocolMessage holder)
+                         throws Exception {
+
+                         final boolean
+                             canProcessDroppableMessage
+                             = transportClientSession.getProtocolHandler()
+                             .messageHandler2
+                             .canProcessDroppableMessage(holder);
+                         if (!canProcessDroppableMessage) {
+                             checker.onDroppable(holder);
+                         }
+                         return canProcessDroppableMessage;
+
+                     }
+                 })
+                 .observeOn(Schedulers.from(transportClientSession.getProtocolHandler()
+                                                                  .getEventExecutor()))
+                 .doAfterNext(new Consumer<ProtocolMessage>() {
+                     @Override
+                     public void accept(final ProtocolMessage holder) throws Exception {
+
+                         checker.onComplete(holder);
+                     }
+                 })
+                 .doOnError(new Consumer<Throwable>() {
+                     @Override
+                     public void accept(final Throwable throwable) throws Exception {
+
+                         checker.onError(throwable);
+                     }
+                 });
+
+         });
+     }
+  */
+    public Flowable<ProtocolMessage> observeMessagesReceived2() {
+
+        MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.transportClientSession, "TC");
         return Flowable.defer(() -> {
 
 
             //transportMessageSubject.onNext(holder);
-            return transportMessagePublishSubject.toFlowable(BackpressureStrategy.LATEST)
-                                                 .subscribeOn(Schedulers.from(transportClientSession
-                                                                                  .getProtocolHandler()
-                                                                                                    .getEventExecutor
-                                                                                                        ()))
-                                                 .doOnNext(new Consumer<ProtocolMessage>() {
-                                                     @Override
-                                                     public void accept(final ProtocolMessage protocolMessage)
-                                                         throws Exception {
+            return transportMessagePublishSubject.onBackpressureLatest().subscribeOn(Schedulers.computation()).doOnNext(
+                new Consumer<ProtocolMessage>() {
+                    @Override
+                    public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
-                                                         checker.onStart(protocolMessage,
-                                                                         System.currentTimeMillis(),
-                                                                         messageCount.getAndIncrement());
-                                                     }
-                                                 })
-                                                 .onBackpressureDrop(new Consumer<ProtocolMessage>() {
-                                                     @Override
-                                                     public void accept(final ProtocolMessage protocolMessage)
-                                                         throws Exception {
-checker.onOverflow(protocolMessage);
-                                                     }
-                                                 })
+                        checker.onStart(protocolMessage, System.currentTimeMillis(), messageCount.getAndIncrement());
+                    }
+                }).filter(new Predicate<ProtocolMessage>() {
+                @Override
+                public boolean test(final ProtocolMessage holder) throws Exception {
 
-                                                 .filter(new Predicate<ProtocolMessage>() {
-                                                     @Override
-                                                     public boolean test(final ProtocolMessage holder)
-                                                         throws Exception {
-                        final boolean
-                            canProcessDroppableMessage
-                            = transportClientSession.getProtocolHandler().messageHandler2.canProcessDroppableMessage(holder);
-                        if (!canProcessDroppableMessage) {
-                            checker.onDroppable(holder);
-                        }
-                        return canProcessDroppableMessage;
+                    final boolean
+                        canProcessDroppableMessage
+                        = transportClientSession.getProtocolHandler().getMessageHandler().canProcessDroppableMessage
+                        (holder);
+                    if (!canProcessDroppableMessage) {
+                        checker.onDroppable(holder);
+                    }
+                    return canProcessDroppableMessage;
 
-                                                     }
-                                                 }).observeOn(Schedulers.from(transportClientSession
-                                                                                                                                    .getProtocolHandler()
-                                                                                                                                    .getEventExecutor
-                                                                                                                                        ()))
-                                                 .doAfterNext(new Consumer<ProtocolMessage>() {
-                                                     @Override
-                                                     public void accept(final ProtocolMessage holder) throws Exception {
+                }
+            }).observeOn(Schedulers.from(transportClientSession.getProtocolHandler().getEventExecutor())).doAfterNext(
+                new Consumer<ProtocolMessage>() {
+                    @Override
+                    public void accept(final ProtocolMessage holder) throws Exception {
 
-                                                         checker.onComplete(holder);
-                                                     }
-                                                 })
-                                                 .doOnError(new Consumer<Throwable>() {
-                                                     @Override
-                                                     public void accept(final Throwable throwable) throws Exception {
+                        checker.onComplete(holder);
+                    }
+                }).doOnError(new Consumer<Throwable>() {
+                @Override
+                public void accept(final Throwable throwable) throws Exception {
 
-                                                         checker.onError(throwable);
-                                                     }
-                                                 });
+                    checker.onError(throwable);
+                }
+            });
 
         });
     }
@@ -1480,7 +1597,7 @@ checker.onOverflow(protocolMessage);
 
     @Override
     public void onMessageReceived(final ProtocolMessage var2) {
-
+        transportMessagePublishSubjectFast.onNext(var2);
         transportMessagePublishSubject.onNext(var2);
     }
 

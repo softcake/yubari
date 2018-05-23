@@ -50,7 +50,6 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.reactivex.Completable;
 import io.reactivex.Observable;
-import io.reactivex.Observer;
 import io.reactivex.Single;
 import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
@@ -123,7 +122,6 @@ implements SateMachineClient, IClientConnector {
         this.protocolHandler = clientSession.getProtocolHandler();
         this.sm = new ClientConnectorStateMachine(this, this.executor, clientSession);
         this.sm.connect();
-        this.protocolHandler.observeAuthorizationEvent(this.executor).subscribe(this::processCompletionEvent);
     }
 
     private static boolean isChannelInActive(final Channel channel) {
@@ -626,11 +624,10 @@ implements SateMachineClient, IClientConnector {
         }
 
     }
-
     @Override
-    public void observe(final Observer<ClientState> observer) {
+    public Observable<ClientState> observeClientState() {
 
-        this.sm.observe().subscribe(observer);
+       return this.sm.observe();
     }
 
     @Override
@@ -705,13 +702,14 @@ implements SateMachineClient, IClientConnector {
 
         super.userEventTriggered(ctx, evt);
 
-      /*  if (evt instanceof SslHandshakeCompletionEvent) {
-            authorizationEvent.onNext(((SslHandshakeCompletionEvent) evt).isSuccess()
+
+        if (evt instanceof SslHandshakeCompletionEvent) {
+            processCompletionEvent(((SslHandshakeCompletionEvent) evt).isSuccess()
                                       ? SslCompletionEvent.success()
                                       : SslCompletionEvent.failed(((SslHandshakeCompletionEvent) evt).cause()));
         } else if (evt instanceof ProtocolVersionNegotiationCompletionEvent) {
-            authorizationEvent.onNext((ProtocolVersionNegotiationCompletionEvent) evt);
-        }*/
+            processCompletionEvent((ProtocolVersionNegotiationCompletionEvent) evt);
+        }
     }
     private void processAuthorizationMessage(final ChannelHandlerContext ctx,
                                              final BinaryProtocolMessage protocolMessage) {

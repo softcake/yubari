@@ -51,7 +51,6 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslHandler;
 import io.reactivex.Completable;
-import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
@@ -923,23 +922,6 @@ public class TransportClientSession implements IClientEvent {
     public IPingListener getPingListener() {
 
         return this.pingListener;
-    }
-
-    public Flowable<ProtocolMessage> observeMessagesReceived() {
-
-        return this.protocolHandler.observeFeedbackMessages("TransportClientSession");
-
-    }
-
-    public Flowable<DisconnectedEvent> observeDisconnectedEvent() {
-
-        return this.protocolHandler.observeDisconnectedEvent("TransportClientSession");
-
-    }
-
-    public Flowable<Long> observeAuthorizedEvent() {
-
-        return this.protocolHandler.observeAuthorizedEvent("TransportClientSession");
     }
 
     @Override

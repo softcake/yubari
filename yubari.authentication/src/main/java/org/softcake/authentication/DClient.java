@@ -87,7 +87,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.ToDoubleFunction;
@@ -185,6 +184,7 @@ public class DClient implements ClientListener {
     private final Map<UUID, Long> pluginIdMap = new HashMap();
     public int anInt;
     List<Double> durchschnitt = new ArrayList<>(1000);
+    List<Double> durchschnitt1 = new ArrayList<>(1000);
     private DClient.ClientGUIListener clientGUIListener;
     //private volatile ISystemListenerExtended systemListener;
     private TransportClient transportClient;
@@ -350,6 +350,11 @@ public class DClient implements ClientListener {
                 public void accept(final ProtocolMessage protocolMessage) throws Exception {
                     messageReceived(protocolMessage);
                 }
+            }); this.transportClient.observeMessagesReceivedFast().subscribe(new Consumer<ProtocolMessage>() {
+                @Override
+                public void accept(final ProtocolMessage protocolMessage) throws Exception {
+                    messageReceivedFast(protocolMessage);
+                }
             });
             this.transportClient.observeOnlineEvent().subscribe(new Consumer<ITransportClient>() {
                 @Override
@@ -412,21 +417,56 @@ public class DClient implements ClientListener {
 
     }
 
+    private void messageReceivedFast(final ProtocolMessage message) {
+        if ((message instanceof CurrencyMarket)) {
+            final long end = System.nanoTime();
+            final long start = ((CurrencyMarket) message).getCreationTimestamp();
 
-int coun = 0;
+            // LOGGER.error("Timestamp in DCClient: {} Execution in Netty Time: {}us", start, ((end - start) / 1000));
+            double diff = ((end - start) / 1000L);
+            synchronized (durchschnitt1) {
+
+                durchschnitt1.add(diff);
+                if (durchschnitt1.size() % 20 == 0) {
+
+
+
+                    double namesOfMaleMembersCollect = durchschnitt1.stream()
+                                                                   .mapToDouble(new ToDoubleFunction<Double>() {
+                                                                       @Override
+                                                                       public double applyAsDouble(final Double value) {
+
+                                                                           return value;
+                                                                       }
+                                                                   })
+                                                                   .average()
+                                                                   .getAsDouble();
+
+                    LOGGER.error("Average Execution in Netty Time Fast: {}us", roundAvoid(namesOfMaleMembersCollect, 3));
+
+                }
+            }
+
+
+        }
+
+    }
+
+
+    int coun = 0;
     private void messageReceived(final ProtocolMessage message) {
 
-      /*  if (coun <= 100) {
+       /* if (coun <= 100) {
             coun++;
             return;
-        }*/
-        final long nextLong = ThreadLocalRandom.current().nextLong(300, 1000);
+        }
+        final long nextLong = ThreadLocalRandom.current().nextLong(800, 1500);
 
         try {
             Thread.sleep(nextLong);
         } catch (InterruptedException e) {
             e.printStackTrace();
-        }
+        }*/
         if ((message instanceof CurrencyMarket)) {
             final long end = System.nanoTime();
             final long start = ((CurrencyMarket) message).getCreationTimestamp();

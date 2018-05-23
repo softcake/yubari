@@ -25,6 +25,7 @@ import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,7 +87,7 @@ public class MessageProcessTimeoutChecker {
 
                              if (executionTime > session.getEventExecutionErrorDelay()) {
 
-                                 this.session.getChannelTrafficBlocker().suspend(this.channel);
+                               //  this.session.getChannelTrafficBlocker().suspend(this.channel);
                                  LOGGER.error(
                                      "[{}] Subscriber: [{}] Event executor queue overloaded, CRITICAL EXECUTION WAIT "
                                      + "TIME: {}ms, possible application problem or deadLock, message [{}]",
@@ -99,7 +100,14 @@ public class MessageProcessTimeoutChecker {
                                  procStartTime.set(currentTime);
                              }
 
-                         }, throwable -> this.session.getChannelTrafficBlocker().resume(this.channel));
+                         }, new Consumer<Throwable>() {
+                             @Override
+                             public void accept(final Throwable throwable) throws Exception {
+
+                                /* MessageProcessTimeoutChecker.this.session.getChannelTrafficBlocker().resume(
+                                     MessageProcessTimeoutChecker.this.channel);*/
+                             }
+                         });
     }
 
     private void logIncompleteExecution(final boolean isError, final long startTime, final long now) {
@@ -167,7 +175,6 @@ public class MessageProcessTimeoutChecker {
     }
 
     public synchronized void onStart(final ProtocolMessage msg, final long time, final int messageCount) {
-
 
         final boolean checkErrorTimeout;
 
@@ -269,8 +276,6 @@ public class MessageProcessTimeoutChecker {
             logExecutionTime(checkError.get(), this.startTime.get(), System.currentTimeMillis());
         }
         clean();
-
-
     }
 
     public synchronized void onOverflow(final ProtocolMessage message) {

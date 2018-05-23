@@ -22,7 +22,6 @@ import static org.softcake.yubari.netty.TransportAttributeKeys.READ_SUSPENDED;
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
-import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler.Sharable;
