@@ -17,6 +17,7 @@
 package org.softcake.yubari.netty.client;
 
 
+import org.softcake.yubari.netty.IClientEvent;
 import org.softcake.yubari.netty.ProtocolEncoderDecoder;
 import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
 import org.softcake.yubari.netty.TransportClientSessionStateHandler;
@@ -76,7 +77,7 @@ import java.util.function.BiConsumer;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 
-public class TransportClientSession {
+public class TransportClientSession implements IClientEvent {
     private static final Logger LOGGER = LoggerFactory.getLogger(TransportClientSession.class);
     private final TransportClient transportClient;
     private final InetSocketAddress address;
@@ -451,7 +452,7 @@ public class TransportClientSession {
 
         if (this.isOnline()) {
 
-                this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message).subscribe();
+            this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message).subscribe();
 
             return true;
         } else {
@@ -502,9 +503,10 @@ public class TransportClientSession {
         if (this.isOnline()) {
             return this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
         } else {
-            return Completable.error(new ConnectException(String.format("[%s] TransportClient not connected, message: %s",
-                                                                   this.transportName,
-                                                                   message.toString(400))));
+            return Completable.error(new ConnectException(String.format(
+                "[%s] TransportClient not connected, message: %s",
+                this.transportName,
+                message.toString(400))));
         }
     }
 
@@ -928,6 +930,7 @@ public class TransportClientSession {
         return this.protocolHandler.observeFeedbackMessages("TransportClientSession");
 
     }
+
     public Flowable<DisconnectedEvent> observeDisconnectedEvent() {
 
         return this.protocolHandler.observeDisconnectedEvent("TransportClientSession");
@@ -937,5 +940,22 @@ public class TransportClientSession {
     public Flowable<Long> observeAuthorizedEvent() {
 
         return this.protocolHandler.observeAuthorizedEvent("TransportClientSession");
+    }
+
+    @Override
+    public void onMessageReceived(final ProtocolMessage var2) {
+
+        this.transportClient.onMessageReceived(var2);
+    }
+
+    @Override
+    public void onDisconnected(final DisconnectedEvent var2) {
+
+        this.transportClient.onDisconnected(var2);
+    }
+    @Override
+    public void onOnline() {
+
+        this.transportClient.onOnline();
     }
 }

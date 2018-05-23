@@ -21,7 +21,6 @@ package org.softcake.authentication;
 
 import org.softcake.yubari.connect.authorization.AuthorizationPropertiesFactory;
 import org.softcake.yubari.netty.SessionHandler;
-import org.softcake.yubari.netty.TransportMessage;
 import org.softcake.yubari.netty.authorization.GreedClientAuthorizationProvider;
 import org.softcake.yubari.netty.client.ITransportClient;
 import org.softcake.yubari.netty.client.TransportClient;
@@ -88,6 +87,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.ToDoubleFunction;
@@ -343,18 +343,24 @@ public class DClient implements ClientListener {
             //            FeedDataProvider.setPlatformTicket(ticket);
             this.initialized = true;
             this.transportClient.connect();
-            this.transportClient.observeMessagesReceived2().subscribe(this::feedbackMessageReceived2);
 
-            this.transportClient.observeAuthorizedEvent().subscribe(new Consumer<ITransportClient>() {
+
+            this.transportClient.observeMessagesReceived().subscribe(new Consumer<ProtocolMessage>() {
+                @Override
+                public void accept(final ProtocolMessage protocolMessage) throws Exception {
+                    messageReceived(protocolMessage);
+                }
+            });
+            this.transportClient.observeOnlineEvent().subscribe(new Consumer<ITransportClient>() {
                 @Override
                 public void accept(final ITransportClient iTransportClient) throws Exception {
-                    authorized(iTransportClient);
+                    online(iTransportClient);
                 }
             });
             this.transportClient.observeDisconnectedEvent().subscribe(new Consumer<DisconnectedEvent>() {
                 @Override
                 public void accept(final DisconnectedEvent event) throws Exception {
-                    disconnected(transportClient,event);
+                    LOGGER.info("DISCONNECTED");
                 }
             });
             this.connectToHistoryServer(username, true);
@@ -381,16 +387,16 @@ public class DClient implements ClientListener {
             //            FeedDataProvider.setPlatformTicket(ticket);
             //            FeedDataProvider.getDefaultInstance().getFeedCommissionManager().clear();
             this.transportClient.connect();
-            this.transportClient.observeMessagesReceived2().subscribe(new Consumer<ProtocolMessage>() {
+            this.transportClient.observeMessagesReceived().subscribe(new Consumer<ProtocolMessage>() {
                 @Override
                 public void accept(final ProtocolMessage protocolMessage) throws Exception {
-                    feedbackMessageReceived2(protocolMessage);
+                    messageReceived(protocolMessage);
                 }
             });
-            this.transportClient.observeAuthorizedEvent().subscribe(new Consumer<ITransportClient>() {
+            this.transportClient.observeOnlineEvent().subscribe(new Consumer<ITransportClient>() {
                 @Override
                 public void accept(final ITransportClient iTransportClient) throws Exception {
-                    authorized(iTransportClient);
+                    online(iTransportClient);
                 }
             });
             this.transportClient.observeDisconnectedEvent().subscribe(new Consumer<DisconnectedEvent>() {
@@ -406,8 +412,21 @@ public class DClient implements ClientListener {
 
     }
 
-    private void feedbackMessageReceived2(final ProtocolMessage message) {
 
+int coun = 0;
+    private void messageReceived(final ProtocolMessage message) {
+
+      /*  if (coun <= 100) {
+            coun++;
+            return;
+        }*/
+        final long nextLong = ThreadLocalRandom.current().nextLong(300, 1000);
+
+        try {
+            Thread.sleep(nextLong);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         if ((message instanceof CurrencyMarket)) {
             final long end = System.nanoTime();
             final long start = ((CurrencyMarket) message).getCreationTimestamp();
@@ -418,6 +437,9 @@ public class DClient implements ClientListener {
 
                 durchschnitt.add(diff);
                 if (durchschnitt.size() % 20 == 0) {
+
+
+
                     double namesOfMaleMembersCollect = durchschnitt.stream()
                                                                    .mapToDouble(new ToDoubleFunction<Double>() {
                                                                        @Override
@@ -931,6 +953,11 @@ public class DClient implements ClientListener {
 
     }
 
+    @Override
+    public void authorized(final ITransportClient var1) {
+
+    }
+
     public void feedbackMessageReceived(ITransportClient client, ProtocolMessage message) {
 /*
 
@@ -1285,8 +1312,9 @@ LOGGER.info("retry");*/
 
     }
 
-    public synchronized void authorized(ITransportClient client) {
+    public synchronized void online(ITransportClient client) {
 
+        LOGGER.info("State in DCC {}",client.getClientState());
         this.connectedInit();
         if (this.initialized) {
             this.fireConnected();
@@ -1445,7 +1473,7 @@ LOGGER.info("retry");*/
 
     public synchronized void disconnected(ITransportClient client, DisconnectedEvent event) {
         //        if (FeedDataProvider.getDefaultInstance() != null) {
-        //            FeedDataProvider.getDefaultInstance().disconnected();
+        //            FeedDataProvider.getDefaultInstance().onDisconnected();
         //            FeedDataProvider.getDefaultInstance().getJssManager().removeJssListener(this
         // .jssBroadcastListener);
         //        }

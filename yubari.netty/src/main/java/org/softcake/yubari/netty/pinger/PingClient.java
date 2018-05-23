@@ -105,7 +105,7 @@ public class PingClient {
     public void connect(final long connectionTimeout) throws InterruptedException, TimeoutException {
 
         if (this.online.get()) {
-            throw new IllegalStateException("Transport is already online " + this.pingTarget);
+            throw new IllegalStateException("Transport is already onOnline " + this.pingTarget);
         } else {
             final NioEventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup(1);
             this.channelBootstrap = new Bootstrap();

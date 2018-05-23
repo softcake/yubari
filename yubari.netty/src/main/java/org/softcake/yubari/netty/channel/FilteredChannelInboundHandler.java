@@ -47,7 +47,7 @@ import io.netty.util.internal.TypeParameterMatcher;
  * <h3>Forward compatibility notice</h3>
  * <p>
  * Please keep in mind that {@link #channelRead0(ChannelHandlerContext, I)} will be renamed to
- * {@code messageReceived(ChannelHandlerContext, I)} in 5.0.
+ * {@code onMessageReceived(ChannelHandlerContext, I)} in 5.0.
  * </p>
  */
 public abstract class FilteredChannelInboundHandler<I> extends ChannelInboundHandlerAdapter {
@@ -137,7 +137,7 @@ public abstract class FilteredChannelInboundHandler<I> extends ChannelInboundHan
 
     /**
      * <strong>Please keep in mind that this method will be renamed to
-     * {@code messageReceived(ChannelHandlerContext, I)} in 5.0.</strong>
+     * {@code onMessageReceived(ChannelHandlerContext, I)} in 5.0.</strong>
      * <p>
      * Is called for each message of type {@link I}.
      *

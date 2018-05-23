@@ -19,44 +19,39 @@ package org.softcake.yubari.netty;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.util.StrUtils;
 
-import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
 import io.reactivex.Observable;
-import io.reactivex.ObservableEmitter;
-import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
+import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class EventTimeoutChecker<T> {
-
 
     private static final long ERROR_TIME_OFFSET = 5000L;
     private static final int SHORT_MESSAGE_LENGTH = 100;
     private static final Logger LOGGER = LoggerFactory.getLogger(EventTimeoutChecker.class);
-    private final AtomicLong LAST_EXECUTION_WARNING_TIME = new AtomicLong(System.currentTimeMillis() - ThreadLocalRandom
-        .current()
-        .nextLong(9999L, 49999L));
-    private final AtomicLong LAST_EXECUTION_ERROR_TIME = new AtomicLong(System.currentTimeMillis()
-                                                                        - ThreadLocalRandom.current()
-                                                                                           .nextLong(9999L, 49999L));
-    private final AtomicLong startTime = new AtomicLong(0L);
-    private final String name;
-    private AtomicBoolean checkError = new AtomicBoolean(false);
-    private AtomicBoolean isTimeOutReached = new AtomicBoolean(false);
+    private static final AtomicLong LAST_EXECUTION_WARNING_TIME = new AtomicLong(System.currentTimeMillis() - 10000L);
+    private static final AtomicLong LAST_EXECUTION_ERROR_TIME = new AtomicLong(System.currentTimeMillis() - 10000L);
+    final AtomicLong startTime = new AtomicLong(0L);
+    final String name;
+    AtomicReference<Channel> channel = new AtomicReference<>();
+    AtomicBoolean checkError = new AtomicBoolean(false);
+    AtomicBoolean isTimeOutReached = new AtomicBoolean(false);
+    TransportClientSession session;
+    PublishSubject<T> overFlow;
     private Disposable observable;
-    private TransportClientSession session;
     private T message;
-    private Disposable overFlow;
-    private ObservableEmitter<T> emitter;
+    private Disposable overFlowDisposable;
 
     public EventTimeoutChecker(final TransportClientSession clientSession, String name) {
 
@@ -64,6 +59,7 @@ public class EventTimeoutChecker<T> {
         session = clientSession;
 
     }
+
     private static boolean isTimeToCheck(final int messageCount,
                                          final long eventExecutionDelay,
                                          final int eventExecutionDelayCheckEveryNTimes) {
@@ -74,46 +70,38 @@ public class EventTimeoutChecker<T> {
     }
 
 
-    private Disposable getOverFlowObservable(final Channel channel) {
+    private Disposable getOverFlowObservable() {
 
         final AtomicLong procStartTime = new AtomicLong(System.currentTimeMillis());
-        return Observable.create((ObservableOnSubscribe<T>) e -> emitter = e)
-                         .observeOn(Schedulers.computation())
-                         .timeout(5000L, TimeUnit.MILLISECONDS)
-                         .subscribe(protocolMessage -> {
+        return overFlow.observeOn(Schedulers.from(session.getScheduledExecutorService()))
+                       .sample(1000L,
+                               TimeUnit.MILLISECONDS,
+                               Schedulers.from(session.getScheduledExecutorService()))
+                       .timeout(1000L, TimeUnit.MILLISECONDS)
+                       .subscribe(protocolMessage -> {
 
-                             final long currentTime = System.currentTimeMillis();
-                             final long executionTime = currentTime - procStartTime.get();
+                           final long currentTime = System.currentTimeMillis();
+                           final long executionTime = currentTime - procStartTime.get();
 
-                             if (executionTime > session.getEventExecutionErrorDelay()) {
+                           if (executionTime > session.getEventExecutionErrorDelay()) {
 
-                                 if (channel != null) {
-                                     this.session.getChannelTrafficBlocker().suspend(channel);
-                                 }
+                               LOGGER.error(
+                                   "[{}] Subscriber: [{}] Event executor queue overloaded, CRITICAL EXECUTION WAIT "
+                                   + "TIME: {}ms, possible application problem or deadLock, message [{}]",
+                                   session.getTransportName(),
+                                   name,
+                                   executionTime,
+                                   StrUtils.toSafeString(protocolMessage, SHORT_MESSAGE_LENGTH));
 
+                               procStartTime.set(currentTime);
+                           }
 
-                                 LOGGER.error(
-                                     "[{}] Subscriber: [{}] Event executor queue overloaded, CRITICAL EXECUTION WAIT "
-                                     + "TIME: {}ms, possible application problem or deadLock, message [{}]",
-                                     session.getTransportName(),
-                                     name,
-                                     executionTime,
-                                     StrUtils.toSafeString(protocolMessage, SHORT_MESSAGE_LENGTH));
+                       }, new Consumer<Throwable>() {
+                           @Override
+                           public void accept(final Throwable throwable) throws Exception {
 
-
-                                 procStartTime.set(currentTime);
-                             }
-
-                         }, new Consumer<Throwable>() {
-                             @Override
-                             public void accept(final Throwable throwable) throws Exception {
-                                 if (channel != null) {
-                                     session.getChannelTrafficBlocker()
-                                            .resume(channel);
-                                 }
-
-                             }
-                         });
+                           }
+                       });
     }
 
     private void logIncompleteExecution(final boolean isError, final long startTime, final long now) {
@@ -146,7 +134,7 @@ public class EventTimeoutChecker<T> {
 
     }
 
-    private void logExecutionTime(final boolean isError, final long startTime, final long endTime) {
+    void logExecutionTime(final boolean isError, final long startTime, final long endTime) {
 
         final long executionTime = endTime - startTime;
         final String shortMessage = StrUtils.toSafeString(message, SHORT_MESSAGE_LENGTH);
@@ -241,8 +229,6 @@ public class EventTimeoutChecker<T> {
                                   logIncompleteExecution(checkError.get(), startTime.get(), now);
                                   clean();
                               }
-
-
                           }
 
                           @Override
@@ -259,7 +245,7 @@ public class EventTimeoutChecker<T> {
 
     }
 
-    private void clean() {
+    void clean() {
 
         if (observable != null) {
             observable.dispose();
@@ -284,38 +270,21 @@ public class EventTimeoutChecker<T> {
         }
         clean();
 
-
-    }
-    public synchronized void onDroppable(final ProtocolMessage message) {
-
-        if (!message.equals(this.message)) {
-            return;
-        }
-        LOGGER.warn("[{}] Subscriber: [{}] Newer message already has arrived, current processing is skipped [{}]",
-                    session.getTransportName(),
-                    name,
-                    message);
-
-        if (isTimeOutReached.get()) {
-            logExecutionTime(checkError.get(), this.startTime.get(), System.currentTimeMillis());
-        }
-        clean();
-
-
     }
 
     public synchronized void onOverflow(final T message) {
+
         onOverflow(message, null);
 
     }
 
+    public synchronized void onOverflow(final T message, ChannelHandlerContext ctx) {
 
-    public synchronized void onOverflow(final T message, Channel channel) {
-
-        if (overFlow == null || overFlow.isDisposed()) {
-            overFlow = getOverFlowObservable(channel);
+        if (overFlow == null || overFlowDisposable == null || overFlowDisposable.isDisposed()) {
+            overFlow = PublishSubject.create();
+            overFlowDisposable = getOverFlowObservable();
         }
-        emitter.serialize().onNext(message);
+        overFlow.onNext(message);
     }
 
     public synchronized void onError(final Throwable throwable) {

@@ -21,6 +21,7 @@ import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMEN
 import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.AbstractConnectingCompletionEvent;
 import org.softcake.yubari.netty.AuthorizationCompletionEvent;
+import org.softcake.yubari.netty.DefaultChannelWriter;
 import org.softcake.yubari.netty.ProtocolVersionNegotiationCompletionEvent;
 import org.softcake.yubari.netty.SslCompletionEvent;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
@@ -42,20 +43,17 @@ import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
-import io.netty.channel.ChannelPipeline;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.reactivex.Completable;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.Single;
 import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
-import io.reactivex.functions.Action;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
@@ -305,7 +303,7 @@ implements SateMachineClient, IClientConnector {
     private void processPrimarySessionOnline() {
 
         if (isChannelInActive(this.primaryChannel)) {
-            LOGGER.warn("[{}] Primary session disconnected. Disconnecting transport client",
+            LOGGER.warn("[{}] Primary session onDisconnected. Disconnecting transport client",
                         this.clientSession.getTransportName());
 
             this.disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
@@ -352,7 +350,7 @@ implements SateMachineClient, IClientConnector {
                      this.primaryChannelAttachment.getReconnectAttempt() + 1);
 
         return this.processConnecting(this.primaryChannelAttachment)
-                   .doOnSuccess(channel -> this.waitForSslAndNegotitation());
+                   .doOnSuccess(channel -> this.waitForSslAndNegotiation());
     }
 
     private Single<Channel> connectChildSession() {
@@ -394,7 +392,7 @@ implements SateMachineClient, IClientConnector {
 
         final Channel channel = isPrimary ? this.primaryChannel : this.childChannel;
 
-        return this.protocolHandler.writeMessage(channel, msg).doOnError(t -> {
+        return DefaultChannelWriter.writeMessage(clientSession, channel, msg).doOnError(t -> {
             if (t.getCause() instanceof ClosedChannelException || !this.isOnline()) {return;}
 
             LOGGER.error("[{}] ", this.clientSession.getTransportName(), t);
@@ -403,13 +401,13 @@ implements SateMachineClient, IClientConnector {
                                                                      isPrimary ? "Primary" : "Child",
                                                                      msg),
                                                        t));
-        }).doOnComplete(() -> socketAuthAcceptormessageSent(isPrimary)
+        }).doOnComplete(() -> socketAuthAcceptorMessageSent(isPrimary)
 
 
         );
     }
 
-    private void socketAuthAcceptormessageSent(final boolean isPrimary) {
+    private void socketAuthAcceptorMessageSent(final boolean isPrimary) {
 
         if (isPrimary) {
             this.primarySocketAuthAcceptorMessageSent = true;
@@ -439,7 +437,7 @@ implements SateMachineClient, IClientConnector {
                                                  : DisconnectReason.CONNECTION_PROBLEM;
 
                        this.disconnect(new ClientDisconnectReason(reason,
-                                                                  String.format("%s exception " + "%s",
+                                                                  String.format("%s exception %s",
                                                                                 cause instanceof CertificateException
                                                                                 ? "Certificate"
                                                                                 : "Unexpected",
@@ -450,7 +448,13 @@ implements SateMachineClient, IClientConnector {
                    })
                    .subscribeOn(Schedulers.from(this.executor))
                    .doOnSuccess(channel -> this.setChannel(isPrimary, channel))
-                   .doOnSuccess(ch -> ch.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(attachment));
+                   .doOnSuccess(new Consumer<Channel>() {
+                       @Override
+                       public void accept(final Channel ch) throws Exception {
+
+                           ch.attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).set(attachment);
+                       }
+                   });
 
 
     }
@@ -464,7 +468,7 @@ implements SateMachineClient, IClientConnector {
         }
     }
 
-    private void waitForSslAndNegotitation() {
+    private void waitForSslAndNegotiation() {
 
         if (ClientConnector.this.clientSession.isUseSSL()) {
             this.processSslHandShakeWaiting();
@@ -684,21 +688,37 @@ implements SateMachineClient, IClientConnector {
     protected void channelRead0(final ChannelHandlerContext ctx, final ProtocolMessage msg) throws Exception {
 
         if (msg instanceof PrimarySocketAuthAcceptorMessage) {
-            LOGGER.info("CURRENT STATE: ----------------------------------------------------------------{}",getClientState().name());
             setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage) msg);
         } else if (msg instanceof ChildSocketAuthAcceptorMessage) {
             setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) msg);
         } else {
+            if (isConnecting()) {
+                processAuthorizationMessage(ctx,msg);
+            }
+
+
             ctx.fireChannelRead(msg);
         }
     }
+    @Override
+    public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
 
+        super.userEventTriggered(ctx, evt);
+
+      /*  if (evt instanceof SslHandshakeCompletionEvent) {
+            authorizationEvent.onNext(((SslHandshakeCompletionEvent) evt).isSuccess()
+                                      ? SslCompletionEvent.success()
+                                      : SslCompletionEvent.failed(((SslHandshakeCompletionEvent) evt).cause()));
+        } else if (evt instanceof ProtocolVersionNegotiationCompletionEvent) {
+            authorizationEvent.onNext((ProtocolVersionNegotiationCompletionEvent) evt);
+        }*/
+    }
     private void processAuthorizationMessage(final ChannelHandlerContext ctx,
                                              final BinaryProtocolMessage protocolMessage) {
 
-        LOGGER.debug("[{}] Sending message [{}] to authorization provider",
+      /*  LOGGER.debug("[{}] Sending message [{}] to authorization provider",
                      this.clientSession.getTransportName(),
-                     protocolMessage);
+                     protocolMessage);*/
 
         if (protocolMessage instanceof OkResponseMessage) {
             LOGGER.debug(
@@ -707,6 +727,7 @@ implements SateMachineClient, IClientConnector {
                 this.clientSession.getAuthorizationProvider().getSessionId(),
                 this.clientSession.getAuthorizationProvider().getLogin());
             this.clientSession.setServerSessionId(this.clientSession.getAuthorizationProvider().getSessionId());
+            processCompletionEvent(AuthorizationCompletionEvent.success());
             //authorizationEvent.onNext(AuthorizationCompletionEvent.success());
         } else if (protocolMessage instanceof ErrorResponseMessage) {
 
@@ -714,6 +735,7 @@ implements SateMachineClient, IClientConnector {
             LOGGER.error("[{}] Received AUTHORIZATION_ERROR notification from the authorization provider, reason: [{}]",
                          this.clientSession.getTransportName(),
                          errorReason);
+            processCompletionEvent(AuthorizationCompletionEvent.failed(new Exception(errorReason)));
            // authorizationEvent.onNext(AuthorizationCompletionEvent.failed(new Exception(errorReason)));
 
         } else if (protocolMessage instanceof HaloResponseMessage) {
@@ -721,9 +743,10 @@ implements SateMachineClient, IClientConnector {
             loginRequestMessage.setUsername(this.clientSession.getAuthorizationProvider().getLogin());
             loginRequestMessage.setTicket(this.clientSession.getAuthorizationProvider().getTicket());
             loginRequestMessage.setSessionId(this.clientSession.getAuthorizationProvider().getSessionId());
-           // writeMessage(ctx.channel(), loginRequestMessage).subscribe();
+            DefaultChannelWriter.writeMessage(this.clientSession, ctx.channel(), loginRequestMessage).subscribe();
         }
     }
+
     public enum ClientState {
         IDLE,
         CONNECTING,

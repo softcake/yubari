@@ -22,7 +22,6 @@ import org.softcake.yubari.netty.mina.ClientListener;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.reactivex.Completable;
 import io.reactivex.Observable;
-import io.reactivex.Single;
 
 import java.net.ConnectException;
 import java.util.List;
@@ -50,4 +49,6 @@ public interface ITransportClient  {
 
 
     List<ClientListener> getListeners();
+
+    ClientConnector.ClientState getClientState();
 }

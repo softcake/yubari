@@ -89,6 +89,7 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_TR
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_USE_FEEDER_SOCKET;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_USE_SSL;
 
+import org.softcake.yubari.netty.IClientEvent;
 import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.mbean.TransportClientMBean;
@@ -107,10 +108,13 @@ import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSession
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
+import io.reactivex.BackpressureStrategy;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.functions.Consumer;
+import io.reactivex.functions.Predicate;
+import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -145,7 +149,7 @@ import javax.management.MalformedObjectNameException;
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 
-public class TransportClient implements ITransportClient {
+public class TransportClient implements ITransportClient, IClientEvent {
     public static final int PROTOCOL_MESSAGE_EXCEPTION_LENGTH = 400;
     private static final Logger LOGGER = LoggerFactory.getLogger(TransportClient.class);
     private static final AtomicInteger defaultTransportCounter = new AtomicInteger();
@@ -190,6 +194,29 @@ public class TransportClient implements ITransportClient {
     private final AtomicInteger ticksCounter = new AtomicInteger();
     private final PublishSubject<ProtocolMessage> transportMessagePublishSubject = PublishSubject.create();
     private final PublishSubject<DisconnectedEvent> transportDisconnectedPublishSubject = PublishSubject.create();
+    /*
+        public Observable<ProtocolMessage> observeMessagesReceived() {
+
+            final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+            if (transportClientSessionLocal != null) {
+
+                return transportMessagePublishSubject;
+
+                // return transportClientSessionLocal.observeMessagesReceived();
+            } else {
+                final String exMessage = String.format("[%s] TransportClient not connected.", this.transportName);
+
+                return Observable.error(new ConnectException(exMessage));
+            }
+
+        }
+
+        public Observable<ProtocolMessage> observeMessagesReceived2() {
+
+            return transportMessagePublishSubject;
+
+
+        }*/ AtomicInteger messageCount = new AtomicInteger();
     private ServerAddress address;
     private ClientAuthorizationProvider authorizationProvider;
     private boolean useSSL;
@@ -231,6 +258,7 @@ public class TransportClient implements ITransportClient {
     private ISessionStats sessionStats;
     private IPingListener pingListener;
     private PublishSubject<ITransportClient> transportAuthorizedPublishSubject = PublishSubject.create();
+    private PublishSubject<ITransportClient> transportOnlinePublishSubject = PublishSubject.create();
 
     public TransportClient() {
 
@@ -571,6 +599,15 @@ public class TransportClient implements ITransportClient {
     public List<ClientListener> getListeners() {
 
         return Collections.unmodifiableList(this.listeners);
+    }
+
+    @Override
+    public ClientConnector.ClientState getClientState() {
+
+        if (this.transportClientSession != null) {
+            return this.transportClientSession.getClientConnector().getClientState();
+        }
+        return ClientConnector.ClientState.DISCONNECTED;
     }
 
     /**
@@ -1082,7 +1119,7 @@ public class TransportClient implements ITransportClient {
 
             clientSession.init();
 
-            clientSession.observeMessagesReceived().subscribe(new Consumer<ProtocolMessage>() {
+           /* clientSession.observeMessagesReceived().subscribe(new Consumer<ProtocolMessage>() {
                 @Override
                 public void accept(final ProtocolMessage protocolMessage) throws Exception {
 
@@ -1104,7 +1141,7 @@ public class TransportClient implements ITransportClient {
 
                     transportAuthorizedPublishSubject.onNext(TransportClient.this);
                 }
-            });
+            });*/
 
 
             clientSession.connect();
@@ -1193,15 +1230,6 @@ public class TransportClient implements ITransportClient {
             throw new ConnectException(exMessage);
         }
     }
-
-    @Override
-    public Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message) {
-
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-        return transportClientSessionLocal != null
-               ? transportClientSessionLocal.sendRequestAsync(message)
-               : this.createFailedResponse(message);
-    }
    /* public <V> ListenableFuture<V> sendMessageAsyncOld(final ProtocolMessage message) {
 
         final TransportClientSession transportClientSessionLocal = this.transportClientSession;
@@ -1234,6 +1262,15 @@ public class TransportClient implements ITransportClient {
                ? transportClientSessionLocal.sendRequestAsyncOld(message)
                : this.createFailedFuture(message);
     }*/
+
+    @Override
+    public Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message) {
+
+        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        return transportClientSessionLocal != null
+               ? transportClientSessionLocal.sendRequestAsync(message)
+               : this.createFailedResponse(message);
+    }
 
     public Completable sendMessageAsync(final ProtocolMessage message) {
 
@@ -1361,22 +1398,67 @@ public class TransportClient implements ITransportClient {
 
     public Flowable<ProtocolMessage> observeMessagesReceived() {
 
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-        if (transportClientSessionLocal != null) {
-            return transportClientSessionLocal.observeMessagesReceived();
-        } else {
-            final String exMessage = String.format("[%s] TransportClient not connected.", this.transportName);
-
-            return Flowable.error(new ConnectException(exMessage));
-        }
-
-    }
-
-    public Observable<ProtocolMessage> observeMessagesReceived2() {
-
-        return transportMessagePublishSubject;
+        MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.transportClientSession, "TC");
+        return Flowable.defer(() -> {
 
 
+            //transportMessageSubject.onNext(holder);
+            return transportMessagePublishSubject.toFlowable(BackpressureStrategy.LATEST)
+                                                 .subscribeOn(Schedulers.from(transportClientSession
+                                                                                  .getProtocolHandler()
+                                                                                                    .getEventExecutor
+                                                                                                        ()))
+                                                 .doOnNext(new Consumer<ProtocolMessage>() {
+                                                     @Override
+                                                     public void accept(final ProtocolMessage protocolMessage)
+                                                         throws Exception {
+
+                                                         checker.onStart(protocolMessage,
+                                                                         System.currentTimeMillis(),
+                                                                         messageCount.getAndIncrement());
+                                                     }
+                                                 })
+                                                 .onBackpressureDrop(new Consumer<ProtocolMessage>() {
+                                                     @Override
+                                                     public void accept(final ProtocolMessage protocolMessage)
+                                                         throws Exception {
+checker.onOverflow(protocolMessage);
+                                                     }
+                                                 })
+
+                                                 .filter(new Predicate<ProtocolMessage>() {
+                                                     @Override
+                                                     public boolean test(final ProtocolMessage holder)
+                                                         throws Exception {
+                        final boolean
+                            canProcessDroppableMessage
+                            = transportClientSession.getProtocolHandler().messageHandler2.canProcessDroppableMessage(holder);
+                        if (!canProcessDroppableMessage) {
+                            checker.onDroppable(holder);
+                        }
+                        return canProcessDroppableMessage;
+
+                                                     }
+                                                 }).observeOn(Schedulers.from(transportClientSession
+                                                                                                                                    .getProtocolHandler()
+                                                                                                                                    .getEventExecutor
+                                                                                                                                        ()))
+                                                 .doAfterNext(new Consumer<ProtocolMessage>() {
+                                                     @Override
+                                                     public void accept(final ProtocolMessage holder) throws Exception {
+
+                                                         checker.onComplete(holder);
+                                                     }
+                                                 })
+                                                 .doOnError(new Consumer<Throwable>() {
+                                                     @Override
+                                                     public void accept(final Throwable throwable) throws Exception {
+
+                                                         checker.onError(throwable);
+                                                     }
+                                                 });
+
+        });
     }
 
     public Observable<DisconnectedEvent> observeDisconnectedEvent() {
@@ -1385,9 +1467,28 @@ public class TransportClient implements ITransportClient {
 
     }
 
-    public Observable<ITransportClient> observeAuthorizedEvent() {
+    public Observable<ITransportClient> observeOnlineEvent() {
 
-        return transportAuthorizedPublishSubject;
-
+        return transportOnlinePublishSubject;
     }
+
+    @Override
+    public void onOnline() {
+
+        this.transportOnlinePublishSubject.onNext(this);
+    }
+
+    @Override
+    public void onMessageReceived(final ProtocolMessage var2) {
+
+        transportMessagePublishSubject.onNext(var2);
+    }
+
+    @Override
+    public void onDisconnected(final DisconnectedEvent event) {
+
+        transportDisconnectedPublishSubject.onNext(event);
+    }
+
+
 }

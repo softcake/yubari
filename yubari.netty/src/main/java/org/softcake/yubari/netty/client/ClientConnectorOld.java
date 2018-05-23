@@ -289,7 +289,7 @@ public class ClientConnectorOld extends Thread  {
                             this.authorizationStartTime = System.currentTimeMillis();
                             // this.protocolHandler.handleAuthorization(this.authorizationProvider, this
                             // .primaryChannel);
-                            this.protocolHandler.handleAuthorization(this.primaryChannel);
+                            this.protocolHandler.handleAuthorization();
                         }
                         continue;
                     case AUTHORIZING:
@@ -598,7 +598,7 @@ this.isProcessConnecting = true;
         }*/
         this.clientSession.getAuthorizationProvider().cleanUp();
         if (this.primaryChannel == null || !this.primaryChannel.isActive()) {
-            LOGGER.warn("[{}] Primary session disconnected. Disconnecting transport client",
+            LOGGER.warn("[{}] Primary session onDisconnected. Disconnecting transport client",
                         this.clientSession.getTransportName());
 
             setDisconnectReason(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,

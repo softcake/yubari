@@ -66,6 +66,7 @@ import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
+import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 import org.slf4j.Logger;
@@ -176,11 +177,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                 if (ClientConnector.ClientState.SSL_HANDSHAKE == clientState) {
 
                 } else if (ClientConnector.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
-                    handleAuthorization(clientConnector.getPrimaryChannel());
+                    handleAuthorization();
                 } else if (ClientConnector.ClientState.ONLINE == clientState) {
                     LOGGER.info("State in ClientProtocolHandler {}", clientState.name());
                     initPublis();
-                   fireAuthorized();
+                    fireAuthorized();
 
                 } else if (ClientConnector.ClientState.DISCONNECTED == clientState) {
                     fireDisconnected();
@@ -206,13 +207,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
 
 
         if (this.unknow == null) {
-            this.unknow = observeFeedbackMessages("unknow").subscribe(new Consumer<ProtocolMessage>() {
-                @Override
-                public void accept(final ProtocolMessage protocolMessage) throws Exception {
-
-                    notifyListeners(protocolMessage);
-                }
-            });
+            this.unknow = observeFeedbackMessages("unknow").subscribe(this::notifyListeners);
         }
 
     }
@@ -234,7 +229,10 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                                                                           disconnectReason.getDisconnectHint(),
                                                                           disconnectReason.getError(),
                                                                           disconnectReason.getDisconnectComments());
-        disconnectedEventPublisher.onNext(disconnectedEvent);
+
+        this.clientSession.onDisconnected(disconnectedEvent);
+
+        //disconnectedEventPublisher.onNext(disconnectedEvent);
 
        /* listeners.forEach(clientListener -> this.fireDisconnectedEvent(clientListener,
                                                                        clientSession.getTransportClient(),
@@ -371,7 +369,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
         ctx.close();
     }
 
-    void handleAuthorization(final Channel session) {
+    void handleAuthorization() {
 
         LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
         final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
@@ -380,8 +378,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
         haloRequestMessage.setSecondaryConnectionDisabled(!this.clientSession.isUseFeederSocket());
         haloRequestMessage.setSecondaryConnectionMessagesTTL(this.clientSession.getDroppableMessagesServerTTL());
         haloRequestMessage.setSessionName(this.clientSession.getAuthorizationProvider().getSessionName());
-        writeMessage(session, haloRequestMessage).subscribe();
-
+        writeMessage(clientConnector.getPrimaryChannel(), haloRequestMessage).subscribe();
     }
 
     private void processAuthorizationMessage(final ChannelHandlerContext ctx,
@@ -419,14 +416,10 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
     public void fireAuthorized() {
 
         final CopyOnWriteArrayList<ClientListener> listeners = this.clientSession.getListeners();
-        authEventPublisher.onNext(System.currentTimeMillis());
-       /* listeners.forEach(clientListener -> this.fireAuthorizedEvent(clientListener,
-                                                                     this.clientSession.getTransportClient()));*/
-
-        LOGGER.info("Authorize in queue, server address [{}], transport name [{}]",
-                    this.clientSession.getAddress(),
-                    this.clientSession.getTransportName());
+        //authEventPublisher.onNext(System.currentTimeMillis());
+        this.clientSession.onOnline();
     }
+
 
     void fireAuthorizedEvent(final ClientListener clientListener, final ITransportClient transportClient) {
 
@@ -472,7 +465,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                     LOGGER.error("[{}] ", clientSession.getTransportName(), e);
                     clientConnector.disconnect(new ClientDisconnectReason(DisconnectReason.EXCEPTION_CAUGHT,
                                                                           String.format(
-                                                                              "Exception caught while disconnected "
+                                                                              "Exception caught while onDisconnected "
                                                                               + "called %s",
                                                                               e.getMessage()),
                                                                           e));
@@ -532,8 +525,10 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
             this.streamProcessor.process(ctx, msg);
             throw new UnsupportedOperationException("Do you really need this?");
         } else if (this.clientConnector.isConnecting()) {
-            this.processAuthorizationMessage(ctx, msg);
+           // this.processAuthorizationMessage(ctx, msg);
         } else {
+
+
             this.fireFeedbackMessageReceived(ctx, requestMessage);
         }
 
@@ -572,57 +567,86 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                 }
             })
 
-                                     .onBackpressureDrop(new Consumer<Long>() {
-                                         @Override
-                                         public void accept(final Long o) throws Exception {
+                                     .onBackpressureDrop(checker::onOverflow).observeOn(Schedulers.from(authEventExecutor)).doAfterNext(
 
-                                             checker.onOverflow(o);
-                                         }
-                                     }).observeOn(Schedulers.from(authEventExecutor)).doAfterNext(new Consumer<Long>() {
-                    @Override
-                    public void accept(final Long msg) throws Exception {
 
-                        checker.onComplete(msg);
-                    }
-                }).doOnError(checker::onError);
+                    checker::onComplete).doOnError(checker::onError);
 
         });
     }
 
+   public Flowable<ProtocolMessage> observeFeedbackMessages2(String name) {
+
+         return Flowable.defer(() -> {
+
+             final MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(clientSession, name);
+
+             return transportMessageSubject.toFlowable(BackpressureStrategy.LATEST)
+                                           .subscribeOn(Schedulers.from(eventExecutor))
+                                           .doOnNext(message -> checker.onStart(message.getMessage(),
+                                                                                System.currentTimeMillis(),
+                                                                                sentMessagesCounterIncrementAndGet()))
+                                           .onBackpressureDrop(new Consumer<MessageChannelHolder>() {
+                                               @Override
+                                               public void accept(final MessageChannelHolder holder)
+                                                   throws Exception {
+ //transportMessageSubject.onNext(holder);
+                                                   checker.onOverflow(holder.getMessage(), holder.getCtx().channel());
+                                               }
+                                           })
+                                           .map(MessageChannelHolder::getMessage)
+                                           .observeOn(Schedulers.from(eventExecutor))
+                                           .filter(message -> {
+                                               final boolean
+                                                   canProcessDroppableMessage
+                                                   = messageHandler2.canProcessDroppableMessage(message);
+                                               if (!canProcessDroppableMessage) {
+                                                   checker.onDroppable(message);
+
+                                               }
+                                               return canProcessDroppableMessage;
+
+                                           })
+                                           .doAfterNext(checker::onComplete)
+                                           .doOnError(checker::onError);
+
+         });
+     }
     public Flowable<ProtocolMessage> observeFeedbackMessages(String name) {
 
         return Flowable.defer(() -> {
 
-            final EventTimeoutChecker<ProtocolMessage> checker = new EventTimeoutChecker(clientSession, name);
 
-            return transportMessageSubject.toFlowable(BackpressureStrategy.LATEST)
-                                          .subscribeOn(Schedulers.from(eventExecutor))
-                                          .doOnNext(message -> checker.onStart(message.getMessage(),
-                                                                               System.currentTimeMillis(),
-                                                                               sentMessagesCounterIncrementAndGet()))
-                                          .onBackpressureDrop(new Consumer<MessageChannelHolder>() {
-                                              @Override
-                                              public void accept(final MessageChannelHolder holder)
-                                                  throws Exception {
+            //transportMessageSubject.onNext(holder);
+            return transportMessageSubject
+                .toFlowable(BackpressureStrategy.LATEST)
+                .doOnNext(MessageChannelHolder::onStart)
+                .subscribeOn(Schedulers.from(
+                eventExecutor))
 
-                                                  checker.onOverflow(holder.getMessage(), holder.getChannel());
-                                              }
-                                          })
-                                          .map(MessageChannelHolder::getMessage)
-                                          .observeOn(Schedulers.from(eventExecutor))
-                                          .filter(message -> {
-                                              final boolean
-                                                  canProcessDroppableMessage
-                                                  = messageHandler2.canProcessDroppableMessage(message);
-                                              if (!canProcessDroppableMessage) {
-                                                  checker.onDroppable(message);
+                .onBackpressureDrop(MessageChannelHolder::onOverflow)
+                .observeOn(Schedulers.from(eventExecutor))
+                .filter(new Predicate<MessageChannelHolder>() {
+                @Override
+                public boolean test(final MessageChannelHolder holder) throws Exception {
 
-                                              }
-                                              return canProcessDroppableMessage;
+                    final boolean
+                        canProcessDroppableMessage
+                        = messageHandler2.canProcessDroppableMessage(holder.getMessage());
+                    if (!canProcessDroppableMessage) {
+                        holder.onDroppable();
 
-                                          })
-                                          .doAfterNext(checker::onComplete)
-                                          .doOnError(checker::onError);
+                    }
+                    return canProcessDroppableMessage;
+
+                }
+            }).doAfterNext(MessageChannelHolder::onComplete)
+                .doOnError(new Consumer<Throwable>() {
+                @Override
+                public void accept(final Throwable throwable) throws Exception {
+
+                }
+            }).map(MessageChannelHolder::getMessage);
 
         });
     }
@@ -633,8 +657,8 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
 
         //  messageHandler2.setCurrentDroppableMessageTime(message);
 
-
-        transportMessageSubject.onNext(new MessageChannelHolder(message, ctx.channel()));
+clientSession.onMessageReceived(message);
+     //   transportMessageSubject.onNext(new MessageChannelHolder(clientSession, message, ctx));
         // primaryPublishSubject.onNext(message);
 /*
 
@@ -757,32 +781,25 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
 
             EventTimeoutChecker<DisconnectedEvent> checker = new EventTimeoutChecker<>(clientSession, name);
 
-            return disconnectedEventPublisher.toFlowable(BackpressureStrategy.LATEST).subscribeOn(Schedulers.from(
-                authEventExecutor)).doOnNext(new Consumer<DisconnectedEvent>() {
-                @Override
-                public void accept(final DisconnectedEvent o) throws Exception {
+            return disconnectedEventPublisher.toFlowable(BackpressureStrategy.LATEST)
+                                             .subscribeOn(Schedulers.from(authEventExecutor))
+                                             .doOnNext(new Consumer<DisconnectedEvent>() {
+                                                 @Override
+                                                 public void accept(final DisconnectedEvent o) throws Exception {
 
-                    checker.onStart(o, System.currentTimeMillis(), sentMessagesCounterIncrementAndGet());
-                }
-            })
+                                                     checker.onStart(o,
+                                                                     System.currentTimeMillis(),
+                                                                     sentMessagesCounterIncrementAndGet());
+                                                 }
+                                             })
 
-                                     .onBackpressureDrop(new Consumer<DisconnectedEvent>() {
-                                         @Override
-                                         public void accept(final DisconnectedEvent o) throws Exception {
-
-                                             checker.onOverflow(o);
-                                         }
-                                     }).observeOn(Schedulers.from(authEventExecutor)).doAfterNext(new Consumer<DisconnectedEvent>() {
-                    @Override
-                    public void accept(final DisconnectedEvent msg) throws Exception {
-
-                        checker.onComplete(msg);
-                    }
-                }).doOnError(checker::onError);
+                                             .onBackpressureDrop(checker::onOverflow)
+                                             .observeOn(Schedulers.from(authEventExecutor))
+                                             .doAfterNext(checker::onComplete)
+                                             .doOnError(checker::onError);
 
         });
     }
-
 
 
 }

@@ -365,7 +365,7 @@ public class DCClientImpl implements ClientListener {
 //                                    }
 //
 //                                    @Override
-//                                    public void messageReceived(final IoSessionWrapper ioSessionWrapper,
+//                                    public void onMessageReceived(final IoSessionWrapper ioSessionWrapper,
 //                                                                final ProtocolMessage protocolMessage) {
 //
 //                                    }
@@ -580,7 +580,7 @@ public class DCClientImpl implements ClientListener {
 
     public synchronized void disconnected(ITransportClient client, DisconnectedEvent event) {
 //        if (FeedDataProvider.getDefaultInstance() != null) {
-//            FeedDataProvider.getDefaultInstance().disconnected();
+//            FeedDataProvider.getDefaultInstance().onDisconnected();
 //            FeedDataProvider.getDefaultInstance().getJssManager().removeJssListener(this.jssBroadcastListener);
 //        }
 //

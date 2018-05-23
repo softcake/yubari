@@ -290,7 +290,7 @@ public class InstrumentManager implements ClientListener {
             req.setNeedFirstTimes(needFirstTimes);
             return this.transport.sendRequestAsync(req);
         } else {
-            LOGGER.warn("Skip instruments subscription. Client not online");
+            LOGGER.warn("Skip instruments subscription. Client not onOnline");
             return null;
         }
     }
@@ -322,7 +322,7 @@ public class InstrumentManager implements ClientListener {
             req.setTopOfBook(true);
             return this.transport.sendRequestAsync(req);
         } else {
-            LOGGER.warn("Skip unsubscribe instruments. Client not online");
+            LOGGER.warn("Skip unsubscribe instruments. Client not onOnline");
             return null;
         }
     }

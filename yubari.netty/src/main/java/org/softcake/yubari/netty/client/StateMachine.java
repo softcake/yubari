@@ -65,11 +65,12 @@ public class StateMachine<T, E extends Enum, C extends Enum> implements Consumer
 
                     final State<T, E, C> next = state.next(event);
                     if (next != null) {
-                        states.onNext(next.getState());
-                        LOGGER.info("[{}] State changed to {}", name, next.getState().toString());
+
                         state.exit(context);
                         state = next;
                         next.enter(context);
+                        states.onNext(next.getState());
+                        LOGGER.info("[{}] State changed to {}", name, next.getState().toString());
                     } else {
                         LOGGER.info("Invalid event : {} current state: {}", event, state);
                     }

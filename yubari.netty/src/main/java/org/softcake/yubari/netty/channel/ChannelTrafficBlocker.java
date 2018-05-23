@@ -128,7 +128,7 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
 
         channel.attr(READ_SUSPENDED).set(Boolean.TRUE);
         // channel.config().setAutoRead(false);
-        LOGGER.trace("[{}] Reading suspended", this.transportName);
+        LOGGER.debug("[{}] Reading suspended", this.transportName);
     }
 
     public void resume(final ChannelHandlerContext ctx) {
@@ -139,7 +139,7 @@ public class ChannelTrafficBlocker extends ChannelDuplexHandler {
     public void resume(final Channel channel) {
 
         channel.attr(READ_SUSPENDED).set(false);
-        LOGGER.trace("[{}] Reading resumed", this.transportName);
+        LOGGER.debug("[{}] Reading resumed", this.transportName);
         channel.read();
     }
 }
