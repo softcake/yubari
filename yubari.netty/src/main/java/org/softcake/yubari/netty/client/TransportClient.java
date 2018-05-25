@@ -22,8 +22,7 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_AU
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_AUTH_EVENT_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_AUTH_EVENT_POOL_SIZE;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTIONS;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHILD_CONNECTION_RECONNECTS_RESET_DELAY;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHILD_CONNECTION_RECONNECT_ATTEMPTS;
@@ -33,12 +32,9 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CR
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CRITICAL_STREAM_PROCESSING_QUEUE_SIZE;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_DROPPABLE_MESSAGE_CLIENT_TTL;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_DROPPABLE_MESSAGE_SERVER_TTL;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_DUPLICATE_SYNC_MESSAGES_TO_CLIENT_LISTENERS;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_DUPLICATE_SYNC_MESSAGES_TO_CLIENT_LISTENERS;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_ERROR_DELAY;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_EVENT_EXECUTION_WARNING_DELAY;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL;
@@ -46,8 +42,7 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_EV
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_EVENT_POOL_TERMINATION_TIME_UNIT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_JMX_BEAN_NAME;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_LOG_EVENT_POOL_THREAD_DUMPS_ON_LONG_EXECUTION;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_LOG_EVENT_POOL_THREAD_DUMPS_ON_LONG_EXECUTION;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_LOG_SKIPPED_DROPPABLE_MESSAGES;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_MAX_MESSAGE_SIZE_BYTES;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_MAX_SUBSEQUENT_PING_FAILED_COUNT;
@@ -56,10 +51,8 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_PI
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_PING_TIMEOUT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_PROTOCOL_VERSION_NEGOTIATION_TIMEOUT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_RECONNECT_DELAY;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SEND_COMPLETION_ERROR_DELAY;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SEND_COMPLETION_WARNING_DELAY;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SEND_CPU_INFO_TO_SERVER;
@@ -68,21 +61,15 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SS
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SSL_PROTOCOLS;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_STREAM_BUFFER_SIZE;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_STREAM_CHUNK_PROCESSING_TIMEOUT;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_STREAM_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_SIZE;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SYNC_MESSAGE_TIMEOUT;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_SIZE;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-import static org.softcake.yubari.netty.client.TransportClientBuilder
-    .DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_SYNC_REQUEST_PROCESSING_QUEUE_SIZE;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_TERMINATION_MAX_AWAIT_TIMEOUT_IN_MILLIS;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_TRANSPORT_POOL_SIZE;
@@ -90,21 +77,16 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_US
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_USE_SSL;
 
 import org.softcake.yubari.netty.IClientEvent;
-import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.mbean.TransportClientMBean;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
-import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
-import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.mina.ServerAddress;
-import org.softcake.yubari.netty.mina.SyncInstrumentsAndAllOtherConcurrencyPolicy;
 import org.softcake.yubari.netty.pinger.PingManager;
 import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
-
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.collect.ImmutableMap;
@@ -178,7 +160,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
     private final int criticalSyncRequestProcessingQueueSize;
     private final long terminationMaxAwaitTimeoutInMillis;
     private final long maxSubsequentPingFailedCount;
-    private final TransportClientSessionStateHandler transportClientSessionStateHandler;
     private final long eventPoolTerminationTimeUnitCount;
     private final TimeUnit eventPoolTerminationTimeUnit;
     private final long authEventPoolTerminationTimeUnitCount;
@@ -252,12 +233,10 @@ public class TransportClient implements ITransportClient, IClientEvent {
     private long sendCompletionErrorDelay;
     private int sendCompletionDelayCheckEveryNTimesWarning;
     private int sendCompletionDelayCheckEveryNTimesError;
-    private FeedbackEventsConcurrencyPolicy concurrencyPolicy;
     private SecurityExceptionHandler securityExceptionHandler;
     private boolean debugMode;
     private volatile TransportClientSession session;
     private AbstractStaticSessionDictionary staticSessionDictionary;
-    private ISessionStats sessionStats;
     private IPingListener pingListener;
     private PublishSubject<ITransportClient> transportAuthorizedPublishSubject = PublishSubject.create();
     private PublishSubject<ITransportClient> transportOnlinePublishSubject = PublishSubject.create();
@@ -305,7 +284,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
         this.sendCompletionErrorDelay = DEFAULT_SEND_COMPLETION_ERROR_DELAY;
         this.sendCompletionDelayCheckEveryNTimesWarning = DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
         this.sendCompletionDelayCheckEveryNTimesError = DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-        this.concurrencyPolicy = new SyncInstrumentsAndAllOtherConcurrencyPolicy();
         this.needJmxBean = DEFAULT_NEED_JMX_BEAN;
         this.jmxBeanName = DEFAULT_JMX_BEAN_NAME;
         this.asyncRequestFutureExecutor = DEFAULT_ASYNC_REQUEST_FUTURE_EXECUTOR;
@@ -326,7 +304,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
         this.criticalSyncRequestProcessingQueueSize = DEFAULT_SYNC_REQUEST_PROCESSING_QUEUE_SIZE;
         this.terminationMaxAwaitTimeoutInMillis = DEFAULT_TERMINATION_MAX_AWAIT_TIMEOUT_IN_MILLIS;
         this.maxSubsequentPingFailedCount = DEFAULT_MAX_SUBSEQUENT_PING_FAILED_COUNT;
-        this.transportClientSessionStateHandler = null;
         this.eventPoolTerminationTimeUnitCount = DEFAULT_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT;
         this.eventPoolTerminationTimeUnit = DEFAULT_EVENT_POOL_TERMINATION_TIME_UNIT;
         this.authEventPoolTerminationTimeUnitCount = DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT;
@@ -380,10 +357,8 @@ public class TransportClient implements ITransportClient, IClientEvent {
                     final long sendCompletionErrorDelay,
                     final int sendCompletionDelayCheckEveryNTimesWarning,
                     final int sendCompletionDelayCheckEveryNTimesError,
-                    final FeedbackEventsConcurrencyPolicy concurrencyPolicy,
                     final SecurityExceptionHandler securityExceptionHandler,
                     final AbstractStaticSessionDictionary staticSessionDictionary,
-                    final ISessionStats sessionStats,
                     final boolean needJmxBean,
                     final String jmxBeanName,
                     final Executor asyncRequestFutureExecutor,
@@ -403,7 +378,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
                     final int criticalSyncRequestProcessingQueueSize,
                     final long terminationMaxAwaitTimeoutInMillis,
                     final long maxSubsequentPingFailedCount,
-                    final TransportClientSessionStateHandler transportClientSessionStateHandler,
                     final long eventPoolTerminationTimeUnitCount,
                     final TimeUnit eventPoolTerminationTimeUnit,
                     final long authEventPoolTerminationTimeUnitCount,
@@ -453,10 +427,8 @@ public class TransportClient implements ITransportClient, IClientEvent {
         this.sendCompletionErrorDelay = sendCompletionErrorDelay;
         this.sendCompletionDelayCheckEveryNTimesWarning = sendCompletionDelayCheckEveryNTimesWarning;
         this.sendCompletionDelayCheckEveryNTimesError = sendCompletionDelayCheckEveryNTimesError;
-        this.concurrencyPolicy = concurrencyPolicy;
         this.securityExceptionHandler = securityExceptionHandler;
         this.staticSessionDictionary = staticSessionDictionary;
-        this.sessionStats = sessionStats;
         this.needJmxBean = needJmxBean;
         this.jmxBeanName = jmxBeanName;
         this.asyncRequestFutureExecutor = asyncRequestFutureExecutor;
@@ -476,7 +448,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
         this.criticalSyncRequestProcessingQueueSize = criticalSyncRequestProcessingQueueSize;
         this.terminationMaxAwaitTimeoutInMillis = terminationMaxAwaitTimeoutInMillis;
         this.maxSubsequentPingFailedCount = maxSubsequentPingFailedCount;
-        this.transportClientSessionStateHandler = transportClientSessionStateHandler;
         this.eventPoolTerminationTimeUnitCount = eventPoolTerminationTimeUnitCount;
         this.eventPoolTerminationTimeUnit = eventPoolTerminationTimeUnit;
         this.authEventPoolTerminationTimeUnitCount = authEventPoolTerminationTimeUnitCount;
@@ -963,16 +934,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
         this.sendCompletionDelayCheckEveryNTimesError = sendCompletionDelayCheckEveryNTimesError;
     }
 
-    public FeedbackEventsConcurrencyPolicy getConcurrencyPolicy() {
-
-        return this.concurrencyPolicy;
-    }
-
-    public void setConcurrencyPolicy(final FeedbackEventsConcurrencyPolicy concurrencyPolicy) {
-
-        this.concurrencyPolicy = concurrencyPolicy;
-    }
-
     public SecurityExceptionHandler getSecurityExceptionHandler() {
 
         return this.securityExceptionHandler;
@@ -1015,11 +976,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
         if (this.authorizationProvider == null) {
             throw new NullPointerException(String.format("[%s] ClientAuthorizationProvider is not set",
-                                                         this.transportName));
-        }
-
-        if (this.concurrencyPolicy == null) {
-            throw new NullPointerException(String.format("[%s] FeedbackEventsConcurrencyPolicy is not set",
                                                          this.transportName));
         }
 
@@ -1077,10 +1033,8 @@ public class TransportClient implements ITransportClient, IClientEvent {
                                                    this.sendCompletionErrorDelay,
                                                    this.sendCompletionDelayCheckEveryNTimesWarning,
                                                    this.sendCompletionDelayCheckEveryNTimesError,
-                                                   this.concurrencyPolicy,
                                                    this.securityExceptionHandler,
                                                    this.staticSessionDictionary,
-                                                   this.sessionStats,
                                                    this.pingListener,
                                                    this.syncMessageTimeout,
                                                    this.duplicateSyncMessagesToClientListeners,
@@ -1098,7 +1052,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
                                                    this.criticalSyncRequestProcessingQueueSize,
                                                    this.terminationMaxAwaitTimeoutInMillis,
                                                    this.maxSubsequentPingFailedCount,
-                                                   this.transportClientSessionStateHandler,
                                                    this.eventPoolTerminationTimeUnitCount,
                                                    this.eventPoolTerminationTimeUnit,
                                                    this.authEventPoolTerminationTimeUnitCount,
@@ -1201,7 +1154,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     }
 
-    public boolean sendMessageNaive(final ProtocolMessage message) {
+    public boolean sendMessage(final ProtocolMessage message) {
 
         final TransportClientSession transportClientSessionLocal = this.session;
         if (transportClientSessionLocal != null) {
@@ -1225,38 +1178,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
             throw new ConnectException(exMessage);
         }
     }
-   /* public <V> ListenableFuture<V> sendMessageAsyncOld(final ProtocolMessage message) {
-
-        final TransportClientSession transportClientSessionLocal = this.session;
-        if (transportClientSessionLocal != null) {
-            return transportClientSessionLocal.sendMessageAsyncOld(message);
-        } else {
-            final String exMessage = String.format("[%s] TransportClient not connected, message: %s",
-                                                   this.transportName,
-                                                   message.toString(PROTOCOL_MESSAGE_EXCEPTION_LENGTH));
-            return Futures.immediateFailedFuture(new ConnectException(exMessage));
-        }
-    }*/
-    /*public <V> void sendMessageAsync(final ProtocolMessage message, final FutureCallback<V> callback) {
-
-        this.sendMessageAsyncOld(message, callback, this.asyncRequestFutureExecutor);
-    }
-
-    public <V> void sendMessageAsyncOld(final ProtocolMessage message,
-                                     final FutureCallback<V> callback,
-                                     final Executor executor) {
-
-        final ListenableFuture<V> future = this.sendMessageAsyncOld(message);
-        Futures.addCallback(future, callback, executor);
-    }
-*/
-  /*  public RequestListenableFuture sendRequestAsyncOld(final ProtocolMessage message) {
-
-        final TransportClientSession transportClientSessionLocal = this.session;
-        return transportClientSessionLocal != null
-               ? transportClientSessionLocal.sendRequestAsyncOld(message)
-               : this.createFailedFuture(message);
-    }*/
 
     @Override
     public Single<ProtocolMessage> sendRequestAsync(final ProtocolMessage message) {
@@ -1351,15 +1272,6 @@ public class TransportClient implements ITransportClient, IClientEvent {
         return this.pingManagers.get(isPrimarySession);
     }
 
-    public ISessionStats getSessionStats() {
-
-        return this.sessionStats;
-    }
-
-    public void setSessionStats(final ISessionStats sessionStats) {
-
-        this.sessionStats = sessionStats;
-    }
 
     public long getDroppableMessagesClientTTL() {
 

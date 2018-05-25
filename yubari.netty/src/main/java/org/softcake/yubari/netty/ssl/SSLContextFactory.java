@@ -41,7 +41,7 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 public final class SSLContextFactory {
-    public static final String KEY_MANAGER_FACTORY_ALGORITHM;
+    private static final String KEY_MANAGER_FACTORY_ALGORITHM;
     private static final String KEYSTORE_PASSFILE = "keystore.passfile";
     private static final Logger LOGGER = LoggerFactory.getLogger(SSLContextFactory.class);
     private static final String PROTOCOL = "SSL";
@@ -246,7 +246,6 @@ public final class SSLContextFactory {
         }
 
     }
-
 
     public static void observeSecurity(Observer<SecurityExceptionEvent> exceptionEventObserver) {
         observer = exceptionEventObserver;

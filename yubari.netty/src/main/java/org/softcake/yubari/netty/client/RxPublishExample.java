@@ -18,7 +18,7 @@ package org.softcake.yubari.netty.client;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
-import org.softcake.yubari.netty.data.DroppableMessageHandler2;
+import org.softcake.yubari.netty.data.DroppableMessageHandler;
 import org.softcake.yubari.netty.mina.TransportHelper;
 
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
@@ -27,7 +27,6 @@ import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.functions.Consumer;
-import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 import org.reactivestreams.Publisher;
@@ -40,7 +39,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /**
@@ -68,7 +66,7 @@ public class RxPublishExample {
                                                                                      true);
     AtomicInteger messagesCounter = new AtomicInteger(0);
     AtomicInteger droppedMessagesCounter = new AtomicInteger(0);
-    DroppableMessageHandler2 messageHandler2 = null; //new DroppableMessageHandler2(null);
+    DroppableMessageHandler messageHandler2 = null; //new DroppableMessageHandler(null);
     AtomicBoolean isSupsended = new AtomicBoolean(Boolean.FALSE);
     PublishSubject<ProtocolMessage> publishSubject = PublishSubject.create();
     TransportClient session = new TransportClient();
@@ -122,7 +120,7 @@ public class RxPublishExample {
     }
 
 
-    public DroppableMessageHandler2 getMessageHandler2() {
+    public DroppableMessageHandler getMessageHandler2() {
 
         return messageHandler2;
     }
@@ -153,7 +151,8 @@ public class RxPublishExample {
             @Override
             public Publisher<? extends ProtocolMessage> call() throws Exception {
 
-                MessageTimeoutWarningChecker checker = new MessageTimeoutWarningChecker(name, RxPublishExample.this);
+                MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(null,
+                                                                                                             name);
 
                 return messagePublishSubject.toFlowable(BackpressureStrategy.LATEST).subscribeOn(Schedulers.from(executor))
                                             .doOnNext(new Consumer<ProtocolMessage>() {
@@ -184,11 +183,11 @@ public class RxPublishExample {
                                                     if (checkError) {
                                                         checker.onStart(message,
                                                                         System.currentTimeMillis(),
-                                                                        Boolean.TRUE);
+                                                                        1);
                                                     } else if (checkWarn) {
                                                         checker.onStart(message,
                                                                         System.currentTimeMillis(),
-                                                                        Boolean.FALSE);
+                                                                        1);
                                                     }
 
                                                 }

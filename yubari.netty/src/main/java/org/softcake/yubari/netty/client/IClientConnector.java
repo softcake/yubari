@@ -29,7 +29,7 @@ import io.reactivex.functions.Consumer;
 /**
  * @author René Neubert
  */
-public interface IClientConnector extends ChannelInboundHandler  {
+public interface IClientConnector extends ChannelInboundHandler {
     ClientDisconnectReason getDisconnectReason();
 
     Channel getPrimaryChannel();
@@ -39,7 +39,9 @@ public interface IClientConnector extends ChannelInboundHandler  {
     Channel getChildChannel();
 
     void connect();
-ClientConnector.ClientState getClientState();
+
+    ClientConnector.ClientState getClientState();
+
     void disconnect();
 
     void disconnect(ClientDisconnectReason reason);

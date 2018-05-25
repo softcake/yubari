@@ -21,9 +21,8 @@ import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMEN
 import org.softcake.cherry.core.base.PreCheck;
 import org.softcake.yubari.netty.DefaultChannelWriter;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
-import org.softcake.yubari.netty.client.processors.HeartbeatProcessor;
 import org.softcake.yubari.netty.client.processors.StreamProcessor;
-import org.softcake.yubari.netty.data.DroppableMessageHandler2;
+import org.softcake.yubari.netty.data.DroppableMessageHandler;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
 import org.softcake.yubari.netty.mina.TransportHelper;
@@ -32,8 +31,6 @@ import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.common.protocol.binary.BinaryProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.BinaryPartMessage;
 import com.dukascopy.dds4.transport.msg.system.DisconnectRequestMessage;
-import com.dukascopy.dds4.transport.msg.system.HaloRequestMessage;
-import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.JSonSerializableWrapper;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamHeaderMessage;
@@ -68,13 +65,13 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
     private final List<Thread> eventExecutorThreadsForLogging = Collections.synchronizedList(new ArrayList<>());
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
     private final StreamProcessor streamProcessor;
-    private final DroppableMessageHandler2 messageHandler2;
+    private final DroppableMessageHandler messageHandler2;
     private IClientConnector clientConnector;
 
     public ClientProtocolHandler(final TransportClientSession session) {
 
         this.clientSession = PreCheck.notNull(session, "session");
-        this.messageHandler2 = new DroppableMessageHandler2(clientSession.getDroppableMessagesClientTTL());
+        this.messageHandler2 = new DroppableMessageHandler(clientSession.getDroppableMessagesClientTTL());
         final boolean logSkippedDroppableMessages = session.isLogSkippedDroppableMessages();
         this.logEventPoolThreadDumpsOnLongExecution = session.getLogEventPoolThreadDumpsOnLongExecution();
         this.eventExecutor = this.initEventExecutor();
@@ -85,7 +82,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
 
     }
 
-    public DroppableMessageHandler2 getMessageHandler() {
+    public DroppableMessageHandler getMessageHandler() {
 
         return messageHandler2;
     }

@@ -40,7 +40,6 @@ import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.reactivex.Completable;
-import io.reactivex.Single;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -464,7 +463,7 @@ public class DCClientImpl implements ClientListener {
         InitRequestMessage initRequestMessage = new InitRequestMessage();
         initRequestMessage.setSendGroups(true);
         initRequestMessage.setSendPacked(true);
-        this.transportClient.sendMessageNaive(initRequestMessage);
+        this.transportClient.sendMessage(initRequestMessage);
 
 
     }

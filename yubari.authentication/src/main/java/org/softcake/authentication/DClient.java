@@ -988,7 +988,7 @@ public class DClient implements ClientListener {
         InitRequestMessage initRequestMessage = new InitRequestMessage();
         initRequestMessage.setSendGroups(true);
         initRequestMessage.setSendPacked(true);
-        this.transportClient.sendMessageNaive(initRequestMessage);
+        this.transportClient.sendMessage(initRequestMessage);
         this.setSubscribedInstruments(this.instruments);
        /* Iterator var2 = this.newsFilters.values().iterator();
 
@@ -1016,7 +1016,7 @@ public class DClient implements ClientListener {
             newsSubscribeRequest.setCalendarType((CalendarType) EnumConverter.convert(newsFilter.getType(),
                                                                                       CalendarType.class));
             LOGGER.debug("Subscribing : " + newsSubscribeRequest);
-            this.transportClient.sendMessageNaive(newsSubscribeRequest);
+            this.transportClient.sendMessage(newsSubscribeRequest);
         }*/
 
     }
@@ -1398,7 +1398,7 @@ LOGGER.info("retry");*/
                         newsUnsubscribeRequest.setSources(Collections.singleton(com.dukascopy.dds3.transport.msg
              .news.NewsSource.valueOf(INewsFilter.NewsSource.FXSPIDER_NEWS.name())));
                         LOGGER.debug("Unsubscribing : " + newsUnsubscribeRequest);
-                        this.transportClient.sendMessageNaive(newsUnsubscribeRequest);*/
+                        this.transportClient.sendMessage(newsUnsubscribeRequest);*/
         }
 
 
@@ -1660,7 +1660,7 @@ LOGGER.info("retry");*/
             //            newsUnsubscribeRequest.setSources(Collections.singleton(com.dukascopy.dds3.transport.msg
             // .news.NewsSource.valueOf(newsSource.name())));
             //            LOGGER.debug("Unsubscribing : " + newsUnsubscribeRequest);
-            //            this.transportClient.sendMessageNaive(newsUnsubscribeRequest);
+            //            this.transportClient.sendMessage(newsUnsubscribeRequest);
             return (INewsFilter) this.newsFilters.remove(newsSource);
         } else {
             return null;
@@ -1800,7 +1800,7 @@ LOGGER.info("retry");*/
         //            newsSubscribeRequest.setCalendarType((CalendarType)EnumConverter.convert(newsFilter.getType(),
         // CalendarType.class));
         //            LOGGER.debug("Subscribing : " + newsSubscribeRequest);
-        //            this.transportClient.sendMessageNaive(newsSubscribeRequest);
+        //            this.transportClient.sendMessage(newsSubscribeRequest);
         //        }
         //
     }

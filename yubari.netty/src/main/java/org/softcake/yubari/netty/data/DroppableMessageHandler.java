@@ -16,28 +16,32 @@
 
 package org.softcake.yubari.netty.data;
 
-import org.softcake.cherry.core.base.PreCheck;
-import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.map.MapHelper;
 
 import com.dukascopy.dds4.transport.msg.system.CurrencyMarket;
 import com.dukascopy.dds4.transport.msg.system.InstrumentableLowMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
 
 /**
  * @author The softcake authors
  */
 public class DroppableMessageHandler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DroppableMessageHandler.class);
     private final Map<Class<?>, Map<String, DroppableMessageScheduling>>
         lastScheduledDropableMessages
         = new ConcurrentHashMap<>();
     private final long droppableMessagesClientTTL;
 
     public DroppableMessageHandler(final long droppableMessagesClientTTL) {
-
 
         this.droppableMessagesClientTTL = droppableMessagesClientTTL;
     }
@@ -64,63 +68,81 @@ public class DroppableMessageHandler {
         return lastScheduledMessageInfo;
     }
 
-    public long getCurrentDropableMessageTime(final ProtocolMessage message) {
+    public void setCurrentDroppableMessageTime(final ProtocolMessage message) {
+        //TODO
+     /*   if (this.clientSession.isSkipDroppableMessages()) {
+            return;
+        }*/
+        final String instrument = getInstrumentIfMessageIsDroppable(message);
+        if (instrument.isEmpty()) { return; }
 
-        return this.checkAndRecordScheduleForDroppableMessage(message);
+        final Long currentInstrumentableMessageTime = getMessageCreationTime(message);
 
+        if (currentInstrumentableMessageTime > 0L) {
+            final DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
+            scheduling.scheduled(currentInstrumentableMessageTime);
+        }
     }
 
-    private long checkAndRecordScheduleForDroppableMessage(final ProtocolMessage message) {
+
+    private String getInstrumentIfMessageIsDroppable(final ProtocolMessage message) {
 
         if (!(message instanceof InstrumentableLowMessage)) {
-            return 0L;
+            return "";
         }
 
         final InstrumentableLowMessage instrumentable = (InstrumentableLowMessage) message;
         final String instrument = instrumentable.getInstrument();
 
         if (instrument == null || !instrumentable.isDropOnTimeout()) {
-            return 0L;
+            return "";
         }
-
-        final long currentInstrumentableMessageTime;
-        if (message instanceof CurrencyMarket) {
-            final CurrencyMarket cm = (CurrencyMarket) message;
-            currentInstrumentableMessageTime = cm.getCreationTimestamp();
-        } else {
-            final Long t = message.getTimestamp();
-            currentInstrumentableMessageTime = t == null ? 0L : t;
-        }
-
-        if (currentInstrumentableMessageTime > 0L) {
-            final DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
-            scheduling.scheduled(currentInstrumentableMessageTime);
-        }
-
-
-        return currentInstrumentableMessageTime;
+        return instrument;
     }
 
-    public boolean canProcessDroppableMessage(final ProtocolMessage message, final long currentDropableMessageTime) {
+    private long getMessageCreationTime(final ProtocolMessage message) {
 
-        if (currentDropableMessageTime <= 0L || !(message instanceof InstrumentableLowMessage)) {return true;}
+        final String instrument = getInstrumentIfMessageIsDroppable(message);
+        if (instrument.isEmpty()) { return 0L; }
 
+        return message instanceof CurrencyMarket
+               ? ((CurrencyMarket) message).getCreationTimestamp()
+               : message.getTimestamp();
 
-        final InstrumentableLowMessage instrumentable = (InstrumentableLowMessage) message;
-        final String instrument = instrumentable.getInstrument();
-
-        if (instrument != null) {
-            final DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
-            final long lastArrivedMessageTime = scheduling.getLastScheduledTime();
-            final int scheduledCount = scheduling.getScheduledCount();
-            scheduling.executed();
-
-            return lastArrivedMessageTime - currentDropableMessageTime <= this.droppableMessagesClientTTL
-                   || scheduledCount <= 1;
-        }
-
-        return true;
 
     }
 
+    public boolean canProcessDroppableMessage(final ProtocolMessage message) {
+/*   if (this.clientSession.isSkipDroppableMessages()) {
+            return true;
+        }*/
+        final long inProcessMessageCreationTime = getMessageCreationTime(message);
+        if (inProcessMessageCreationTime <= 0L) {return true;}
+
+
+        final InstrumentableLowMessage msg = (InstrumentableLowMessage) message;
+        final String instrument = msg.getInstrument();
+
+
+        final DroppableMessageScheduling scheduling = this.getDroppableScheduling(message, instrument);
+        final long lastArrivedMessageTime = scheduling.getLastScheduledTime();
+        final int scheduledCount = scheduling.getScheduledCount();
+        scheduling.executed();
+
+
+       // LOGGER.info("Aktuelleste Message Zeit: {}   inProcess Message Zeit: {}",millsToLocalDateTime(lastArrivedMessageTime), millsToLocalDateTime(inProcessMessageCreationTime));
+
+
+
+        long diff = lastArrivedMessageTime - inProcessMessageCreationTime;
+      //  long diff = inProcessMessageCreationTime - lastArrivedMessageTime;
+        return diff <= this.droppableMessagesClientTTL;
+             // || scheduledCount <= 1;
+
+    }
+    public static LocalDateTime millsToLocalDateTime(long millis) {
+        Instant instant = Instant.ofEpochMilli(millis);
+        LocalDateTime date = instant.atZone(ZoneId.systemDefault()).toLocalDateTime();
+        return date;
+    }
 }

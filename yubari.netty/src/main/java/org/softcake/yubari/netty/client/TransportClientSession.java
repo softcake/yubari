@@ -16,25 +16,14 @@
 
 package org.softcake.yubari.netty.client;
 
-
-import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_CONNECT_TIMEOUT_MILLIS;
-import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_MESSAGE_SIZE_ESTIMATOR;
-import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_SO_REUSEADDR;
-import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_SO_SO_LINGER;
-import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_TCP_NODELAY;
-import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_WRITE_BUFFER_WATER_MARK;
-
 import org.softcake.yubari.netty.IClientEvent;
 import org.softcake.yubari.netty.ProtocolEncoderDecoder;
 import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
-import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.channel.ChannelTrafficBlocker;
 import org.softcake.yubari.netty.client.processors.Heartbeat;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
-import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
-import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.pinger.PingManager;
 import org.softcake.yubari.netty.ssl.SSLContextFactory;
@@ -80,6 +69,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -125,11 +115,9 @@ public class TransportClientSession implements IClientEvent {
     private final long sendCompletionErrorDelay;
     private final int sendCompletionDelayCheckEveryNTimesWarning;
     private final int sendCompletionDelayCheckEveryNTimesError;
-    private final FeedbackEventsConcurrencyPolicy concurrencyPolicy;
     private final SecurityExceptionHandler securityExceptionHandler;
     private final ChannelHandler protocolEncoderDecoder;
     private final ChannelTrafficBlocker channelTrafficBlocker;
-    private final ISessionStats sessionStats;
     private final IPingListener pingListener;
     private final long syncMessageTimeout;
     private final boolean duplicateSyncMessagesToClientListeners;
@@ -147,7 +135,6 @@ public class TransportClientSession implements IClientEvent {
     private final int criticalSyncRequestProcessingQueueSize;
     private final long terminationAwaitMaxTimeoutInMillis;
     private final long maxSubsequentPingFailedCount;
-    private final TransportClientSessionStateHandler transportClientSessionStateHandler;
     private final long eventPoolTerminationTimeUnitCount;
     private final TimeUnit eventPoolTerminationTimeUnit;
     private final long authEventPoolTerminationTimeUnitCount;
@@ -157,7 +144,7 @@ public class TransportClientSession implements IClientEvent {
     private final long syncRequestProcessingPoolTerminationTimeUnitCount;
     private final TimeUnit syncRequestProcessingPoolTerminationTimeUnit;
     private final Set<String> enabledSslProtocols;
-    SynchRequestProcessor synchRequestProcessor;
+    private SynchRequestProcessor synchRequestProcessor;
     private boolean skipDroppableMessages;
     private Bootstrap channelBootstrap;
     private ProtocolVersionClientNegotiatorHandler protocolVersionClientNegotiatorHandler;
@@ -167,6 +154,7 @@ public class TransportClientSession implements IClientEvent {
     private String serverSessionId;
     private Heartbeat heartbeat;
 
+    @SuppressWarnings({"ParameterNumberCheck", "JavaNCSSCheck"})
     protected TransportClientSession(final TransportClient transportClient,
                                      final InetSocketAddress address,
                                      final ClientAuthorizationProvider authorizationProvider,
@@ -207,10 +195,8 @@ public class TransportClientSession implements IClientEvent {
                                      final long sendCompletionErrorDelay,
                                      final int sendCompletionDelayCheckEveryNTimesWarning,
                                      final int sendCompletionDelayCheckEveryNTimesError,
-                                     final FeedbackEventsConcurrencyPolicy concurrencyPolicy,
                                      final SecurityExceptionHandler securityExceptionHandler,
                                      final AbstractStaticSessionDictionary staticSessionDictionary,
-                                     final ISessionStats sessionStats,
                                      final IPingListener pingListener,
                                      final long syncMessageTimeout,
                                      final boolean duplicateSyncMessagesToClientListeners,
@@ -228,7 +214,6 @@ public class TransportClientSession implements IClientEvent {
                                      final int criticalSyncRequestProcessingQueueSize,
                                      final long terminationAwaitMaxTimeoutInMillis,
                                      final long maxSubsequentPingFailedCount,
-                                     final TransportClientSessionStateHandler transportClientSessionStateHandler,
                                      final long eventPoolTerminationTimeUnitCount,
                                      final TimeUnit eventPoolTerminationTimeUnit,
                                      final long authEventPoolTerminationTimeUnitCount,
@@ -279,13 +264,11 @@ public class TransportClientSession implements IClientEvent {
         this.sendCompletionErrorDelay = sendCompletionErrorDelay;
         this.sendCompletionDelayCheckEveryNTimesWarning = sendCompletionDelayCheckEveryNTimesWarning;
         this.sendCompletionDelayCheckEveryNTimesError = sendCompletionDelayCheckEveryNTimesError;
-        this.concurrencyPolicy = concurrencyPolicy;
         this.securityExceptionHandler = securityExceptionHandler;
         this.protocolEncoderDecoder = new ProtocolEncoderDecoder(transportName,
                                                                  maxMessageSizeBytes,
                                                                  staticSessionDictionary);
         this.channelTrafficBlocker = new ChannelTrafficBlocker(transportName);
-        this.sessionStats = sessionStats;
         this.pingListener = pingListener;
         this.syncMessageTimeout = syncMessageTimeout;
         this.duplicateSyncMessagesToClientListeners = duplicateSyncMessagesToClientListeners;
@@ -303,7 +286,6 @@ public class TransportClientSession implements IClientEvent {
         this.criticalSyncRequestProcessingQueueSize = criticalSyncRequestProcessingQueueSize;
         this.terminationAwaitMaxTimeoutInMillis = terminationAwaitMaxTimeoutInMillis;
         this.maxSubsequentPingFailedCount = maxSubsequentPingFailedCount;
-        this.transportClientSessionStateHandler = transportClientSessionStateHandler;
         this.eventPoolTerminationTimeUnitCount = eventPoolTerminationTimeUnitCount;
         this.eventPoolTerminationTimeUnit = eventPoolTerminationTimeUnit;
         this.authEventPoolTerminationTimeUnitCount = authEventPoolTerminationTimeUnitCount;
@@ -346,20 +328,13 @@ public class TransportClientSession implements IClientEvent {
         this.channelBootstrap = new Bootstrap();
         this.channelBootstrap.group(nettyEventLoopGroup);
         this.channelBootstrap.channel(NioSocketChannel.class);
+        this.channelOptions.forEach(new BiConsumer<ChannelOption<?>, Object>() {
+            @Override
+            public void accept(final ChannelOption<?> key, final Object value) {
 
-        this.channelBootstrap.option(ChannelOption.SO_REUSEADDR, DEFAULT_CHANNEL_OPTION_SO_REUSEADDR);
-        this.channelBootstrap.option(ChannelOption.SO_REUSEADDR, DEFAULT_CHANNEL_OPTION_SO_REUSEADDR);
-        this.channelBootstrap.option(ChannelOption.TCP_NODELAY, DEFAULT_CHANNEL_OPTION_TCP_NODELAY);
-        this.channelBootstrap.option(ChannelOption.SO_LINGER, DEFAULT_CHANNEL_OPTION_SO_SO_LINGER);
-        this.channelBootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, DEFAULT_CHANNEL_OPTION_CONNECT_TIMEOUT_MILLIS);
-        this.channelBootstrap.option(ChannelOption.WRITE_BUFFER_WATER_MARK,DEFAULT_CHANNEL_OPTION_WRITE_BUFFER_WATER_MARK);
-        this.channelBootstrap.option(ChannelOption.MESSAGE_SIZE_ESTIMATOR, DEFAULT_CHANNEL_OPTION_MESSAGE_SIZE_ESTIMATOR);
-
-
-
-
-
-
+                TransportClientSession.this.channelBootstrap.option((ChannelOption) key, value);
+            }
+        });
         this.protocolHandler = new ClientProtocolHandler(this);
         this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this);
 
@@ -397,7 +372,8 @@ public class TransportClientSession implements IClientEvent {
                 }
 
                 pipeline.addLast("protocol_version_negotiator", protocolVersionClientNegotiatorHandler);
-                pipeline.addLast("frame_handler", new LengthFieldBasedFrameDecoder(maxMessageSizeBytes, 0, 4, 0, 4, true));
+                pipeline.addLast("frame_handler",
+                                 new LengthFieldBasedFrameDecoder(maxMessageSizeBytes, 0, 4, 0, 4, true));
                 pipeline.addLast("frame_encoder", new LengthFieldPrepender(4, false));
                 pipeline.addLast("protocol_encoder_decoder", protocolEncoderDecoder);
                 pipeline.addLast("authorization_provider", (ChannelHandler) authorizationProvider);
@@ -449,13 +425,6 @@ public class TransportClientSession implements IClientEvent {
 
     public void terminate() {
 
-        if (this.transportClientSessionStateHandler != null) {
-            try {
-                this.transportClientSessionStateHandler.beforeTerminate();
-            } catch (final Throwable var2) {
-                LOGGER.warn("[{}] terminate handler error", this.transportName, var2);
-            }
-        }
 
         LOGGER.debug("[{}] Terminating client session", this.transportName);
         if (this.clientConnector != null) {
@@ -741,10 +710,6 @@ public class TransportClientSession implements IClientEvent {
         return this.sendCompletionDelayCheckEveryNTimesError;
     }
 
-    public FeedbackEventsConcurrencyPolicy getConcurrencyPolicy() {
-
-        return this.concurrencyPolicy;
-    }
 
     String getServerSessionId() {
 
@@ -799,11 +764,6 @@ public class TransportClientSession implements IClientEvent {
     public PingManager getPingManager(final boolean isPrimarySession) {
 
         return this.transportClient.getPingManager(isPrimarySession);
-    }
-
-    public ISessionStats getSessionStats() {
-
-        return this.sessionStats;
     }
 
     boolean isDuplicateSyncMessagesToClientListeners() {

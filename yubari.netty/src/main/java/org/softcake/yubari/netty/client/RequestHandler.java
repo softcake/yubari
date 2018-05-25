@@ -25,8 +25,6 @@ import io.reactivex.ObservableSource;
 import io.reactivex.Single;
 import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
-import io.reactivex.functions.Action;
-import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
 import org.slf4j.Logger;
@@ -94,40 +92,19 @@ public class RequestHandler {
         PreCheck.parameterNotNull(timeoutUnits, "timeoutUnits");
         PreCheck.parameterNotNull(requestSent, "requestSent");
 
-        return Single.defer(() -> Single.create(new SingleOnSubscribe<ProtocolMessage>() {
-            @Override
-            public void subscribe(final SingleEmitter<ProtocolMessage> e) throws Exception {
+        return Single.defer(() -> Single.create((SingleOnSubscribe<ProtocolMessage>) e -> {
 
-                emitter = e;
-                requestMessage.doOnComplete(new Action() {
-                    @Override
-                    public void run() throws Exception {
-
-                        RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
-                                                           timeoutUnits,
-                                                           doNotRestartTimerOnInProcessResponse)
-                                           .subscribe();
-                    }
-                })
-                              .subscribe(new Action() {
-                                  @Override
-                                  public void run() throws Exception {
-
-                                      requestSent.subscribe();
-                                  }
-                              });
-            }
+            emitter = e;
+            requestMessage.doOnComplete(() -> RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
+                                                                                 timeoutUnits,
+                                                                                 doNotRestartTimerOnInProcessResponse)
+                                                                 .subscribe())
+                          .subscribe(() -> requestSent.subscribe());
         })
-                                        .doOnError(new Consumer<Throwable>() {
-                                            @Override
-                                            public void accept(final Throwable throwable) throws Exception {
-
-                                                LOGGER.error("Error... while waiting for response for message: {}",
-                                                             message,
-                                                             throwable);
-
-                                            }
-                                        }));
+                                        .doOnError(throwable -> LOGGER.error(
+                                            "Error... while waiting for response for message: {}",
+                                            message,
+                                            throwable)));
     }
 
     private Observable<Long> observeTimeout(final long timeout,
@@ -144,9 +121,9 @@ public class RequestHandler {
                                      scheduledTime))
                                                         .flatMap((Function<Object, ObservableSource<?>>) o ->
                                                             Observable.timer(
-                                                            scheduledTime.get(),
-                                                            TimeUnit.MILLISECONDS,
-                                                            Schedulers.from(scheduledExecutorService)));
+                                                                scheduledTime.get(),
+                                                                TimeUnit.MILLISECONDS,
+                                                                Schedulers.from(scheduledExecutorService)));
                              });
     }
 

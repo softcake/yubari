@@ -16,15 +16,11 @@
 
 package org.softcake.yubari.netty.client;
 
-import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.AnonymousClientAuthorizationProvider;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.mina.ClientListener;
-import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
-import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.mina.ServerAddress;
-import org.softcake.yubari.netty.mina.SyncInstrumentsClientsAndAllOtherConcurrencyPolicy;
 import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
@@ -48,79 +44,74 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @SuppressWarnings("unchecked")
 public class TransportClientBuilder {
-    public static final int DEFAULT_TRANSPORT_POOL_SIZE = Math.max(Runtime.getRuntime()
+    static final int DEFAULT_TRANSPORT_POOL_SIZE = Math.max(Runtime.getRuntime()
                                                                           .availableProcessors() / 4, 4);
-    public static final int DEFAULT_EVENT_POOL_SIZE = Math.max(Runtime.getRuntime()
+    static final int DEFAULT_EVENT_POOL_SIZE = Math.max(Runtime.getRuntime()
                                                                       .availableProcessors() / 2, 10);
-    public static final String DEFAULT_JMX_BEAN_NAME = null;
-    public static final Map<ChannelOption<?>, Object> DEFAULT_CHANNEL_OPTIONS;
-    public static final Executor DEFAULT_ASYNC_REQUEST_FUTURE_EXECUTOR = Executors.newSingleThreadExecutor();
-    public static final int DEFAULT_STREAM_CHUNK_PROCESSING_TIMEOUT;
-    public static final TimeUnit DEFAULT_EVENT_POOL_TERMINATION_TIME_UNIT;
-    public static final TimeUnit DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT;
-    public static final TimeUnit DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT;
-    public static final TimeUnit DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
+    static final String DEFAULT_JMX_BEAN_NAME = null;
+    static final Map<ChannelOption<?>, Object> DEFAULT_CHANNEL_OPTIONS;
+    static final Executor DEFAULT_ASYNC_REQUEST_FUTURE_EXECUTOR = Executors.newSingleThreadExecutor();
+    static final int DEFAULT_STREAM_CHUNK_PROCESSING_TIMEOUT;
+    static final TimeUnit DEFAULT_EVENT_POOL_TERMINATION_TIME_UNIT;
+    static final TimeUnit DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT;
+    static final TimeUnit DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT;
+    static final TimeUnit DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT;
     public static final Set<String> DEFAULT_SSL_PROTOCOLS;
-    public static final boolean DEFAULT_USE_FEEDER_SOCKET = true;
-    public static final long DEFAULT_CONNECTION_TIMEOUT = 15000L;
-    public static final long DEFAULT_AUTHORIZATION_TIMEOUT = 15000L;
-    public static final long DEFAULT_PING_INTERVAL = 15000L;
-    public static final long DEFAULT_PING_TIMEOUT = 10000L;
-    public static final int DEFAULT_CHILD_CONNECTION_RECONNECT_ATTEMPTS = 3;
-    public static final long DEFAULT_CHILD_CONNECTION_RECONNECTS_RESET_DELAY = 30000L;
-    public static final long DEFAULT_DROPPABLE_MESSAGE_SERVER_TTL = 0L;
-    public static final long DEFAULT_DROPPABLE_MESSAGE_CLIENT_TTL = 0L;
-    public static final boolean DEFAULT_SKIP_DROPPABLE_MESSAGES = true;
-    public static final boolean DEFAULT_USE_SSL = false;
-    public static final long DEFAULT_SSL_HANDSHAKE_TIMEOUT = 15000L;
-    public static final long DEFAULT_PROTOCOL_VERSION_NEGOTIATION_TIMEOUT = 15000L;
-    public static final long DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL = 0L;
-    public static final int DEFAULT_AUTH_EVENT_POOL_SIZE = 1;
-    public static final long DEFAULT_AUTH_EVENT_POOL_AUTO_CLEANUP_INTERVAL = 0L;
-    public static final long DEFAULT_RECONNECT_DELAY = 10000L;
-    public static final int DEFAULT_MAX_MESSAGE_SIZE_BYTES = 10485760;
-    public static final int DEFAULT_CRITICAL_EVENT_QUEUE_SIZE = 50;
-    public static final int DEFAULT_CRITICAL_AUTH_EVENT_QUEUE_SIZE = 10;
-    public static final long DEFAULT_EVENT_EXECUTION_WARNING_DELAY = 100L;
-    public static final long DEFAULT_EVENT_EXECUTION_ERROR_DELAY = 1000L;
-    public static final int DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING = 31;
-    public static final int DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_ERROR = 10;
-    public static final long DEFAULT_SEND_COMPLETION_WARNING_DELAY = 100L;
-    public static final long DEFAULT_SEND_COMPLETION_ERROR_DELAY = 1000L;
-    public static final int DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING = 31;
-    public static final int DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR = 10;
-    public static final String DEFAULT_USER_AGENT = "NettyTransportClient "
-                                                    + TransportClient.getTransportVersion()
-                                                    + " - "
-                                                    + TransportClient.getLocalIpAddress()
+    static final boolean DEFAULT_USE_FEEDER_SOCKET = true;
+    static final long DEFAULT_CONNECTION_TIMEOUT = 15000L;
+    static final long DEFAULT_AUTHORIZATION_TIMEOUT = 15000L;
+    static final long DEFAULT_PING_INTERVAL = 15000L;
+    static final long DEFAULT_PING_TIMEOUT = 10000L;
+    static final int DEFAULT_CHILD_CONNECTION_RECONNECT_ATTEMPTS = 3;
+    static final long DEFAULT_CHILD_CONNECTION_RECONNECTS_RESET_DELAY = 30000L;
+    static final long DEFAULT_DROPPABLE_MESSAGE_SERVER_TTL = 0L;
+    static final long DEFAULT_DROPPABLE_MESSAGE_CLIENT_TTL = 0L;
+    static final boolean DEFAULT_SKIP_DROPPABLE_MESSAGES = true;
+    static final boolean DEFAULT_USE_SSL = false;
+    static final long DEFAULT_SSL_HANDSHAKE_TIMEOUT = 15000L;
+    static final long DEFAULT_PROTOCOL_VERSION_NEGOTIATION_TIMEOUT = 15000L;
+    static final long DEFAULT_EVENT_POOL_AUTO_CLEANUP_INTERVAL = 0L;
+    static final int DEFAULT_AUTH_EVENT_POOL_SIZE = 1;
+    static final long DEFAULT_AUTH_EVENT_POOL_AUTO_CLEANUP_INTERVAL = 0L;
+    static final long DEFAULT_RECONNECT_DELAY = 10000L;
+    static final int DEFAULT_MAX_MESSAGE_SIZE_BYTES = 10485760;
+    static final int DEFAULT_CRITICAL_EVENT_QUEUE_SIZE = 50;
+    static final int DEFAULT_CRITICAL_AUTH_EVENT_QUEUE_SIZE = 10;
+    static final long DEFAULT_EVENT_EXECUTION_WARNING_DELAY = 100L;
+    static final long DEFAULT_EVENT_EXECUTION_ERROR_DELAY = 1000L;
+    static final int DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_WARNING = 31;
+    static final int DEFAULT_EVENT_EXECUTION_DELAY_CHECK_EVERY_N_TIMES_ERROR = 10;
+    static final long DEFAULT_SEND_COMPLETION_WARNING_DELAY = 100L;
+    static final long DEFAULT_SEND_COMPLETION_ERROR_DELAY = 1000L;
+    static final int DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING = 31;
+    static final int DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR = 10;
+    private static final String DEFAULT_USER_AGENT = "NettyTransportClient "
+                                                     + TransportClient.getTransportVersion()
+                                                     + " - "
+                                                     + TransportClient.getLocalIpAddress()
                                                                      .getHostAddress();
-    public static final boolean DEFAULT_NEED_JMX_BEAN = true;
-    public static final long DEFAULT_SYNC_MESSAGE_TIMEOUT = 30000L;
-    public static final boolean DEFAULT_DUPLICATE_SYNC_MESSAGES_TO_CLIENT_LISTENERS = false;
-    public static final boolean DEFAULT_LOG_SKIPPED_DROPPABLE_MESSAGES = false;
-    public static final boolean DEFAULT_LOG_EVENT_POOL_THREAD_DUMPS_ON_LONG_EXECUTION = false;
-    public static final int DEFAULT_STREAM_BUFFER_SIZE = 2097152;
-    public static final int DEFAULT_STREAM_PROCESSING_POOL_SIZE = 5;
-    public static final long DEFAULT_STREAM_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL = 0L;
-    public static final int DEFAULT_CRITICAL_STREAM_PROCESSING_QUEUE_SIZE = 100;
-    public static final boolean DEFAULT_SEND_CPU_INFO_TO_SERVER = false;
-    public static final int DEFAULT_SYNC_REQUEST_PROCESSING_POOL_SIZE = 1;
-    public static final long DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL = 0L;
-    public static final int DEFAULT_SYNC_REQUEST_PROCESSING_QUEUE_SIZE = 100;
-    public static final long DEFAULT_TERMINATION_MAX_AWAIT_TIMEOUT_IN_MILLIS = 5000L;
-    public static final long DEFAULT_MAX_SUBSEQUENT_PING_FAILED_COUNT = 3L;
-    public static final long DEFAULT_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
-    public static final long DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
-    public static final long DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
-    public static final long DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
-    public static final long MAX_PING_TIMEOUT = TimeUnit.HOURS.toMillis(1);
-    public static final long MAX_PING_INTERVAL = TimeUnit.HOURS.toMillis(1);
-    static final boolean DEFAULT_CHANNEL_OPTION_SO_REUSEADDR;
-    static final boolean DEFAULT_CHANNEL_OPTION_TCP_NODELAY;
-    static final int DEFAULT_CHANNEL_OPTION_SO_SO_LINGER;
-    static final int DEFAULT_CHANNEL_OPTION_CONNECT_TIMEOUT_MILLIS;
-    static final WriteBufferWaterMark DEFAULT_CHANNEL_OPTION_WRITE_BUFFER_WATER_MARK;
-    static final DefaultMessageSizeEstimator DEFAULT_CHANNEL_OPTION_MESSAGE_SIZE_ESTIMATOR;
+    static final boolean DEFAULT_NEED_JMX_BEAN = true;
+    static final long DEFAULT_SYNC_MESSAGE_TIMEOUT = 30000L;
+    static final boolean DEFAULT_DUPLICATE_SYNC_MESSAGES_TO_CLIENT_LISTENERS = false;
+    static final boolean DEFAULT_LOG_SKIPPED_DROPPABLE_MESSAGES = false;
+    static final boolean DEFAULT_LOG_EVENT_POOL_THREAD_DUMPS_ON_LONG_EXECUTION = false;
+    static final int DEFAULT_STREAM_BUFFER_SIZE = 2097152;
+    static final int DEFAULT_STREAM_PROCESSING_POOL_SIZE = 5;
+    static final long DEFAULT_STREAM_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL = 0L;
+    static final int DEFAULT_CRITICAL_STREAM_PROCESSING_QUEUE_SIZE = 100;
+    static final boolean DEFAULT_SEND_CPU_INFO_TO_SERVER = false;
+    static final int DEFAULT_SYNC_REQUEST_PROCESSING_POOL_SIZE = 1;
+    static final long DEFAULT_SYNC_REQUEST_PROCESSING_POOL_AUTO_CLEANUP_INTERVAL = 0L;
+    static final int DEFAULT_SYNC_REQUEST_PROCESSING_QUEUE_SIZE = 100;
+    static final long DEFAULT_TERMINATION_MAX_AWAIT_TIMEOUT_IN_MILLIS = 5000L;
+    static final long DEFAULT_MAX_SUBSEQUENT_PING_FAILED_COUNT = 3L;
+    static final long DEFAULT_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
+    static final long DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
+    static final long DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
+    static final long DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
+    private static final long MAX_PING_TIMEOUT = TimeUnit.HOURS.toMillis(1);
+    private static final long MAX_PING_INTERVAL = TimeUnit.HOURS.toMillis(1);
+
     private static final String TLS_V_1 = "TLSv1";
     private static final String TLS_V_1_1 = "TLSv1.1";
     private static final String TLS_V_1_2 = "TLSv1.2";
@@ -132,20 +123,13 @@ public class TransportClientBuilder {
         DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
         DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
         DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
-        DEFAULT_CHANNEL_OPTION_SO_REUSEADDR = true;
-        DEFAULT_CHANNEL_OPTION_TCP_NODELAY = true;
-        DEFAULT_CHANNEL_OPTION_SO_SO_LINGER = -1;
-        DEFAULT_CHANNEL_OPTION_CONNECT_TIMEOUT_MILLIS = 15000;
-        DEFAULT_CHANNEL_OPTION_WRITE_BUFFER_WATER_MARK = new WriteBufferWaterMark(5120, 10240);
-        DEFAULT_CHANNEL_OPTION_MESSAGE_SIZE_ESTIMATOR = new DefaultMessageSizeEstimator(150);
+
         final Map<ChannelOption<?>, Object> defaultChannelOptions = new LinkedHashMap<>();
         defaultChannelOptions.put(ChannelOption.SO_REUSEADDR, true);
         defaultChannelOptions.put(ChannelOption.TCP_NODELAY, true);
         defaultChannelOptions.put(ChannelOption.SO_LINGER, -1);
         defaultChannelOptions.put(ChannelOption.CONNECT_TIMEOUT_MILLIS, 15000);
         defaultChannelOptions.put(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(5120, 10240));
-        /*defaultChannelOptions.put(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, 5120);
-        defaultChannelOptions.put(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, 10240);*/
         defaultChannelOptions.put(ChannelOption.MESSAGE_SIZE_ESTIMATOR, new DefaultMessageSizeEstimator(150));
         DEFAULT_CHANNEL_OPTIONS = ImmutableMap.copyOf(defaultChannelOptions);
         final Set<String> sslProtocols = new LinkedHashSet<>();
@@ -194,10 +178,8 @@ public class TransportClientBuilder {
     private long sendCompletionErrorDelay;
     private int sendCompletionDelayCheckEveryNTimesWarning;
     private int sendCompletionDelayCheckEveryNTimesError;
-    private FeedbackEventsConcurrencyPolicy concurrencyPolicy;
     private SecurityExceptionHandler securityExceptionHandler;
     private AbstractStaticSessionDictionary staticSessionDictionary;
-    private ISessionStats sessionStats;
     private boolean needJmxBean;
     private String jmxBeanName;
     private Executor asyncRequestFutureExecutor;
@@ -217,7 +199,7 @@ public class TransportClientBuilder {
     private int criticalSyncRequestProcessingQueueSize;
     private long terminationMaxAwaitTimeoutInMillis;
     private long maxSubsequentPingFailedCount;
-    private TransportClientSessionStateHandler transportClientSessionStateHandler;
+
     private long eventPoolTerminationTimeUnitCount;
     private TimeUnit eventPoolTerminationTimeUnit;
     private long authEventPoolTerminationTimeUnitCount;
@@ -259,7 +241,7 @@ public class TransportClientBuilder {
         this.sendCompletionErrorDelay = DEFAULT_SEND_COMPLETION_ERROR_DELAY;
         this.sendCompletionDelayCheckEveryNTimesWarning = DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_WARNING;
         this.sendCompletionDelayCheckEveryNTimesError = DEFAULT_SEND_COMPLETION_DELAY_CHECK_EVERY_N_TIMES_ERROR;
-        this.concurrencyPolicy = new SyncInstrumentsClientsAndAllOtherConcurrencyPolicy();
+
         this.needJmxBean = DEFAULT_NEED_JMX_BEAN;
         this.jmxBeanName = DEFAULT_JMX_BEAN_NAME;
         this.asyncRequestFutureExecutor = DEFAULT_ASYNC_REQUEST_FUTURE_EXECUTOR;
@@ -526,12 +508,7 @@ public class TransportClientBuilder {
         return this;
     }
 
-    public TransportClientBuilder withFeedbackEventsConcurrencyPolicy(final FeedbackEventsConcurrencyPolicy
-                                                                          concurrencyPolicy) {
 
-        this.concurrencyPolicy = concurrencyPolicy;
-        return this;
-    }
 
     public TransportClientBuilder withSecurityExceptionHandler(final SecurityExceptionHandler
                                                                    securityExceptionHandler) {
@@ -547,11 +524,6 @@ public class TransportClientBuilder {
         return this;
     }
 
-    public TransportClientBuilder withSessionStats(final ISessionStats sessionStats) {
-
-        this.sessionStats = sessionStats;
-        return this;
-    }
 
     public TransportClientBuilder withUserAgent(final String userAgent) {
 
@@ -622,10 +594,9 @@ public class TransportClientBuilder {
                                    this.sendCompletionErrorDelay,
                                    this.sendCompletionDelayCheckEveryNTimesWarning,
                                    this.sendCompletionDelayCheckEveryNTimesError,
-                                   this.concurrencyPolicy,
+
                                    this.securityExceptionHandler,
                                    this.staticSessionDictionary,
-                                   this.sessionStats,
                                    this.needJmxBean,
                                    this.jmxBeanName,
                                    this.asyncRequestFutureExecutor,
@@ -645,7 +616,6 @@ public class TransportClientBuilder {
                                    this.criticalSyncRequestProcessingQueueSize,
                                    this.terminationMaxAwaitTimeoutInMillis,
                                    this.maxSubsequentPingFailedCount,
-                                   this.transportClientSessionStateHandler,
                                    this.eventPoolTerminationTimeUnitCount,
                                    this.eventPoolTerminationTimeUnit,
                                    this.authEventPoolTerminationTimeUnitCount,
@@ -842,10 +812,6 @@ public class TransportClientBuilder {
         return this.sendCompletionDelayCheckEveryNTimesError;
     }
 
-    public FeedbackEventsConcurrencyPolicy getConcurrencyPolicy() {
-
-        return this.concurrencyPolicy;
-    }
 
     public SecurityExceptionHandler getSecurityExceptionHandler() {
 
@@ -855,11 +821,6 @@ public class TransportClientBuilder {
     public AbstractStaticSessionDictionary getStaticSessionDictionary() {
 
         return this.staticSessionDictionary;
-    }
-
-    public ISessionStats getSessionStats() {
-
-        return this.sessionStats;
     }
 
     public boolean isNeedJmxBean() {
@@ -1117,18 +1078,6 @@ public class TransportClientBuilder {
     public TransportClientBuilder withMaxSubsequentPingFailedCount(final long maxSubsequentPingFailedCount) {
 
         this.maxSubsequentPingFailedCount = maxSubsequentPingFailedCount;
-        return this;
-    }
-
-    public TransportClientSessionStateHandler getTransportClientSessionStateHandler() {
-
-        return this.transportClientSessionStateHandler;
-    }
-
-    public TransportClientBuilder withTransportClientSessionStateHandler(final TransportClientSessionStateHandler
-                                                                             transportClientSessionStateHandler) {
-
-        this.transportClientSessionStateHandler = transportClientSessionStateHandler;
         return this;
     }
 

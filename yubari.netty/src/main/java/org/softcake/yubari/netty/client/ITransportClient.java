@@ -32,18 +32,14 @@ import java.util.concurrent.TimeoutException;
 public interface ITransportClient  {
 
 
-    boolean sendMessageNaive(ProtocolMessage var1);
+    boolean sendMessage(ProtocolMessage var1);
 
     Completable sendMessageAsync(ProtocolMessage var1);
-
-  //  <V> void sendMessageAsync(ProtocolMessage var1, FutureCallback<V> var2);
-
- //   <V> void sendMessageAsync(ProtocolMessage var1, FutureCallback<V> var2, Executor var3);
 
     ProtocolMessage sendRequest(ProtocolMessage var1, long var2, TimeUnit var4)
         throws InterruptedException, TimeoutException, ConnectException, ExecutionException;
 
-    //RequestListenableFuture sendRequestAsync(ProtocolMessage var1);
+
     Single<ProtocolMessage> sendRequestAsync(ProtocolMessage var1);
 
 
