@@ -307,6 +307,10 @@ public class TransportClientSession implements IClientEvent {
         this.syncRequestProcessingPoolTerminationTimeUnitCount = syncRequestProcessingPoolTerminationTimeUnitCount;
         this.syncRequestProcessingPoolTerminationTimeUnit = syncRequestProcessingPoolTerminationTimeUnit;
         this.enabledSslProtocols = enabledSslProtocols;
+        System.setProperty("io.netty.noUnsafe", "false");
+        System.setProperty("io.netty.tryReflectionSetAccessible", "true");
+        System.setProperty("io.netty.leakDetectionLevel", "advanced");
+
     }
 
 
@@ -535,7 +539,7 @@ public class TransportClientSession implements IClientEvent {
                                                     final Channel channel,
                                                     final long timeout,
                                                     final boolean doNotRestartTimerOnInProcessResponse,
-                                                    final Observable messageSentListener) {
+                                                    final Observable<?> messageSentListener) {
 
         if (this.isOnline()) {
             final Long syncRequestId = this.transportClient.getNextId();

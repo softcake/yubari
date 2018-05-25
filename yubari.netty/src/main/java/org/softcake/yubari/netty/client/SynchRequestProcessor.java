@@ -125,6 +125,15 @@ public class SynchRequestProcessor extends SimpleChannelInboundHandler<ProtocolM
 
     }
 
+    /**
+     *
+     * Is called for each message of type {@link ProtocolMessage}.
+     *
+     * @param ctx           the {@link ChannelHandlerContext} which this {@link SimpleChannelInboundHandler}
+     *                      belongs to
+     * @param msg           the message to handle
+     * @throws Exception    is thrown if an error occurred
+     */
     @Override
     protected void channelRead0(final ChannelHandlerContext ctx, final ProtocolMessage msg) throws Exception {
 

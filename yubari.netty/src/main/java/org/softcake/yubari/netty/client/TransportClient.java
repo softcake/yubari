@@ -505,7 +505,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
         try {
 
             // Iterate all NICs (network interface cards)...
-            for (final Enumeration ifaces = NetworkInterface.getNetworkInterfaces(); ifaces.hasMoreElements(); ) {
+            for (final Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces(); ifaces.hasMoreElements(); ) {
                 final NetworkInterface iface = (NetworkInterface) ifaces.nextElement();
                 // Iterate all IP addresses assigned to each card...
                 for (final Enumeration inetAddrs = iface.getInetAddresses(); inetAddrs.hasMoreElements(); ) {

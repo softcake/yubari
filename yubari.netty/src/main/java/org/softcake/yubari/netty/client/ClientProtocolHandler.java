@@ -318,11 +318,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                                final ProtocolMessage msg,
                                final ChannelAttachment attachment) {
 
-        if (!(msg instanceof ProtocolMessage)) {
+       /* if (!(msg instanceof ProtocolMessage)) {
             return;
-        }
+        }*/
 
-        final ProtocolMessage requestMessage = (ProtocolMessage) msg;
+        final ProtocolMessage requestMessage = msg;
 
         if (requestMessage instanceof HeartbeatRequestMessage) {
             this.heartbeatProcessor.process(ctx, attachment, (HeartbeatRequestMessage) requestMessage);

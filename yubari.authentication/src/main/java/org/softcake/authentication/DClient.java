@@ -734,7 +734,7 @@ public class DClient implements ClientListener {
 
                     this.authProvider.setUserAgent(userAgent);
                     if (this.transportClient == null) {
-                        System.setProperty("io.netty.tryReflectionSetAccessible", "true");
+
                         TransportClientBuilder builder = TransportClient.builder();
                         builder.withStaticSessionDictionary(new StaticSessionDictionary())
                                .withTransportName("DDS2 Standalone Transport Client")

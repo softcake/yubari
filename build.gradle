@@ -24,7 +24,7 @@ buildscript {
     }
     dependencies {
         classpath "org.junit.platform:junit-platform-gradle-plugin:1.1.0"
-        classpath "gradle.plugin.com.zyxist:chainsaw:0.2.0"
+        classpath "gradle.plugin.com.zyxist:chainsaw:0.3.0"
         classpath "com.netflix.nebula:nebula-project-plugin:3.4.1"
         classpath "org.sonarsource.scanner.gradle:sonarqube-gradle-plugin:2.6.2"
         classpath "ru.vyarus:gradle-pom-plugin:1.2.0"
