@@ -17,8 +17,7 @@
 package org.softcake.yubari.netty.pinger;
 
 
-import com.dukascopy.dds4.ping.PingStats;
-import com.dukascopy.dds4.ping.StatsStruct;
+
 import com.sun.management.OperatingSystemMXBean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -215,17 +214,15 @@ public class PingManager {
     public PingStats getLatestStats() {
 
 
-        final ArrayList pingsCopy;
+        final ArrayList<PingItem> pingsCopy;
         synchronized (this.SYNCH) {
             this.cleanUpOldItems(System.currentTimeMillis(), this.statisticsInterval);
             pingsCopy = new ArrayList<>(this.pings);
         }
 
         PingStats result = null;
-
-        PingItem pi;
-        for (final Iterator<PingItem> i$ = pingsCopy.iterator(); i$.hasNext(); result = this.handleNewPing(pi, result)) {
-            pi = i$.next();
+        for (final PingItem item : pingsCopy) {
+            result = this.handleNewPing(item, result);
         }
 
         return result;

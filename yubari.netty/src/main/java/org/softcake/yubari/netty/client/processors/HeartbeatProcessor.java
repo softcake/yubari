@@ -25,8 +25,6 @@ import org.softcake.yubari.netty.pinger.PingManager;
 import org.softcake.yubari.netty.stream.BlockingBinaryStream;
 
 import com.dukascopy.dds4.ping.IPingListener;
-
-import com.dukascopy.dds4.ping.PingStats;
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
@@ -117,7 +115,7 @@ public class HeartbeatProcessor {
             okResponseMessage.setSystemCpuLoad(systemCpuLoad);
             okResponseMessage.setAvailableProcessors(pm.getAvailableProcessors());
 
-            PingStats generalStats = pm.getGeneralStats();
+            org.softcake.yubari.netty.pinger.PingStats generalStats = pm.getGeneralStats();
             if (generalStats != null) {
                 okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval()
                                                                      .getRoundedLast());

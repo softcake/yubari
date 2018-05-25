@@ -18,8 +18,8 @@ package org.softcake.yubari.netty.mbean;
 
 
 import org.softcake.yubari.netty.pinger.PingManager;
+import org.softcake.yubari.netty.pinger.PingStats;
 
-import com.dukascopy.dds4.ping.PingStats;
 
 import java.text.SimpleDateFormat;
 import java.util.TimeZone;
@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class TransportClientMBean implements ITransportClientMBean {
-    public static final TimeZone GMT_TIME_ZONE = TimeZone.getTimeZone("GMT 0");
+    private static final TimeZone GMT_TIME_ZONE = TimeZone.getTimeZone("GMT 0");
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSS");
     private final PingManager primPingManager;
     private final PingManager secPingManager;
