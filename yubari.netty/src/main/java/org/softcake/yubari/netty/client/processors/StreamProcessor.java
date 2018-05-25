@@ -55,7 +55,7 @@ public class StreamProcessor {
     }
 
     private void createStream(final ChannelHandlerContext ctx,
-                             final StreamHeaderMessage stream) {
+                              final StreamHeaderMessage stream) {
 
         this.streamProcessingExecutor.submit(() -> {
 
@@ -76,7 +76,7 @@ public class StreamProcessor {
     }
 
     private void streamPartReceived(final ChannelHandlerContext ctx,
-                                   final BinaryPartMessage binaryPart) {
+                                    final BinaryPartMessage binaryPart) {
 
         this.streamProcessingExecutor.submit(() -> {
 
@@ -85,7 +85,9 @@ public class StreamProcessor {
                 final StreamingStatus ss = new StreamingStatus();
                 ss.setStreamId(binaryPart.getStreamId());
                 ss.setState(StreamState.STATE_ERROR);
-                clientSession.getProtocolHandler().writeMessage(ctx.channel(), ss).subscribe();
+                clientSession.getProtocolHandler()
+                             .writeMessage(ctx.channel(), ss)
+                             .subscribe();
             } else {
                 boolean terminated = false;
 
@@ -153,7 +155,7 @@ public class StreamProcessor {
                 try {
                     bbs.close();
                 } catch (final IOException e) {
-                    LOGGER.error("Failed to close stream with Id: {}" , bbs.getStreamId(), e);
+                    LOGGER.error("Failed to close stream with Id: {}", bbs.getStreamId(), e);
 
                 }
 

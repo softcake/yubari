@@ -147,7 +147,7 @@ public class AbstractChannelAttachment {
         this.lastSubsequentFailedPingCount.set(0L);
     }
 
-    public void pingSuccessfull() {
+    public void pingSuccessful() {
 
         this.lastSubsequentFailedPingCount.set(0L);
     }

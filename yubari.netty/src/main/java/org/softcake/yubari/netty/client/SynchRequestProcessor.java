@@ -24,6 +24,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.reactivex.Completable;
 import io.reactivex.Observable;
+import io.reactivex.Single;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,7 +59,7 @@ public class SynchRequestProcessor extends SimpleChannelInboundHandler<ProtocolM
         return this.requestId.incrementAndGet();
     }
 
-    public Observable<ProtocolMessage> createNewSyncRequest(final Channel channel,
+    public Single<ProtocolMessage> createNewSyncRequest(final Channel channel,
                                                             final ProtocolMessage message,
                                                             final long timeout,
                                                             final TimeUnit timeoutUnits,
@@ -69,28 +70,28 @@ public class SynchRequestProcessor extends SimpleChannelInboundHandler<ProtocolM
                                     timeout,
                                     timeoutUnits,
                                     doNotRestartTimerOnInProcessResponse,
-                                    aBoolean -> {});
+                                    Observable.empty());
 
     }
 
-    public Observable<ProtocolMessage> createNewSyncRequest(final Channel channel,
+    public Single<ProtocolMessage> createNewSyncRequest(final Channel channel,
                                                             final ProtocolMessage message,
                                                             final long timeout,
                                                             final TimeUnit timeoutUnits,
                                                             final boolean doNotRestartTimerOnInProcessResponse,
-                                                            final io.reactivex.functions.Consumer<Boolean> listener) {
+                                                            final Observable listener) {
 
         final Long syncRequestId = this.getNextRequestId();
         message.setSynchRequestId(syncRequestId);
         final Completable booleanSingle = protocolHandler.writeMessage(channel, message);
 
         final RequestHandler handler = new RequestHandler(syncRequestId, scheduledExecutorService);
-        final Observable<ProtocolMessage> request = handler.sendRequest(booleanSingle,
-                                                                        message,
-                                                                        doNotRestartTimerOnInProcessResponse,
-                                                                        timeout,
-                                                                        timeoutUnits,
-                                                                        listener);
+        final Single<ProtocolMessage> request = handler.sendRequest(booleanSingle,
+                                                                    message,
+                                                                    doNotRestartTimerOnInProcessResponse,
+                                                                    timeout,
+                                                                    timeoutUnits,
+                                                                    listener);
         return request.doOnSubscribe(disposable -> syncRequests.put(syncRequestId, handler));
     }
 

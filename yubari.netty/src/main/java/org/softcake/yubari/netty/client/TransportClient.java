@@ -111,8 +111,8 @@ import io.netty.channel.ChannelOption;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
+import io.reactivex.Single;
 import io.reactivex.functions.Consumer;
-import io.reactivex.functions.Predicate;
 import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
@@ -198,7 +198,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
     /*
         public Observable<ProtocolMessage> observeMessagesReceived() {
 
-            final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+            final TransportClientSession transportClientSessionLocal = this.session;
             if (transportClientSessionLocal != null) {
 
                 return transportMessagePublishSubject;
@@ -254,7 +254,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
     private FeedbackEventsConcurrencyPolicy concurrencyPolicy;
     private SecurityExceptionHandler securityExceptionHandler;
     private boolean debugMode;
-    private volatile TransportClientSession transportClientSession;
+    private volatile TransportClientSession session;
     private AbstractStaticSessionDictionary staticSessionDictionary;
     private ISessionStats sessionStats;
     private IPingListener pingListener;
@@ -288,7 +288,9 @@ public class TransportClient implements ITransportClient, IClientEvent {
         this.skipDroppableMessages = DEFAULT_SKIP_DROPPABLE_MESSAGES;
         this.channelOptions = ImmutableMap.copyOf(DEFAULT_CHANNEL_OPTIONS);
         this.userAgent = "NettyTransportClient " + getTransportVersion() + " - " + getLocalIpAddress().getHostAddress();
-        String version = this.getClass().getPackage().getImplementationVersion();
+        String version = this.getClass()
+                             .getPackage()
+                             .getImplementationVersion();
         version = version == null ? "SNAPSHOT" : version;
         // this.userAgent = version;
         this.reconnectDelay = DEFAULT_RECONNECT_DELAY;
@@ -561,9 +563,8 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     public static String getTransportVersion() {
 
-        String version = TransportClient.class.getPackage().getImplementationVersion();
-        version = version == null ? "SNAPSHOT" : version;
-        return version;
+        final String version = TransportClient.class.getPackage().getImplementationVersion();
+        return version == null ? "SNAPSHOT" : version;
     }
 
     private String checkAndGetJmxName() {
@@ -606,20 +607,11 @@ public class TransportClient implements ITransportClient, IClientEvent {
     @Override
     public ClientConnector.ClientState getClientState() {
 
-        if (this.transportClientSession != null) {
-            return this.transportClientSession.getClientConnector().getClientState();
+        if (this.session != null) {
+            return this.session.getClientConnector()
+                               .getClientState();
         }
         return ClientConnector.ClientState.DISCONNECTED;
-    }
-
-    /**
-     * @deprecated
-     */
-    @Deprecated
-    public void setListener(final ClientListener listener) {
-
-        this.addListener(listener);
-
     }
 
     public void addListener(final ClientListener listener) {
@@ -1002,13 +994,13 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
         this.checkAndSetTransportName();
         TransportClientSession clientSession;
-        if (this.transportClientSession != null) {
-            if (this.transportClientSession.isOnline() || this.transportClientSession.isConnecting()) {
+        if (this.session != null) {
+            if (this.session.isOnline() || this.session.isConnecting()) {
                 return;
             }
 
-            clientSession = this.transportClientSession;
-            this.transportClientSession = null;
+            clientSession = this.session;
+            this.session = null;
             clientSession.terminate();
         }
 
@@ -1147,7 +1139,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
 
             clientSession.connect();
-            this.transportClientSession = clientSession;
+            this.session = clientSession;
         } catch (final Throwable t) {
             clientSession.terminate();
             throw t;
@@ -1158,15 +1150,15 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     public String getTransportSessionId() {
 
-        final TransportClientSession transportClientSession = this.transportClientSession;
+        final TransportClientSession transportClientSession = this.session;
         return transportClientSession != null ? transportClientSession.getServerSessionId() : null;
     }
 
     public synchronized void disconnect() {
 
-        if (this.transportClientSession != null) {
-            final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-            this.transportClientSession = null;
+        if (this.session != null) {
+            final TransportClientSession transportClientSessionLocal = this.session;
+            this.session = null;
             transportClientSessionLocal.disconnect();
         }
 
@@ -1174,22 +1166,22 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     public boolean isOnline() {
 
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        final TransportClientSession transportClientSessionLocal = this.session;
         return transportClientSessionLocal != null && transportClientSessionLocal.isOnline();
     }
 
     public boolean isConnecting() {
 
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        final TransportClientSession transportClientSessionLocal = this.session;
         return transportClientSessionLocal != null && transportClientSessionLocal.isConnecting();
     }
 
     public synchronized void terminate() {
 
         this.isTerminated.set(true);
-        if (this.transportClientSession != null) {
-            final TransportClientSession transportClientSessionLocal = this.transportClientSession;
-            this.transportClientSession = null;
+        if (this.session != null) {
+            final TransportClientSession transportClientSessionLocal = this.session;
+            this.session = null;
             transportClientSessionLocal.terminate();
         }
 
@@ -1210,7 +1202,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     public boolean sendMessageNaive(final ProtocolMessage message) {
 
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        final TransportClientSession transportClientSessionLocal = this.session;
         if (transportClientSessionLocal != null) {
             return transportClientSessionLocal.sendMessageNaive(message);
         } else {
@@ -1222,7 +1214,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
     public ProtocolMessage sendRequest(final ProtocolMessage message, final long timeout, final TimeUnit timeoutUnits)
         throws InterruptedException, TimeoutException, ConnectException, ExecutionException {
 
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        final TransportClientSession transportClientSessionLocal = this.session;
         if (transportClientSessionLocal != null) {
             return transportClientSessionLocal.sendRequest(message, timeout, timeoutUnits);
         } else {
@@ -1234,7 +1226,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
     }
    /* public <V> ListenableFuture<V> sendMessageAsyncOld(final ProtocolMessage message) {
 
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        final TransportClientSession transportClientSessionLocal = this.session;
         if (transportClientSessionLocal != null) {
             return transportClientSessionLocal.sendMessageAsyncOld(message);
         } else {
@@ -1259,16 +1251,16 @@ public class TransportClient implements ITransportClient, IClientEvent {
 */
   /*  public RequestListenableFuture sendRequestAsyncOld(final ProtocolMessage message) {
 
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        final TransportClientSession transportClientSessionLocal = this.session;
         return transportClientSessionLocal != null
                ? transportClientSessionLocal.sendRequestAsyncOld(message)
                : this.createFailedFuture(message);
     }*/
 
     @Override
-    public Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message) {
+    public Single<ProtocolMessage> sendRequestAsync(final ProtocolMessage message) {
 
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        final TransportClientSession transportClientSessionLocal = this.session;
         return transportClientSessionLocal != null
                ? transportClientSessionLocal.sendRequestAsync(message)
                : this.createFailedResponse(message);
@@ -1276,7 +1268,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     public Completable sendMessageAsync(final ProtocolMessage message) {
 
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        final TransportClientSession transportClientSessionLocal = this.session;
         if (transportClientSessionLocal != null) {
             return transportClientSessionLocal.sendMessageAsync(message);
         } else {
@@ -1288,13 +1280,13 @@ public class TransportClient implements ITransportClient, IClientEvent {
         }
     }
 
-    Observable<ProtocolMessage> createFailedResponse(final ProtocolMessage message) {
+    Single<ProtocolMessage> createFailedResponse(final ProtocolMessage message) {
 
         final String exMessage = String.format("[%s] TransportClient not connected, message: %s",
                                                this.transportName,
                                                message.toString(PROTOCOL_MESSAGE_EXCEPTION_LENGTH));
 
-        return Observable.error(new ConnectException(exMessage));
+        return Single.error(new ConnectException(exMessage));
     }
 
     long getNextId() {
@@ -1309,8 +1301,8 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     synchronized void disconnected() {
 
-        if (this.transportClientSession != null) {
-            this.transportClientSession = null;
+        if (this.session != null) {
+            this.session = null;
         }
 
     }
@@ -1327,7 +1319,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     TransportClientSession getTransportClientSession() {
 
-        return this.transportClientSession;
+        return this.session;
     }
 
     public void removeListener(final ClientListener listener) {
@@ -1381,7 +1373,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
     public void setSkipDroppableMessages(final boolean skipDroppableMessages) {
 
         this.skipDroppableMessages = skipDroppableMessages;
-        final TransportClientSession transportClientSessionLocal = this.transportClientSession;
+        final TransportClientSession transportClientSessionLocal = this.session;
         if (transportClientSessionLocal != null) {
             transportClientSessionLocal.setSkipDroppableMessages(skipDroppableMessages);
         }
@@ -1400,71 +1392,47 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     public Flowable<ProtocolMessage> observeMessagesReceived() {
 
-        MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.transportClientSession, "TC");
+        MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.session, "TC");
 
         return transportMessagePublishSubject.onBackpressureLatest()
-                                             .subscribeOn(Schedulers.from(transportClientSession.getProtocolHandler()
-                                                                                                .getEventExecutor()))
-                                             .doOnNext(new Consumer<ProtocolMessage>() {
-                                                 @Override
-                                                 public void accept(final ProtocolMessage protocolMessage)
-                                                     throws Exception {
-
-                                                     checker.onStart(protocolMessage,
-                                                                     System.currentTimeMillis(),
-                                                                     messageCount.getAndIncrement());
-                                                 }
+                                             .subscribeOn(Schedulers.from(session.getProtocolHandler()
+                                                                                 .getEventExecutor()))
+                                             .doOnNext(protocolMessage -> checker.onStart(protocolMessage,
+                                                                                          System.currentTimeMillis(),
+                                                                                          messageCount
+                                                                                              .getAndIncrement()))
+                                             .onBackpressureDrop(message -> {
+                                                 checker.onOverflow(message);
+                                                 LOGGER.info("Overflow {}", messageCount.get());
                                              })
-                                             .onBackpressureDrop(new Consumer<ProtocolMessage>() {
-                                                 @Override
-                                                 public void accept(final ProtocolMessage message) throws Exception {
-                                                     transportMessagePublishSubject.onNext(message);
-                                                     checker.onOverflow(message);
-                                                     LOGGER.info("Overflow {}", messageCount.get());
-                                                 }
-                                             })
-                                             .observeOn(Schedulers.from(transportClientSession.getProtocolHandler()
-                                                                                              .getEventExecutor()))
-                                             .filter(new Predicate<ProtocolMessage>() {
-                                                 @Override
-                                                 public boolean test(final ProtocolMessage holder) throws Exception {
+                                             .observeOn(Schedulers.from(session.getProtocolHandler()
+                                                                               .getEventExecutor()))
+                                             .filter(holder -> {
 
-                                                     final boolean
-                                                         canProcessDroppableMessage
-                                                         = transportClientSession.getProtocolHandler()
-                                                         .getMessageHandler().canProcessDroppableMessage(
+                                                 final boolean
+                                                     canProcessDroppableMessage
+                                                     = session.getProtocolHandler()
+                                                              .getMessageHandler()
+                                                              .canProcessDroppableMessage(
+                                                                  holder);
+                                                 if (!canProcessDroppableMessage) {
+                                                     checker.onDroppable(holder);
+                                                     LOGGER.warn(
+                                                         "[{}] Newer message already has arrived, current "
+                                                         + "processing is skipped [{}]",
+                                                         session.getTransportName(),
                                                          holder);
-                                                     if (!canProcessDroppableMessage) {
-                                                         checker.onDroppable(holder);
-                                                         LOGGER.warn(
-                                                             "[{}] Newer message already has arrived, current "
-                                                             + "processing is skipped [{}]",
-                                                             transportClientSession.getTransportName(),
-                                                             holder);
-                                                     }
-                                                     return canProcessDroppableMessage;
-
                                                  }
+                                                 return canProcessDroppableMessage;
+
                                              })
-                                             .doAfterNext(new Consumer<ProtocolMessage>() {
-                                                 @Override
-                                                 public void accept(final ProtocolMessage holder) throws Exception {
-
-                                                     checker.onComplete(holder);
-                                                 }
-                                             })
-                                             .doOnError(new Consumer<Throwable>() {
-                                                 @Override
-                                                 public void accept(final Throwable throwable) throws Exception {
-
-                                                     checker.onError(throwable);
-                                                 }
-                                             });
+                                             .doAfterNext(checker::onComplete)
+                                             .doOnError(checker::onError);
 
 
     }
-    public Observable<ProtocolMessage> observeMessagesReceivedFast() {
 
+    public Observable<ProtocolMessage> observeMessagesReceivedFast() {
 
 
         return transportMessagePublishSubjectFast.observeOn(Schedulers.from(Executors.newSingleThreadExecutor()));
@@ -1474,13 +1442,13 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     /* public Observable<ProtocolMessage> observeMessagesReceived1() {
 
-         MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.transportClientSession, "TC");
+         MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.session, "TC");
          return Observable.defer(() -> {
 
 
              //transportMessageSubject.onNext(holder);
              return transportMessagePublishSubject
-                 .subscribeOn(Schedulers.from(transportClientSession
+                 .subscribeOn(Schedulers.from(session
                                                   .getProtocolHandler()
                                                   .getEventExecutor
                                                       ()))
@@ -1502,7 +1470,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
                          final boolean
                              canProcessDroppableMessage
-                             = transportClientSession.getProtocolHandler()
+                             = session.getProtocolHandler()
                              .messageHandler2
                              .canProcessDroppableMessage(holder);
                          if (!canProcessDroppableMessage) {
@@ -1512,7 +1480,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
                      }
                  })
-                 .observeOn(Schedulers.from(transportClientSession.getProtocolHandler()
+                 .observeOn(Schedulers.from(session.getProtocolHandler()
                                                                   .getEventExecutor()))
                  .doAfterNext(new Consumer<ProtocolMessage>() {
                      @Override
@@ -1534,46 +1502,41 @@ public class TransportClient implements ITransportClient, IClientEvent {
   */
     public Flowable<ProtocolMessage> observeMessagesReceived2() {
 
-        MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.transportClientSession, "TC");
+        MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.session, "TC");
         return Flowable.defer(() -> {
 
 
             //transportMessageSubject.onNext(holder);
-            return transportMessagePublishSubject.onBackpressureLatest().subscribeOn(Schedulers.computation()).doOnNext(
-                new Consumer<ProtocolMessage>() {
-                    @Override
-                    public void accept(final ProtocolMessage protocolMessage) throws Exception {
+            return transportMessagePublishSubject.onBackpressureLatest()
+                                                 .subscribeOn(Schedulers.computation())
+                                                 .doOnNext(
+                                                     new Consumer<ProtocolMessage>() {
+                                                         @Override
+                                                         public void accept(final ProtocolMessage protocolMessage)
+                                                             throws Exception {
 
-                        checker.onStart(protocolMessage, System.currentTimeMillis(), messageCount.getAndIncrement());
-                    }
-                }).filter(new Predicate<ProtocolMessage>() {
-                @Override
-                public boolean test(final ProtocolMessage holder) throws Exception {
+                                                             checker.onStart(protocolMessage,
+                                                                             System.currentTimeMillis(),
+                                                                             messageCount.getAndIncrement());
+                                                         }
+                                                     })
+                                                 .filter(holder -> {
 
-                    final boolean
-                        canProcessDroppableMessage
-                        = transportClientSession.getProtocolHandler().getMessageHandler().canProcessDroppableMessage
-                        (holder);
-                    if (!canProcessDroppableMessage) {
-                        checker.onDroppable(holder);
-                    }
-                    return canProcessDroppableMessage;
+                                                     final boolean
+                                                         canProcessDroppableMessage
+                                                         = session.getProtocolHandler()
+                                                                  .getMessageHandler()
+                                                                  .canProcessDroppableMessage(holder);
+                                                     if (!canProcessDroppableMessage) {
+                                                         checker.onDroppable(holder);
+                                                     }
+                                                     return canProcessDroppableMessage;
 
-                }
-            }).observeOn(Schedulers.from(transportClientSession.getProtocolHandler().getEventExecutor())).doAfterNext(
-                new Consumer<ProtocolMessage>() {
-                    @Override
-                    public void accept(final ProtocolMessage holder) throws Exception {
-
-                        checker.onComplete(holder);
-                    }
-                }).doOnError(new Consumer<Throwable>() {
-                @Override
-                public void accept(final Throwable throwable) throws Exception {
-
-                    checker.onError(throwable);
-                }
-            });
+                                                 })
+                                                 .observeOn(Schedulers.from(session.getProtocolHandler()
+                                                                                   .getEventExecutor()))
+                                                 .doAfterNext(checker::onComplete)
+                                                 .doOnError(checker::onError);
 
         });
     }
@@ -1597,6 +1560,7 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
     @Override
     public void onMessageReceived(final ProtocolMessage var2) {
+
         transportMessagePublishSubjectFast.onNext(var2);
         transportMessagePublishSubject.onNext(var2);
     }

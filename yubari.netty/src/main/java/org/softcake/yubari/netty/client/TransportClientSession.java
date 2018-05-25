@@ -23,6 +23,7 @@ import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
 import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
 import org.softcake.yubari.netty.channel.ChannelTrafficBlocker;
+import org.softcake.yubari.netty.client.processors.Heartbeat;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.DisconnectedEvent;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
@@ -52,6 +53,7 @@ import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslHandler;
 import io.reactivex.Completable;
 import io.reactivex.Observable;
+import io.reactivex.Single;
 import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -157,6 +159,7 @@ public class TransportClientSession implements IClientEvent {
     private IClientConnector clientConnector;
     private ScheduledExecutorService scheduledExecutorService;
     private String serverSessionId;
+    private Heartbeat heartbeat;
 
     protected TransportClientSession(final TransportClient transportClient,
                                      final InetSocketAddress address,
@@ -310,9 +313,11 @@ public class TransportClientSession implements IClientEvent {
     void init() {
 
         this.protocolVersionClientNegotiatorHandler = new ProtocolVersionClientNegotiatorHandler(this.transportName);
-        final ThreadFactory threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(String.format(
-            "[%s] SyncMessagesTimeouter",
-            this.transportName)).build();
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder().setDaemon(true)
+                                                                      .setNameFormat(String.format(
+                                                                          "[%s] SyncMessagesTimeouter",
+                                                                          this.transportName))
+                                                                      .build();
 
         this.scheduledExecutorService = Executors.newScheduledThreadPool(1, threadFactory);
 
@@ -342,6 +347,7 @@ public class TransportClientSession implements IClientEvent {
         this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this);
 
         this.protocolHandler.setClientConnector(this.clientConnector);
+        this.heartbeat = new Heartbeat(this);
         this.synchRequestProcessor = new SynchRequestProcessor(this,
                                                                this.protocolHandler,
                                                                this.scheduledExecutorService);
@@ -373,11 +379,11 @@ public class TransportClientSession implements IClientEvent {
                 }
 
                 pipeline.addLast("protocol_version_negotiator", protocolVersionClientNegotiatorHandler);
-                pipeline.addLast("frame_handler",
-                                 new LengthFieldBasedFrameDecoder(maxMessageSizeBytes, 0, 4, 0, 4, true));
+                pipeline.addLast("frame_handler", new LengthFieldBasedFrameDecoder(maxMessageSizeBytes, 0, 4, 0, 4, true));
                 pipeline.addLast("frame_encoder", new LengthFieldPrepender(4, false));
                 pipeline.addLast("protocol_encoder_decoder", protocolEncoderDecoder);
                 pipeline.addLast("connector_handler", clientConnector);
+                pipeline.addLast("heartbeat", heartbeat);
                 pipeline.addLast("traffic_blocker", channelTrafficBlocker);
                 pipeline.addLast("sync_request_handler", synchRequestProcessor);
 
@@ -390,12 +396,19 @@ public class TransportClientSession implements IClientEvent {
 
     private String[] cleanUpCipherSuites(final String[] enabledCipherSuites) {
 
-        return Arrays.stream(enabledCipherSuites).filter(cipher -> !cipher.toUpperCase().contains("EXPORT")
-                                                                   && !cipher.toUpperCase().contains("NULL")
-                                                                   && !cipher.toUpperCase().contains("ANON")
-                                                                   && !cipher.toUpperCase().contains("_DES_")
-                                                                   && !cipher.toUpperCase().contains("MD5")).toArray(
-            String[]::new);
+        return Arrays.stream(enabledCipherSuites)
+                     .filter(cipher -> !cipher.toUpperCase()
+                                              .contains("EXPORT")
+                                       && !cipher.toUpperCase()
+                                                 .contains("NULL")
+                                       && !cipher.toUpperCase()
+                                                 .contains("ANON")
+                                       && !cipher.toUpperCase()
+                                                 .contains("_DES_")
+                                       && !cipher.toUpperCase()
+                                                 .contains("MD5"))
+                     .toArray(
+                         String[]::new);
 
 
     }
@@ -431,7 +444,8 @@ public class TransportClientSession implements IClientEvent {
         }
 
         if (this.channelBootstrap != null) {
-            final EventLoopGroup group = this.channelBootstrap.config().group();
+            final EventLoopGroup group = this.channelBootstrap.config()
+                                                              .group();
             if (group != null) {
                 group.shutdownGracefully();
             }
@@ -451,7 +465,8 @@ public class TransportClientSession implements IClientEvent {
 
         if (this.isOnline()) {
 
-            this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message).subscribe();
+            this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message)
+                                .subscribe();
 
             return true;
         } else {
@@ -475,7 +490,7 @@ public class TransportClientSession implements IClientEvent {
         }
 
 
-        final Observable<ProtocolMessage>
+        final Single<ProtocolMessage>
             newSynchRequest
             = synchRequestProcessor.createNewSyncRequest(this.clientConnector.getPrimaryChannel(),
                                                          message,
@@ -489,7 +504,7 @@ public class TransportClientSession implements IClientEvent {
                 LOGGER.info(protocolMessage.toString());
             }
         });
-        final ProtocolMessage protocolMessage = newSynchRequest.blockingFirst();
+        final ProtocolMessage protocolMessage = newSynchRequest.blockingGet();
 
         return protocolMessage;
 
@@ -509,20 +524,18 @@ public class TransportClientSession implements IClientEvent {
         }
     }
 
-    Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message) {
+    Single<ProtocolMessage> sendRequestAsync(final ProtocolMessage message) {
 
         return this.sendRequestAsync(message, this.clientConnector.getPrimaryChannel(), this.syncMessageTimeout, false,
 
-                                     aBoolean -> {
-
-                                     });
+                                     Observable.empty());
     }
 
-    public Observable<ProtocolMessage> sendRequestAsync(final ProtocolMessage message,
-                                                        final Channel channel,
-                                                        final long timeout,
-                                                        final boolean doNotRestartTimerOnInProcessResponse,
-                                                        final Consumer<Boolean> messageSentListener) {
+    public Single<ProtocolMessage> sendRequestAsync(final ProtocolMessage message,
+                                                    final Channel channel,
+                                                    final long timeout,
+                                                    final boolean doNotRestartTimerOnInProcessResponse,
+                                                    final Observable messageSentListener) {
 
         if (this.isOnline()) {
             final Long syncRequestId = this.transportClient.getNextId();
@@ -935,6 +948,7 @@ public class TransportClientSession implements IClientEvent {
 
         this.transportClient.onDisconnected(var2);
     }
+
     @Override
     public void onOnline() {
 

@@ -272,7 +272,7 @@ implements SateMachineClient, IClientConnector {
 
     private void processChildSessionOnline() {
 
-        if (isChannelInActive(this.childChannel)) {
+        if (isChannelInActive(this.childChannel) || this.childSocketAuthAcceptorMessage == null) {
 
             if (this.childChannelAttachment.isMaxReconnectAttemptsReached(this.clientSession
                                                                               .getChildConnectionReconnectAttempts())) {
@@ -288,10 +288,14 @@ implements SateMachineClient, IClientConnector {
                 this.connectChildSession().subscribe();
 
             }
+        } else if(this.childSocketAuthAcceptorMessage == null){
+            LOGGER.debug("childSocketAuthAcceptorMessage is still null");
+
+
         } else {
             this.processSocketAuthAcceptorMessage(this.childSocketAuthAcceptorMessage).subscribe();
-            this.protocolHandler.getHeartbeatProcessor()
-                                .startSendPingChild(this.clientSession.getChildConnectionPingInterval());
+          /*  this.protocolHandler.getHeartbeatProcessor()
+                                .startSendPingChild(this.clientSession.getChildConnectionPingInterval());*/
             this.childChannelAttachment.resetReconnectAttemptsIfValid(this.clientSession
                                                                           .getChildConnectionReconnectsResetDelay(),
                                                                       System.currentTimeMillis());
@@ -300,17 +304,19 @@ implements SateMachineClient, IClientConnector {
 
     private void processPrimarySessionOnline() {
 
-        if (isChannelInActive(this.primaryChannel)) {
+        if (isChannelInActive(this.primaryChannel) ) {
             LOGGER.warn("[{}] Primary session onDisconnected. Disconnecting transport client",
                         this.clientSession.getTransportName());
 
             this.disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
                                                        "Primary session is not active"));
+        } else if(this.primarySocketAuthAcceptorMessage == null){
+        LOGGER.debug("primarySocketAuthAcceptorMessage is still null");
 
         } else {
             this.processSocketAuthAcceptorMessage(this.primarySocketAuthAcceptorMessage).subscribe();
-            this.protocolHandler.getHeartbeatProcessor()
-                                .startSendPingPrimary(this.clientSession.getPrimaryConnectionPingInterval());
+          /*  this.protocolHandler.getHeartbeatProcessor()
+                                .startSendPingPrimary(this.clientSession.getPrimaryConnectionPingInterval());*/
         }
     }
 
@@ -685,9 +691,13 @@ implements SateMachineClient, IClientConnector {
     protected void channelRead0(final ChannelHandlerContext ctx, final ProtocolMessage msg) throws Exception {
 
         if (msg instanceof PrimarySocketAuthAcceptorMessage) {
+
             setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage) msg);
+
+            ctx.fireUserEventTriggered(msg);
         } else if (msg instanceof ChildSocketAuthAcceptorMessage) {
             setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) msg);
+            ctx.fireUserEventTriggered(msg);
         } else {
             if (isConnecting()) {
                 processAuthorizationMessage(ctx,msg);
@@ -697,6 +707,7 @@ implements SateMachineClient, IClientConnector {
             ctx.fireChannelRead(msg);
         }
     }
+
     @Override
     public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
 

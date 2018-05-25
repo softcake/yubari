@@ -34,7 +34,8 @@ import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.reactivex.Observable;
-import io.reactivex.Observer;
+import io.reactivex.Single;
+import io.reactivex.SingleObserver;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import org.slf4j.Logger;
@@ -91,8 +92,10 @@ public class HeartbeatProcessor {
     private Channel getChannel(boolean isPrimary) {
 
         return isPrimary
-               ? this.clientSession.getClientConnector().getPrimaryChannel()
-               : this.clientSession.getClientConnector().getChildChannel();
+               ? this.clientSession.getClientConnector()
+                                   .getPrimaryChannel()
+               : this.clientSession.getClientConnector()
+                                   .getChildChannel();
     }
 
     public void process(final ChannelHandlerContext ctx,
@@ -118,7 +121,8 @@ public class HeartbeatProcessor {
                 okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval()
                                                                      .getRoundedLast());
             } else {
-                generalStats = this.clientSession.getPingManager(attachment.isPrimaryConnection()).getGeneralStats();
+                generalStats = this.clientSession.getPingManager(attachment.isPrimaryConnection())
+                                                 .getGeneralStats();
                 if (generalStats != null) {
                     okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval()
                                                                          .getRoundedLast());
@@ -126,73 +130,80 @@ public class HeartbeatProcessor {
             }
 
             if (!this.clientSession.isTerminating()) {
-                clientSession.getProtocolHandler().writeMessage(ctx.channel(), okResponseMessage).subscribe();
+                clientSession.getProtocolHandler()
+                             .writeMessage(ctx.channel(), okResponseMessage)
+                             .subscribe();
             }
         } catch (final Exception e) {
             LOGGER.error("[{}] ", clientSession.getTransportName(), e);
             final ErrorResponseMessage errorMessage = new ErrorResponseMessage(String.format(
                 "Error occurred while processing the message [%s]. Error message: [%s:%s]",
                 requestMessage,
-                e.getClass().getName(),
+                e.getClass()
+                 .getName(),
                 e.getMessage()));
             errorMessage.setSynchRequestId(requestMessage.getSynchRequestId());
             if (!this.clientSession.isTerminating()) {
-                clientSession.getProtocolHandler().writeMessage(ctx.channel(), errorMessage).subscribe();
+                clientSession.getProtocolHandler()
+                             .writeMessage(ctx.channel(), errorMessage)
+                             .subscribe();
             }
         }
     }
 
     public void stopPrimaryPing() {
 
-        if (this.primaryPing != null &&!this.primaryPing.isDisposed()) {
+        if (this.primaryPing != null && !this.primaryPing.isDisposed()) {
             this.primaryPing.dispose();
         }
     }
+
     public void stopChildPing() {
 
         if (this.childPing != null && !this.childPing.isDisposed()) {
             this.childPing.dispose();
         }
     }
+
     public void startSendPingPrimary(long pingInterval) {
 
         if (this.primaryPing == null || this.primaryPing.isDisposed()) {
-            this.primaryPing = Observable.interval(3333L,pingInterval, TimeUnit.MILLISECONDS)
+            this.primaryPing = Observable.interval(3333L, pingInterval, TimeUnit.MILLISECONDS)
                                          .doOnError(new Consumer<Throwable>() {
                                              @Override
                                              public void accept(final Throwable throwable) throws Exception {
 
                                              }
-                                         }).subscribe(new Consumer<Long>() {
-                    @Override
-                    public void accept(final Long aLong) throws Exception {
+                                         })
+                                         .subscribe(new Consumer<Long>() {
+                                             @Override
+                                             public void accept(final Long aLong) throws Exception {
 
-                        sendPingIfRequired(Boolean.TRUE);
-                    }
-                });
+                                                 sendPingIfRequired(Boolean.TRUE);
+                                             }
+                                         });
         }
 
 
-
-
-
     }
+
     public void startSendPingChild(long pingInterval) {
 
         if (this.childPing == null || this.childPing.isDisposed()) {
             this.childPing = Observable.interval(pingInterval, TimeUnit.MILLISECONDS)
-                                         .doOnError(new Consumer<Throwable>() {
-                                             @Override
-                                             public void accept(final Throwable throwable) throws Exception {
+                                       .doOnError(new Consumer<Throwable>() {
+                                           @Override
+                                           public void accept(final Throwable throwable) throws Exception {
 
-                                             }
-                                         }).subscribe(new Consumer<Long>() {
-                    @Override
-                    public void accept(final Long aLong) throws Exception {
+                                           }
+                                       })
+                                       .subscribe(new Consumer<Long>() {
+                                           @Override
+                                           public void accept(final Long aLong) throws Exception {
 
-                        sendPingIfRequired(Boolean.FALSE);
-                    }
-                });
+                                               sendPingIfRequired(Boolean.FALSE);
+                                           }
+                                       });
         }
     }
 
@@ -234,7 +245,8 @@ public class HeartbeatProcessor {
 
     private boolean isOnline() {
 
-        return clientSession.getClientConnector().isOnline();
+        return clientSession.getClientConnector()
+                            .isOnline();
     }
 
     private ChannelAttachment getChannelAttachment(final boolean isPrimary) {
@@ -244,12 +256,14 @@ public class HeartbeatProcessor {
 
     private ChannelAttachment getPrimaryChannelAttachment() {
 
-        return getChannel(Boolean.TRUE).attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
+        return getChannel(Boolean.TRUE).attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY)
+                                       .get();
     }
 
     private ChannelAttachment getChildChannelAttachment() {
 
-        return getChannel(Boolean.FALSE).attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY).get();
+        return getChannel(Boolean.FALSE).attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY)
+                                        .get();
 
     }
 
@@ -268,6 +282,7 @@ public class HeartbeatProcessor {
         Consumer<Boolean> messageSentListener = new Consumer<>() {
             @Override
             public void accept(final Boolean aBoolean) throws Exception {
+
                 LOGGER.debug("[{}] Ping sent in {} channel.",
                              clientSession.getTransportName(),
                              (isPrimary ? PRIMARY : CHILD).toUpperCase());
@@ -276,16 +291,17 @@ public class HeartbeatProcessor {
         };
 
 
-        Observable<ProtocolMessage> future = this.clientSession.sendRequestAsync(pingRequestMessage,
-                                                                                 channel,
-                                                                                 pingTimeout,
-                                                                                 Boolean.TRUE,
-                                                                                 messageSentListener);
+        Single<ProtocolMessage> future = null;/*this.clientSession.sendRequestAsync(pingRequestMessage,
+                                                                             channel,
+                                                                             pingTimeout,
+                                                                             Boolean.TRUE,
+                                                                             messageSentListener);*/
 
 
-        future.subscribe(new Observer<ProtocolMessage>() {
+        future.subscribe(new SingleObserver<ProtocolMessage>() {
             @Override
             public void onSubscribe(final Disposable d) {
+
                 LOGGER.debug("[{}] Sending {} connection ping request: {}",
                              clientSession.getTransportName(),
                              (isPrimary ? PRIMARY : CHILD).toLowerCase(),
@@ -293,7 +309,7 @@ public class HeartbeatProcessor {
             }
 
             @Override
-            public void onNext(final ProtocolMessage protocolMessage) {
+            public void onSuccess(final ProtocolMessage protocolMessage) {
 
                 final long now = System.currentTimeMillis();
 
@@ -303,7 +319,7 @@ public class HeartbeatProcessor {
                         final HeartbeatOkResponseMessage message = (HeartbeatOkResponseMessage) protocolMessage;
                         final long turnOverTime = now - startTime;
 
-                        attachment.pingSuccessfull();
+                        attachment.pingSuccessful();
 
                         final Double systemCpuLoad = sendCpuInfoToServer ? pingManager.getSystemCpuLoad() : null;
                         final Double processCpuLoad = sendCpuInfoToServer ? pingManager.getProcessCpuLoad() : null;
@@ -349,12 +365,8 @@ public class HeartbeatProcessor {
 
             @Override
             public void onError(final Throwable e) {
-                LOGGER.error("Error while waiting for response for message: {}",pingRequestMessage, e);
-            }
 
-            @Override
-            public void onComplete() {
-
+                LOGGER.error("Error while waiting for response for message: {}", pingRequestMessage, e);
             }
         });
 

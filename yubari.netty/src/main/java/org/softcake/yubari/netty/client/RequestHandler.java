@@ -21,10 +21,10 @@ import org.softcake.cherry.core.base.PreCheck;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.reactivex.Completable;
 import io.reactivex.Observable;
-import io.reactivex.ObservableEmitter;
-import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.ObservableSource;
 import io.reactivex.Single;
+import io.reactivex.SingleEmitter;
+import io.reactivex.SingleOnSubscribe;
 import io.reactivex.functions.Action;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
@@ -46,7 +46,7 @@ public class RequestHandler {
     private final Long syncRequestId;
     private final AtomicBoolean isResponse = new AtomicBoolean(false);
     private final ScheduledExecutorService scheduledExecutorService;
-    private ObservableEmitter<ProtocolMessage> emitter;
+    private SingleEmitter<ProtocolMessage> emitter;
     private ProtocolMessage responseMessage = null;
     private long inProcessResponseLastTime = Long.MIN_VALUE;
 
@@ -67,31 +67,31 @@ public class RequestHandler {
         return responseMessage;
     }
 
-    public Observable<ProtocolMessage> sendRequest(final Completable requestMessage,
+    public Single<ProtocolMessage> sendRequest(final Completable requestMessage,
                                                    final ProtocolMessage message,
                                                    final boolean doNotRestartTimerOnInProcessResponse,
                                                    final long timeout,
                                                    final TimeUnit timeoutUnits) {
 
-        return sendRequest(requestMessage, message, doNotRestartTimerOnInProcessResponse, timeout, timeoutUnits, aBoolean -> {});
+        return sendRequest(requestMessage, message, doNotRestartTimerOnInProcessResponse, timeout, timeoutUnits,Observable.empty());
 
 
     }
 
-    public Observable<ProtocolMessage> sendRequest(final Completable requestMessage,
+    public Single<ProtocolMessage> sendRequest(final Completable requestMessage,
                                                    final ProtocolMessage message,
                                                    final boolean doNotRestartTimerOnInProcessResponse,
                                                    final long timeout,
                                                    final TimeUnit timeoutUnits,
-                                                   final Consumer<Boolean> requestSent) {
+                                                   final Observable requestSent) {
 
         PreCheck.parameterNotNull(requestMessage, "requestMessage");
         PreCheck.parameterNotNull(timeoutUnits, "timeoutUnits");
         PreCheck.parameterNotNull(requestSent, "requestSent");
 
-        return Observable.defer(() -> Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
+        return Single.defer(() -> Single.create(new SingleOnSubscribe<ProtocolMessage>() {
             @Override
-            public void subscribe(final ObservableEmitter<ProtocolMessage> e) throws Exception {
+            public void subscribe(final SingleEmitter<ProtocolMessage> e) throws Exception {
 
                 emitter = e;
                 requestMessage.doOnComplete(new Action() {
@@ -104,7 +104,7 @@ public class RequestHandler {
                 }).subscribe(new Action() {
                     @Override
                     public void run() throws Exception {
-                        requestSent.accept(true);
+                        requestSent.subscribe();
                     }
                 });
             }
@@ -163,8 +163,7 @@ public class RequestHandler {
 
         if (this.syncRequestId.equals(message.getSynchRequestId())) {
             isResponse.set(true);
-            emitter.onNext(message);
-            emitter.onComplete();
+            emitter.onSuccess(message);
             this.responseMessage = message;
         } else {
             emitter.onError(new IllegalStateException(String.format("SynchRequestId is not valid: %s",

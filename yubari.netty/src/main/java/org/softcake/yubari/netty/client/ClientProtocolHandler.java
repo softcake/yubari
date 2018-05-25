@@ -66,7 +66,6 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
     private final ListeningExecutorService streamProcessingExecutor;
     private final ListeningExecutorService syncRequestProcessingExecutor;
     private final List<Thread> eventExecutorThreadsForLogging = Collections.synchronizedList(new ArrayList<>());
-    private final boolean logSkippedDroppableMessages;
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
     private final StreamProcessor streamProcessor;
     private final DroppableMessageHandler2 messageHandler2;
@@ -77,7 +76,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
 
         this.clientSession = PreCheck.notNull(session, "session");
         this.messageHandler2 = new DroppableMessageHandler2(clientSession.getDroppableMessagesClientTTL());
-        this.logSkippedDroppableMessages = session.isLogSkippedDroppableMessages();
+        final boolean logSkippedDroppableMessages = session.isLogSkippedDroppableMessages();
         this.logEventPoolThreadDumpsOnLongExecution = session.getLogEventPoolThreadDumpsOnLongExecution();
         this.eventExecutor = this.initEventExecutor();
         this.authEventExecutor = this.initAuthEventExecutor();

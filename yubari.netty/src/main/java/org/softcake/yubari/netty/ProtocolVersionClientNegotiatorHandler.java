@@ -54,8 +54,8 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
 
     private static void cleanUp(final ChannelHandlerContext ctx) {
 
-        final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(
-            PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
+        final Attribute<ByteBuf> byteBufAttribute = ctx.channel()
+                                                       .attr(PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
         final ByteBuf byteBuf = byteBufAttribute.get();
 
         if (byteBuf != null) {
@@ -92,13 +92,15 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
 
     private static Integer getProtocolVersionAttribute(final ChannelHandlerContext ctx) {
 
-        final Attribute<Integer> attribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
+        final Attribute<Integer> attribute = ctx.channel()
+                                                .attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
         return attribute.get();
     }
 
     private static void setProtocolVersionAttribute(final ChannelHandlerContext ctx, final int acceptedVersion) {
 
-        final Attribute<Integer> attribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
+        final Attribute<Integer> attribute = ctx.channel()
+                                                .attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
         attribute.set(acceptedVersion);
     }
 
@@ -112,17 +114,22 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
     public void channelActive(final ChannelHandlerContext ctx) throws Exception {
 
         final Attribute<ByteBuf> byteBufAttribute
-            = ctx.channel().attr(PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
-        byteBufAttribute.set(ctx.alloc().buffer(SEVER_RESPONSE_MESSAGE_SIZE));
+            = ctx.channel()
+                 .attr(PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
+        byteBufAttribute.set(ctx.alloc()
+                                .buffer(SEVER_RESPONSE_MESSAGE_SIZE));
 
         final int size = SessionProtocolEncoder.SUPPORTED_VERSIONS.size();
 
-        final ByteBuf response = ctx.alloc().buffer(TRANSPORT_HELLO_MESSAGE.length() + 2 + size * 4);
+        final ByteBuf response = ctx.alloc()
+                                    .buffer(TRANSPORT_HELLO_MESSAGE.length() + 2 + size * 4);
         response.writeBytes(TRANSPORT_HELLO_MESSAGE.getBytes("US-ASCII"));
         response.writeShort(size * 4);
         SessionProtocolEncoder.SUPPORTED_VERSIONS.forEach(response::writeInt);
 
-        LOGGER.trace("[{}] Sending supported versions list: {}", this.transportName, SessionProtocolEncoder.SUPPORTED_VERSIONS);
+        LOGGER.trace("[{}] Sending supported versions list: {}",
+                     this.transportName,
+                     SessionProtocolEncoder.SUPPORTED_VERSIONS);
         ctx.writeAndFlush(response);
         ctx.fireChannelActive();
     }
@@ -176,8 +183,9 @@ public class ProtocolVersionClientNegotiatorHandler extends ChannelDuplexHandler
 
         } else {
             final ByteBuf byteBuffer = (ByteBuf) message;
-            final Attribute<ByteBuf> byteBufAttribute = ctx.channel().attr(
-                PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
+            final Attribute<ByteBuf> byteBufAttribute = ctx.channel()
+                                                           .attr(
+                                                               PROTOCOL_VERSION_SERVER_RESPONSE_BUFFER_ATTRIBUTE_KEY);
             final ByteBuf serverResponseBuf = byteBufAttribute.get();
 
             try {

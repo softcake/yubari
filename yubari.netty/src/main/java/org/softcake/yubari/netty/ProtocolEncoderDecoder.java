@@ -31,7 +31,6 @@ import com.dukascopy.dds4.transport.common.protocol.binary.RawObject.RawData;
 import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolDecoder;
 import com.dukascopy.dds4.transport.common.protocol.binary.SessionProtocolEncoder;
 import com.dukascopy.dds4.transport.common.protocol.binary.codec.CodecFactoryAndCache;
-import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
@@ -81,15 +80,17 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
     private static int getProtocolVersion(final ChannelHandlerContext ctx) {
 
-        final Attribute<Integer> protocolVersionAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
+        final Attribute<Integer> protocolVersionAttribute = ctx.channel()
+                                                               .attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
         final Integer protocolVersionObj = protocolVersionAttribute.get();
         return protocolVersionObj == null ? DEFAULT_PROTOCOL_VERSION : protocolVersionObj;
     }
 
     private void failScheduledWrites(final ChannelHandlerContext ctx) {
 
-        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
-            PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel()
+                                                                            .attr(
+                                                                                PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
         final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
         if (messageQueue != null) {
 
@@ -113,8 +114,9 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
     @Override
     public void channelActive(final ChannelHandlerContext ctx) throws Exception {
 
-        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
-            PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel()
+                                                                            .attr(
+                                                                                PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
         messageQueueAttribute.set(new ArrayList<>());
         ctx.fireChannelActive();
     }
@@ -138,8 +140,9 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         if (evt instanceof ProtocolVersionNegotiationCompletionEvent
             && ((ProtocolVersionNegotiationCompletionEvent) evt).isSuccess()) {
 
-            final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
-                PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+            final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel()
+                                                                                .attr(
+                                                                                    PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
             final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
             if (messageQueue != null) {
                 this.sendScheduledMessages(ctx, messageQueueAttribute);
@@ -189,7 +192,8 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
     private SessionProtocolDecoder getSessionProtocolDecoder(final ChannelHandlerContext ctx) {
 
-        final Attribute<SessionProtocolDecoder> decoderAttribute = ctx.channel().attr(DECODER_ATTACHMENT_ATTRIBUTE_KEY);
+        final Attribute<SessionProtocolDecoder> decoderAttribute = ctx.channel()
+                                                                      .attr(DECODER_ATTACHMENT_ATTRIBUTE_KEY);
         SessionProtocolDecoder sessionProtocolDecoder = decoderAttribute.get();
         if (sessionProtocolDecoder == null) {
 
@@ -209,10 +213,12 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
     public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise)
         throws Exception {
 
-        final Attribute<Integer> firstMessageAttribute = ctx.channel().attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
+        final Attribute<Integer> firstMessageAttribute = ctx.channel()
+                                                            .attr(PROTOCOL_VERSION_ATTRIBUTE_KEY);
         final Object firstMessage = firstMessageAttribute.get();
-        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel().attr(
-            PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
+        final Attribute<ArrayList<PendingWrite>> messageQueueAttribute = ctx.channel()
+                                                                            .attr(
+                                                                                PROTOCOL_VERSION_MESSAGE_QUEUE_ATTRIBUTE_KEY);
         final ArrayList<PendingWrite> messageQueue = messageQueueAttribute.get();
 
 
@@ -229,7 +235,8 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
     private void doEncode(final ChannelHandlerContext ctx, final Object messageObject, final ChannelPromise promise) {
 
-        ByteBuf buf = ctx.alloc().ioBuffer();
+        ByteBuf buf = ctx.alloc()
+                         .ioBuffer();
 
         try (final DataOutputStream dataOutputStream = new DataOutputStream(new ByteBufOutputStream(buf))) {
 
@@ -303,8 +310,9 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         if (deferredClassIdPositions != null && !deferredClassIdPositions.isEmpty()) {
 
             for (final Map.Entry<Integer, Class> entry : deferredClassIdPositions.entrySet()) {
-                final ClassInfo<Short> classInfo = sessionProtocolEncoder.getDictionary().getClassInfo(entry.getValue(),
-                                                                                                       encodingContext);
+                final ClassInfo<Short> classInfo = sessionProtocolEncoder.getDictionary()
+                                                                         .getClassInfo(entry.getValue(),
+                                                                                       encodingContext);
                 if (classInfo == null) {
                     throw new IllegalArgumentException(String.format("Unable to find %s in dictionary",
                                                                      entry.getValue()));
@@ -315,10 +323,11 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
                     dataOutputStream.write(data, index, idIndex - index);
                     index = idIndex;
                 }
-                sessionProtocolEncoder.getDictionary().writeClassId(protocolVersion,
-                                                                    dataOutputStream,
-                                                                    entry.getValue(),
-                                                                    encodingContext);
+                sessionProtocolEncoder.getDictionary()
+                                      .writeClassId(protocolVersion,
+                                                    dataOutputStream,
+                                                    entry.getValue(),
+                                                    encodingContext);
                 index += DEFAULT_PROTOCOL_VERSION;
 
             }
@@ -332,7 +341,8 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
     private SessionProtocolEncoder getSessionProtocolEncoder(final ChannelHandlerContext ctx) {
 
-        final Attribute<SessionProtocolEncoder> encoderAttribute = ctx.channel().attr(ENCODER_ATTACHMENT_ATTRIBUTE_KEY);
+        final Attribute<SessionProtocolEncoder> encoderAttribute = ctx.channel()
+                                                                      .attr(ENCODER_ATTACHMENT_ATTRIBUTE_KEY);
         SessionProtocolEncoder sessionProtocolEncoder = encoderAttribute.get();
 
         if (sessionProtocolEncoder == null) {

@@ -350,11 +350,6 @@ public class DClient implements ClientListener {
                 public void accept(final ProtocolMessage protocolMessage) throws Exception {
                     messageReceived(protocolMessage);
                 }
-            }); this.transportClient.observeMessagesReceivedFast().subscribe(new Consumer<ProtocolMessage>() {
-                @Override
-                public void accept(final ProtocolMessage protocolMessage) throws Exception {
-                    messageReceivedFast(protocolMessage);
-                }
             });
             this.transportClient.observeOnlineEvent().subscribe(new Consumer<ITransportClient>() {
                 @Override
