@@ -444,8 +444,8 @@ public class Heartbeat extends ChannelDuplexHandler {
             return;
         }
 
-        channel.disconnect();
-        channel.close();
+      /*  channel.disconnect();
+        channel.close();*/
 
         LOGGER.warn("[{}] {} session ping timeout {}ms. Disconnecting session...",
                     this.clientSession.getTransportName(),

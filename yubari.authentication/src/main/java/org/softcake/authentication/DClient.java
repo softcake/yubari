@@ -185,6 +185,7 @@ public class DClient implements ClientListener {
     public int anInt;
     List<Double> durchschnitt = new ArrayList<>(1000);
     List<Double> durchschnitt1 = new ArrayList<>(1000);
+    int coun = 0;
     private DClient.ClientGUIListener clientGUIListener;
     //private volatile ISystemListenerExtended systemListener;
     private TransportClient transportClient;
@@ -258,7 +259,9 @@ public class DClient implements ClientListener {
         this.out = System.out;
         this.err = System.err;
         // NotificationUtilsProvider.setNotificationUtils(new PrintStreamNotificationUtils(this.out, this.err));
-        this.version = this.getClass().getPackage().getImplementationVersion();
+        this.version = this.getClass()
+                           .getPackage()
+                           .getImplementationVersion();
         if (this.version == null || this.version.endsWith("SNAPSHOT")) {
             this.version = "99.99.99";
         }
@@ -345,24 +348,30 @@ public class DClient implements ClientListener {
             this.transportClient.connect();
 
 
-            this.transportClient.observeMessagesReceived().subscribe(new Consumer<ProtocolMessage>() {
-                @Override
-                public void accept(final ProtocolMessage protocolMessage) throws Exception {
-                    messageReceived(protocolMessage);
-                }
-            });
-            this.transportClient.observeOnlineEvent().subscribe(new Consumer<ITransportClient>() {
-                @Override
-                public void accept(final ITransportClient iTransportClient) throws Exception {
-                    online(iTransportClient);
-                }
-            });
-            this.transportClient.observeDisconnectedEvent().subscribe(new Consumer<DisconnectedEvent>() {
-                @Override
-                public void accept(final DisconnectedEvent event) throws Exception {
-                    LOGGER.info("DISCONNECTED");
-                }
-            });
+            this.transportClient.observeMessagesReceived()
+                                .subscribe(new Consumer<ProtocolMessage>() {
+                                    @Override
+                                    public void accept(final ProtocolMessage protocolMessage) throws Exception {
+
+                                        messageReceived(protocolMessage);
+                                    }
+                                });
+            this.transportClient.observeOnlineEvent()
+                                .subscribe(new Consumer<ITransportClient>() {
+                                    @Override
+                                    public void accept(final ITransportClient iTransportClient) throws Exception {
+
+                                        online(iTransportClient);
+                                    }
+                                });
+            this.transportClient.observeDisconnectedEvent()
+                                .subscribe(new Consumer<DisconnectedEvent>() {
+                                    @Override
+                                    public void accept(final DisconnectedEvent event) throws Exception {
+
+                                        LOGGER.info("DISCONNECTED");
+                                    }
+                                });
             this.connectToHistoryServer(username, true);
             //            FeedDataProvider.getDefaultInstance().setInstrumentsSubscribed(FeedDataProvider
             // .createInstrumentMapMappedWithSaveInCacheOption(this.instruments, true));
@@ -387,24 +396,30 @@ public class DClient implements ClientListener {
             //            FeedDataProvider.setPlatformTicket(ticket);
             //            FeedDataProvider.getDefaultInstance().getFeedCommissionManager().clear();
             this.transportClient.connect();
-            this.transportClient.observeMessagesReceived().subscribe(new Consumer<ProtocolMessage>() {
-                @Override
-                public void accept(final ProtocolMessage protocolMessage) throws Exception {
-                    messageReceived(protocolMessage);
-                }
-            });
-            this.transportClient.observeOnlineEvent().subscribe(new Consumer<ITransportClient>() {
-                @Override
-                public void accept(final ITransportClient iTransportClient) throws Exception {
-                    online(iTransportClient);
-                }
-            });
-            this.transportClient.observeDisconnectedEvent().subscribe(new Consumer<DisconnectedEvent>() {
-                @Override
-                public void accept(final DisconnectedEvent event) throws Exception {
-                    LOGGER.info("DISCONNECTED");
-                }
-            });
+            this.transportClient.observeMessagesReceived()
+                                .subscribe(new Consumer<ProtocolMessage>() {
+                                    @Override
+                                    public void accept(final ProtocolMessage protocolMessage) throws Exception {
+
+                                        messageReceived(protocolMessage);
+                                    }
+                                });
+            this.transportClient.observeOnlineEvent()
+                                .subscribe(new Consumer<ITransportClient>() {
+                                    @Override
+                                    public void accept(final ITransportClient iTransportClient) throws Exception {
+
+                                        online(iTransportClient);
+                                    }
+                                });
+            this.transportClient.observeDisconnectedEvent()
+                                .subscribe(new Consumer<DisconnectedEvent>() {
+                                    @Override
+                                    public void accept(final DisconnectedEvent event) throws Exception {
+
+                                        LOGGER.info("DISCONNECTED");
+                                    }
+                                });
             // this.connectToHistoryServer(username, true);
             //            InstrumentTradability.clean();
             //            InstrumentTradability.getInstance();
@@ -413,6 +428,7 @@ public class DClient implements ClientListener {
     }
 
     private void messageReceivedFast(final ProtocolMessage message) {
+
         if ((message instanceof CurrencyMarket)) {
             final long end = System.nanoTime();
             final long start = ((CurrencyMarket) message).getCreationTimestamp();
@@ -425,19 +441,20 @@ public class DClient implements ClientListener {
                 if (durchschnitt1.size() % 20 == 0) {
 
 
-
                     double namesOfMaleMembersCollect = durchschnitt1.stream()
-                                                                   .mapToDouble(new ToDoubleFunction<Double>() {
-                                                                       @Override
-                                                                       public double applyAsDouble(final Double value) {
+                                                                    .mapToDouble(new ToDoubleFunction<Double>() {
+                                                                        @Override
+                                                                        public double applyAsDouble(final Double
+                                                                        value) {
 
-                                                                           return value;
-                                                                       }
-                                                                   })
-                                                                   .average()
-                                                                   .getAsDouble();
+                                                                            return value;
+                                                                        }
+                                                                    })
+                                                                    .average()
+                                                                    .getAsDouble();
 
-                    LOGGER.error("Average Execution in Netty Time Fast: {}us", roundAvoid(namesOfMaleMembersCollect, 3));
+                    LOGGER.error("Average Execution in Netty Time Fast: {}us",
+                                 roundAvoid(namesOfMaleMembersCollect, 3));
 
                 }
             }
@@ -447,8 +464,6 @@ public class DClient implements ClientListener {
 
     }
 
-
-    int coun = 0;
     private void messageReceived(final ProtocolMessage message) {
 
        /* if (coun <= 100) {
@@ -462,6 +477,10 @@ public class DClient implements ClientListener {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }*/
+
+       try{
+
+
         if ((message instanceof CurrencyMarket)) {
             final long end = System.nanoTime();
             final long start = ((CurrencyMarket) message).getCreationTimestamp();
@@ -472,7 +491,6 @@ public class DClient implements ClientListener {
 
                 durchschnitt.add(diff);
                 if (durchschnitt.size() % 20 == 0) {
-
 
 
                     double namesOfMaleMembersCollect = durchschnitt.stream()
@@ -493,6 +511,10 @@ public class DClient implements ClientListener {
 
 
         }
+
+       }catch(Exception e){
+           LOGGER.info("EX",e);
+       }
     }
 
     public synchronized void connect(Collection<String> authServerUrls,
@@ -556,12 +578,14 @@ public class DClient implements ClientListener {
     private String getAuthServers(String jnlp) throws Exception {
 
         URL jnlpUrl = new URL(jnlp);
-        InputStream jnlpIs = jnlpUrl.openConnection().getInputStream();
+        InputStream jnlpIs = jnlpUrl.openConnection()
+                                    .getInputStream();
         Throwable var5 = null;
 
         Document doc;
         try {
-            DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            DocumentBuilder builder = DocumentBuilderFactory.newInstance()
+                                                            .newDocumentBuilder();
             doc = builder.parse(jnlpIs);
         } catch (Throwable var20) {
             var5 = var20;
@@ -598,13 +622,19 @@ public class DClient implements ClientListener {
                 for (int i = 0; i < propertyNodes.getLength(); ++i) {
                     Element propertyElement = (Element) propertyNodes.item(i);
                     String nameAttribute = propertyElement.getAttribute("name");
-                    if (nameAttribute != null && nameAttribute.trim().equals("jnlp.client.mode")) {
-                        String clientMode = propertyElement.getAttribute("value").trim();
+                    if (nameAttribute != null && nameAttribute.trim()
+                                                              .equals("jnlp.client.mode")) {
+                        String clientMode = propertyElement.getAttribute("value")
+                                                           .trim();
                         //  this.live = !ObjectUtils.isNullOrEmpty(clientMode) && clientMode.equals("LIVE");
-                    } else if (nameAttribute != null && nameAttribute.trim().equals("jnlp.login.url")) {
-                        authServersCsv_no_srp6 = propertyElement.getAttribute("value").trim();
-                    } else if (nameAttribute != null && nameAttribute.trim().equals("jnlp.srp6.login.url")) {
-                        authServersCsv_srp6 = propertyElement.getAttribute("value").trim();
+                    } else if (nameAttribute != null && nameAttribute.trim()
+                                                                     .equals("jnlp.login.url")) {
+                        authServersCsv_no_srp6 = propertyElement.getAttribute("value")
+                                                                .trim();
+                    } else if (nameAttribute != null && nameAttribute.trim()
+                                                                     .equals("jnlp.srp6.login.url")) {
+                        authServersCsv_srp6 = propertyElement.getAttribute("value")
+                                                             .trim();
                     }
                 }
 
@@ -725,7 +755,10 @@ public class DClient implements ClientListener {
                     String userAgent = CommonContext.getUserAgent("DDS3_JFOREXSDK");
                     LOGGER.debug("UserAgent: " + userAgent);
                     if (this.authProvider == null) {
-                        this.authProvider = new DefaultClientAuthorizationProvider(username, ticket, this.sessionID, userAgent);
+                        this.authProvider = new DefaultClientAuthorizationProvider(username,
+                                                                                   ticket,
+                                                                                   this.sessionID,
+                                                                                   userAgent);
                     } else {
                         this.authProvider.setSessionId(this.sessionID);
                         this.authProvider.setTicket(ticket);
@@ -1349,7 +1382,7 @@ LOGGER.info("retry");*/
 
     public synchronized void online(ITransportClient client) {
 
-        LOGGER.info("State in DCC {}",client.getClientState());
+        LOGGER.info("State in DCC {}", client.getClientState());
         this.connectedInit();
         if (this.initialized) {
             this.fireConnected();
@@ -1553,7 +1586,8 @@ LOGGER.info("retry");*/
     public synchronized Map<Long, IStrategy> getStartedStrategies() {
 
         Map<Long, IStrategy> map = new HashMap();
-        Iterator var2 = this.runningJfRunnables.entrySet().iterator();
+        Iterator var2 = this.runningJfRunnables.entrySet()
+                                               .iterator();
 
         while (var2.hasNext()) {
             Map.Entry<Long, IJFRunnable<?>> entry = (Map.Entry) var2.next();
