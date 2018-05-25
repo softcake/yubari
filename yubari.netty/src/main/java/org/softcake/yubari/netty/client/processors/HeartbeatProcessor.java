@@ -21,10 +21,11 @@ import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMEN
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
+import org.softcake.yubari.netty.pinger.PingManager;
 import org.softcake.yubari.netty.stream.BlockingBinaryStream;
 
 import com.dukascopy.dds4.ping.IPingListener;
-import com.dukascopy.dds4.ping.PingManager;
+
 import com.dukascopy.dds4.ping.PingStats;
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;

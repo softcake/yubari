@@ -19,14 +19,18 @@ package org.softcake.yubari.netty.client.processors;
 import static org.slf4j.LoggerFactory.getLogger;
 import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
 
+import org.softcake.yubari.netty.DefaultChannelWriter;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
+import org.softcake.yubari.netty.pinger.PingManager;
 import org.softcake.yubari.netty.stream.BlockingBinaryStream;
 
 import com.dukascopy.dds4.ping.IPingListener;
-import com.dukascopy.dds4.ping.PingManager;
+
+import com.dukascopy.dds4.ping.PingStats;
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
+import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
@@ -37,6 +41,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelPipeline;
+import io.netty.util.Attribute;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.Single;
@@ -160,7 +165,9 @@ public class Heartbeat extends ChannelDuplexHandler {
      */
     @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object msg) throws Exception {
-
+        if (msg instanceof HeartbeatRequestMessage) {
+            process(ctx, (HeartbeatRequestMessage) msg);
+        }
 
         ctx.fireChannelRead(msg);
 
@@ -408,6 +415,57 @@ public class Heartbeat extends ChannelDuplexHandler {
 
         } finally {
             Heartbeat.this.checkPingFailed(channel, attachment, pingTimeout, now);
+        }
+    }
+
+    public void process(final ChannelHandlerContext ctx,
+                        final HeartbeatRequestMessage requestMessage) {
+        final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel().attr(
+            CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+        final ChannelAttachment attachment = channelAttachmentAttribute.get();
+
+        try {
+            final HeartbeatOkResponseMessage okResponseMessage = new HeartbeatOkResponseMessage();
+            okResponseMessage.setRequestTime(requestMessage.getRequestTime());
+            okResponseMessage.setReceiveTime(System.currentTimeMillis());
+            okResponseMessage.setSynchRequestId(requestMessage.getSynchRequestId());
+
+            final PingManager pm = this.clientSession.getPingManager(attachment.isPrimaryConnection());
+            final Double systemCpuLoad = this.sendCpuInfoToServer ? pm.getSystemCpuLoad() : null;
+            final Double processCpuLoad = this.sendCpuInfoToServer ? pm.getProcessCpuLoad() : null;
+
+            okResponseMessage.setProcessCpuLoad(processCpuLoad);
+            okResponseMessage.setSystemCpuLoad(systemCpuLoad);
+            okResponseMessage.setAvailableProcessors(pm.getAvailableProcessors());
+
+            PingStats generalStats = pm.getGeneralStats();
+            if (generalStats != null) {
+                okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval()
+                                                                     .getRoundedLast());
+            } else {
+                generalStats = this.clientSession.getPingManager(attachment.isPrimaryConnection())
+                                                 .getGeneralStats();
+                if (generalStats != null) {
+                    okResponseMessage.setSocketWriteInterval(generalStats.getInitiatorSocketWriteInterval()
+                                                                         .getRoundedLast());
+                }
+            }
+
+            if (!this.clientSession.isTerminating()) {
+                DefaultChannelWriter.writeMessage(clientSession, ctx.channel(), okResponseMessage).subscribe();
+            }
+        } catch (final Exception e) {
+            LOGGER.error("[{}] ", clientSession.getTransportName(), e);
+            final ErrorResponseMessage errorMessage = new ErrorResponseMessage(String.format(
+                "Error occurred while processing the message [%s]. Error message: [%s:%s]",
+                requestMessage,
+                e.getClass()
+                 .getName(),
+                e.getMessage()));
+            errorMessage.setSynchRequestId(requestMessage.getSynchRequestId());
+            if (!this.clientSession.isTerminating()) {
+                DefaultChannelWriter.writeMessage(clientSession, ctx.channel(), errorMessage).subscribe();
+            }
         }
     }
 

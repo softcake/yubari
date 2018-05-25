@@ -24,7 +24,6 @@ import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CH
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_TCP_NODELAY;
 import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_WRITE_BUFFER_WATER_MARK;
 
-import org.softcake.yubari.netty.AuthorizationProviderListener;
 import org.softcake.yubari.netty.IClientEvent;
 import org.softcake.yubari.netty.ProtocolEncoderDecoder;
 import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
@@ -37,12 +36,12 @@ import org.softcake.yubari.netty.mina.DisconnectedEvent;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
+import org.softcake.yubari.netty.pinger.PingManager;
 import org.softcake.yubari.netty.ssl.SSLContextFactory;
 import org.softcake.yubari.netty.ssl.SecurityExceptionEvent;
 import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
-import com.dukascopy.dds4.ping.PingManager;
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -52,9 +51,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.DefaultMessageSizeEstimator;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -83,7 +80,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiConsumer;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;

@@ -16,7 +16,9 @@
 
 package org.softcake.yubari.netty.mbean;
 
-import com.dukascopy.dds4.ping.PingManager;
+
+import org.softcake.yubari.netty.pinger.PingManager;
+
 import com.dukascopy.dds4.ping.PingStats;
 
 import java.text.SimpleDateFormat;

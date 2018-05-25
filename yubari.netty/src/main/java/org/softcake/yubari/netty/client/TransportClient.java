@@ -100,10 +100,11 @@ import org.softcake.yubari.netty.mina.ISessionStats;
 import org.softcake.yubari.netty.mina.SecurityExceptionHandler;
 import org.softcake.yubari.netty.mina.ServerAddress;
 import org.softcake.yubari.netty.mina.SyncInstrumentsAndAllOtherConcurrencyPolicy;
+import org.softcake.yubari.netty.pinger.PingManager;
 import org.softcake.yubari.netty.stream.StreamListener;
 
 import com.dukascopy.dds4.ping.IPingListener;
-import com.dukascopy.dds4.ping.PingManager;
+
 import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSessionDictionary;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
 import com.google.common.collect.ImmutableMap;
