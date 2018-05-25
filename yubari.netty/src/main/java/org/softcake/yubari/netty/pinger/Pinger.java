@@ -76,7 +76,7 @@ public class Pinger {
                     this.pingTimeoutTimeUnit = pingTimeoutTimeUnit;
                     this.waitForDisconnect = waitForDisconnect;
                     final int threadCount = Math.min(targets.size(), maxPingThreadsCount);
-                    this.executor = new ThreadPoolExecutor(threadCount, threadCount, 1L, TimeUnit.MINUTES, new LinkedBlockingQueue(), new ThreadFactory() {
+                    this.executor = new ThreadPoolExecutor(threadCount, threadCount, 1L, TimeUnit.MINUTES, new LinkedBlockingQueue<>(), new ThreadFactory() {
                         private final AtomicInteger threadCounter = new AtomicInteger(1);
 
                         public Thread newThread(final Runnable r) {

@@ -69,7 +69,6 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
     private final AtomicBoolean logEventPoolThreadDumpsOnLongExecution;
     private final StreamProcessor streamProcessor;
     private final DroppableMessageHandler2 messageHandler2;
-    private final HeartbeatProcessor heartbeatProcessor;
     private IClientConnector clientConnector;
 
     public ClientProtocolHandler(final TransportClientSession session) {
@@ -83,19 +82,12 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
         this.streamProcessingExecutor = this.initStreamProcessingExecutor();
         this.syncRequestProcessingExecutor = this.initSyncRequestProcessingExecutor();
         this.streamProcessor = new StreamProcessor(clientSession, this.streamProcessingExecutor);
-        this.heartbeatProcessor = new HeartbeatProcessor(clientSession);
 
     }
 
     public DroppableMessageHandler2 getMessageHandler() {
 
         return messageHandler2;
-    }
-
-
-    public HeartbeatProcessor getHeartbeatProcessor() {
-
-        return heartbeatProcessor;
     }
 
     public void setClientConnector(final IClientConnector clientConnector) {
@@ -111,7 +103,6 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
             public void onNext(final ClientConnector.ClientState clientState) {
 
                 if (ClientConnector.ClientState.PROTOCOL_VERSION_NEGOTIATION == clientState) {
-                    handleAuthorization();
                 } else if (ClientConnector.ClientState.ONLINE == clientState) {
                     fireAuthorized();
                 } else if (ClientConnector.ClientState.DISCONNECTED == clientState) {
@@ -248,44 +239,11 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
     }
 
     @Override
-    public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
-
-        super.channelInactive(ctx);
-        final Attribute<ChannelAttachment> attribute = ctx.channel().attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
-        final ChannelAttachment attachment = attribute.get();
-        if (attachment != null && this.clientConnector != null) {
-            if (attachment.isPrimaryConnection()) {
-                this.clientConnector.primaryChannelDisconnected();
-            } else {
-                this.clientConnector.childChannelDisconnected();
-            }
-        }
-
-    }
-
-    @Override
-    public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
-        super.userEventTriggered(ctx, evt);
-    }
-
-    @Override
     public void exceptionCaught(final ChannelHandlerContext ctx, final Throwable cause) throws Exception {
 
         LOGGER.error(cause.getMessage(), cause);
 
         ctx.close();
-    }
-
-    void handleAuthorization() {
-
-        LOGGER.debug("[{}] Calling authorize on authorization provider", this.clientSession.getTransportName());
-        final HaloRequestMessage haloRequestMessage = new HaloRequestMessage();
-        haloRequestMessage.setPingable(true);
-        haloRequestMessage.setUseragent(this.clientSession.getUserAgent());
-        haloRequestMessage.setSecondaryConnectionDisabled(!this.clientSession.isUseFeederSocket());
-        haloRequestMessage.setSecondaryConnectionMessagesTTL(this.clientSession.getDroppableMessagesServerTTL());
-        haloRequestMessage.setSessionName(this.clientSession.getAuthorizationProvider().getSessionName());
-        writeMessage(clientConnector.getPrimaryChannel(), haloRequestMessage).subscribe();
     }
 
     public void fireAuthorized() {
@@ -318,15 +276,9 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                                final ProtocolMessage msg,
                                final ChannelAttachment attachment) {
 
-       /* if (!(msg instanceof ProtocolMessage)) {
-            return;
-        }*/
-
         final ProtocolMessage requestMessage = msg;
 
-        if (requestMessage instanceof HeartbeatRequestMessage) {
-            this.heartbeatProcessor.process(ctx, attachment, (HeartbeatRequestMessage) requestMessage);
-        } else if (requestMessage instanceof DisconnectRequestMessage) {
+        if (requestMessage instanceof DisconnectRequestMessage) {
             this.proccessDisconnectRequestMessage((DisconnectRequestMessage) requestMessage);
         } else if (requestMessage instanceof JSonSerializableWrapper) {
             throw new UnsupportedOperationException("Do you really need this?");
@@ -335,9 +287,7 @@ public class ClientProtocolHandler extends SimpleChannelInboundHandler<ProtocolM
                    || msg instanceof StreamingStatus) {
             this.streamProcessor.process(ctx, msg);
             throw new UnsupportedOperationException("Do you really need this?");
-        } else if (this.clientConnector.isConnecting()) {
-            // this.processAuthorizationMessage(ctx, msg);
-        } else {
+        }  else {
             this.fireFeedbackMessageReceived(ctx, requestMessage);
         }
     }

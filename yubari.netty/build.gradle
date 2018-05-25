@@ -19,6 +19,13 @@ plugins {
 }
 
 javaModule.name = "org.softcake.yubari.netty"
+javaModule.hacks {
+
+
+    exports('java.base', 'jdk.internal.misc', 'ALL-UNNAMED')
+
+}
+javadoc.enabled = false
 description = " The Connect module of the Yubari project."
 
 dependencies {

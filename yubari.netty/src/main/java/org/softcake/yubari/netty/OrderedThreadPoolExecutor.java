@@ -232,10 +232,11 @@ public class OrderedThreadPoolExecutor extends ThreadPoolExecutor {
         writeLock.lock();
 
         try {
-            final Iterator iterator = this.childExecutors.entrySet().iterator();
+            final Iterator<Entry<Object, ChildExecutor>> iterator = this.childExecutors.entrySet()
+                                                                                       .iterator();
 
             while (iterator.hasNext()) {
-                final Entry<Object, OrderedThreadPoolExecutor.ChildExecutor> entry = (Entry) iterator.next();
+                final Entry<Object, OrderedThreadPoolExecutor.ChildExecutor> entry = iterator.next();
                 final OrderedThreadPoolExecutor.ChildExecutor executor = entry.getValue();
                 if (executor != null && executor.isIdle()) {
                     iterator.remove();
@@ -276,8 +277,10 @@ public class OrderedThreadPoolExecutor extends ThreadPoolExecutor {
         int size = 0;
         final int sum = this.childExecutors.values().stream().mapToInt(value -> value.isRunning() ? 1 : 0).sum();
         OrderedThreadPoolExecutor.ChildExecutor childExecutor;
-        for (final Iterator i$ = this.childExecutors.values().iterator(); i$.hasNext(); size += childExecutor.size()) {
-            childExecutor = (OrderedThreadPoolExecutor.ChildExecutor) i$.next();
+
+        for (final Iterator<ChildExecutor> i$ = this.childExecutors.values()
+                                                                         .iterator(); i$.hasNext(); size += childExecutor.size()) {
+            childExecutor =  i$.next();
         }
 
         size += this.getQueue().size();
@@ -301,7 +304,7 @@ public class OrderedThreadPoolExecutor extends ThreadPoolExecutor {
         int size = 0;
 
 
-        final int sum = this.childExecutors.values().stream().mapToInt(new ToIntFunction<ChildExecutor>() {
+        final int sum = this.childExecutors.values().stream().mapToInt(new ToIntFunction<>() {
             @Override
             public int applyAsInt(final ChildExecutor value) {
 
@@ -310,12 +313,13 @@ public class OrderedThreadPoolExecutor extends ThreadPoolExecutor {
         }).sum();
 
 
-        final Iterator i$ = this.childExecutors.values().iterator();
+        final Iterator<ChildExecutor> i$ = this.childExecutors.values()
+                                                                    .iterator();
 
         while (i$.hasNext()) {
             final OrderedThreadPoolExecutor.ChildExecutor
                 childExecutor
-                = (OrderedThreadPoolExecutor.ChildExecutor) i$.next();
+                = i$.next();
             if (childExecutor.isRunning()) {
                 size += childExecutor.size();
             }
@@ -374,20 +378,18 @@ public class OrderedThreadPoolExecutor extends ThreadPoolExecutor {
     @Override
     protected <T> RunnableFuture<T> newTaskFor(final Runnable runnable, final T value) {
 
-        return (RunnableFuture) (runnable instanceof OrderedThreadPoolExecutor.OrderedRunnable
-                                 ? new OrderedThreadPoolExecutor.OrderedFutureTask((OrderedThreadPoolExecutor
-            .OrderedRunnable) runnable,
-                                                                                   value)
-                                 : super.newTaskFor(runnable, value));
+        return runnable instanceof OrderedRunnable
+                                 ? new OrderedFutureTask<>((OrderedRunnable) runnable,
+                                                           value)
+                                 : super.newTaskFor(runnable, value);
     }
 
     @Override
     protected <T> RunnableFuture<T> newTaskFor(final Callable<T> callable) {
 
-        return (RunnableFuture) (callable instanceof OrderedThreadPoolExecutor.OrderedCallable
-                                 ? new OrderedThreadPoolExecutor.OrderedFutureTask((OrderedThreadPoolExecutor
-            .OrderedCallable) callable)
-                                 : super.newTaskFor(callable));
+        return callable instanceof OrderedCallable
+                                 ? new OrderedFutureTask<>((OrderedCallable<T>) callable)
+                                 : super.newTaskFor(callable);
     }
 
     protected OrderedThreadPoolExecutor.ChildExecutor getChildExecutor(final OrderedThreadPoolExecutor
@@ -532,7 +534,7 @@ public class OrderedThreadPoolExecutor extends ThreadPoolExecutor {
                         }
 
                         if (task instanceof OrderedThreadPoolExecutor.MergeableTask) {
-                            ArrayList mergeableTasks;
+                            ArrayList<MergeableTask> mergeableTasks;
                             Runnable nextTask;
                             for (mergeableTasks = null; (nextTask = this.tasks.peek()) != null
                                                         && nextTask instanceof OrderedThreadPoolExecutor.MergeableTask
@@ -548,10 +550,10 @@ public class OrderedThreadPoolExecutor extends ThreadPoolExecutor {
                                 }
 
                                 if (mergeableTasks == null) {
-                                    mergeableTasks = new ArrayList();
+                                    mergeableTasks = new ArrayList<>();
                                 }
 
-                                mergeableTasks.add(task);
+                                mergeableTasks.add((MergeableTask) task);
                             }
 
                             if (mergeableTasks != null) {

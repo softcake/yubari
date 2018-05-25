@@ -17,73 +17,61 @@
 package org.softcake.yubari.netty.authorization;
 
 
-import org.softcake.yubari.netty.AuthorizationProviderListener;
+import static org.softcake.yubari.netty.TransportAttributeKeys.CHANNEL_ATTACHMENT_ATTRIBUTE_KEY;
 
-public abstract class AbstractClientAuthorizationProvider implements ClientAuthorizationProvider {
-    protected AuthorizationProviderListener listener;
-    protected String userAgent;
-    protected boolean childConnectionDisabled;
-    protected long droppableMessageServerTTL;
-    protected String sessionName;
+import org.softcake.yubari.netty.ProtocolVersionNegotiationCompletionEvent;
+import org.softcake.yubari.netty.channel.ChannelAttachment;
+
+import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public abstract class AbstractClientAuthorizationProvider extends SimpleChannelInboundHandler<ProtocolMessage>
+    implements ClientAuthorizationProvider {
+    protected static final Logger LOGGER = LoggerFactory.getLogger(DefaultClientAuthorizationProvider.class);
+
 
     public AbstractClientAuthorizationProvider() {
 
     }
 
-    public String getUserAgent() {
+    @Override
+    protected void channelRead0(final ChannelHandlerContext ctx, final ProtocolMessage msg) throws Exception {
 
-        return this.userAgent;
+        processAuthorizationMessage(ctx, msg);
+        ctx.fireChannelRead(msg);
     }
 
-    public void setUserAgent(final String userAgent) {
+    @Override
+    public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
 
-        this.userAgent = userAgent;
+        super.userEventTriggered(ctx, evt);
+
+
+        if (evt instanceof ProtocolVersionNegotiationCompletionEvent
+            && ((ProtocolVersionNegotiationCompletionEvent) evt).isSuccess()) {
+
+            final ChannelAttachment channelAttachment = ctx.channel()
+                                                           .attr(CHANNEL_ATTACHMENT_ATTRIBUTE_KEY)
+                                                           .get();
+            if (channelAttachment == null) {
+                return;
+            }
+            if (channelAttachment.isPrimaryConnection()) {
+
+                handleAuthorization(ctx);
+            }
+        }
     }
 
-    public boolean isChildConnectionDisabled() {
+    abstract void handleAuthorization(final ChannelHandlerContext ctx);
 
-        return this.childConnectionDisabled;
-    }
-
-    public void setChildConnectionDisabled(final boolean childConnectionDisabled) {
-
-        this.childConnectionDisabled = childConnectionDisabled;
-    }
-
-    public long getDroppableMessageServerTTL() {
-
-        return this.droppableMessageServerTTL;
-    }
-
-    public void setDroppableMessageServerTTL(final long droppableMessageServerTTL) {
-
-        this.droppableMessageServerTTL = droppableMessageServerTTL;
-    }
+    abstract void processAuthorizationMessage(final ChannelHandlerContext ctx,
+                                              final ProtocolMessage protocolMessage);
 
 
-
-    public AuthorizationProviderListener getListener() {
-
-        return this.listener;
-    }
-
-    public void setListener(final AuthorizationProviderListener listener) {
-
-        this.listener = listener;
-    }
-
-    public void cleanUp() {
-
-        this.listener = null;
-    }
-
-    public String getSessionName() {
-
-        return this.sessionName;
-    }
-
-    public void setSessionName(final String sessionName) {
-
-        this.sessionName = sessionName;
-    }
 }
+
+

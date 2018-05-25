@@ -28,7 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 
-public class RXStateMachine<T, E extends Enum> implements Consumer<E> {
+public class RXStateMachine<T, E extends Enum<E>> implements Consumer<E> {
     private static final Logger LOG = LoggerFactory.getLogger(RXStateMachine.class);
 
 

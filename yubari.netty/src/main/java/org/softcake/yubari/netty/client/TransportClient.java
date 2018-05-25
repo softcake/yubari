@@ -506,10 +506,10 @@ public class TransportClient implements ITransportClient, IClientEvent {
 
             // Iterate all NICs (network interface cards)...
             for (final Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces(); ifaces.hasMoreElements(); ) {
-                final NetworkInterface iface = (NetworkInterface) ifaces.nextElement();
+                final NetworkInterface iface = ifaces.nextElement();
                 // Iterate all IP addresses assigned to each card...
-                for (final Enumeration inetAddrs = iface.getInetAddresses(); inetAddrs.hasMoreElements(); ) {
-                    final InetAddress inetAddr = (InetAddress) inetAddrs.nextElement();
+                for (final Enumeration<InetAddress> inetAddrs = iface.getInetAddresses(); inetAddrs.hasMoreElements(); ) {
+                    final InetAddress inetAddr = inetAddrs.nextElement();
                     if (!inetAddr.isLoopbackAddress()) {
                         if (!inetAddr.isSiteLocalAddress() && !inetAddr.isLinkLocalAddress()) {
                             if (inetAddr instanceof Inet6Address) {

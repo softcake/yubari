@@ -16,9 +16,9 @@
 
 package org.softcake.yubari.netty.client;
 
+import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.authorization.AnonymousClientAuthorizationProvider;
 import org.softcake.yubari.netty.authorization.ClientAuthorizationProvider;
-import org.softcake.yubari.netty.TransportClientSessionStateHandler;
 import org.softcake.yubari.netty.mina.ClientListener;
 import org.softcake.yubari.netty.mina.FeedbackEventsConcurrencyPolicy;
 import org.softcake.yubari.netty.mina.ISessionStats;
@@ -32,6 +32,7 @@ import com.dukascopy.dds4.transport.common.protocol.binary.AbstractStaticSession
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultMessageSizeEstimator;
+import io.netty.channel.WriteBufferWaterMark;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -45,10 +46,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-@SuppressWarnings({"squid:S109","squid:CallToDeprecatedMethod"})
+@SuppressWarnings("unchecked")
 public class TransportClientBuilder {
-    public static final int DEFAULT_TRANSPORT_POOL_SIZE = Math.max(Runtime.getRuntime().availableProcessors() / 4, 4);
-    public static final int DEFAULT_EVENT_POOL_SIZE = Math.max(Runtime.getRuntime().availableProcessors() / 2, 10);
+    public static final int DEFAULT_TRANSPORT_POOL_SIZE = Math.max(Runtime.getRuntime()
+                                                                          .availableProcessors() / 4, 4);
+    public static final int DEFAULT_EVENT_POOL_SIZE = Math.max(Runtime.getRuntime()
+                                                                      .availableProcessors() / 2, 10);
     public static final String DEFAULT_JMX_BEAN_NAME = null;
     public static final Map<ChannelOption<?>, Object> DEFAULT_CHANNEL_OPTIONS;
     public static final Executor DEFAULT_ASYNC_REQUEST_FUTURE_EXECUTOR = Executors.newSingleThreadExecutor();
@@ -89,7 +92,8 @@ public class TransportClientBuilder {
     public static final String DEFAULT_USER_AGENT = "NettyTransportClient "
                                                     + TransportClient.getTransportVersion()
                                                     + " - "
-                                                    + TransportClient.getLocalIpAddress().getHostAddress();
+                                                    + TransportClient.getLocalIpAddress()
+                                                                     .getHostAddress();
     public static final boolean DEFAULT_NEED_JMX_BEAN = true;
     public static final long DEFAULT_SYNC_MESSAGE_TIMEOUT = 30000L;
     public static final boolean DEFAULT_DUPLICATE_SYNC_MESSAGES_TO_CLIENT_LISTENERS = false;
@@ -111,6 +115,12 @@ public class TransportClientBuilder {
     public static final long DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT_COUNT = 2L;
     public static final long MAX_PING_TIMEOUT = TimeUnit.HOURS.toMillis(1);
     public static final long MAX_PING_INTERVAL = TimeUnit.HOURS.toMillis(1);
+    static final boolean DEFAULT_CHANNEL_OPTION_SO_REUSEADDR;
+    static final boolean DEFAULT_CHANNEL_OPTION_TCP_NODELAY;
+    static final int DEFAULT_CHANNEL_OPTION_SO_SO_LINGER;
+    static final int DEFAULT_CHANNEL_OPTION_CONNECT_TIMEOUT_MILLIS;
+    static final WriteBufferWaterMark DEFAULT_CHANNEL_OPTION_WRITE_BUFFER_WATER_MARK;
+    static final DefaultMessageSizeEstimator DEFAULT_CHANNEL_OPTION_MESSAGE_SIZE_ESTIMATOR;
     private static final String TLS_V_1 = "TLSv1";
     private static final String TLS_V_1_1 = "TLSv1.1";
     private static final String TLS_V_1_2 = "TLSv1.2";
@@ -122,14 +132,20 @@ public class TransportClientBuilder {
         DEFAULT_AUTH_EVENT_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
         DEFAULT_STREAM_PROCESSING_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
         DEFAULT_SYNC_REQUEST_PROCESSING_POOL_TERMINATION_TIME_UNIT = TimeUnit.SECONDS;
-
+        DEFAULT_CHANNEL_OPTION_SO_REUSEADDR = true;
+        DEFAULT_CHANNEL_OPTION_TCP_NODELAY = true;
+        DEFAULT_CHANNEL_OPTION_SO_SO_LINGER = -1;
+        DEFAULT_CHANNEL_OPTION_CONNECT_TIMEOUT_MILLIS = 15000;
+        DEFAULT_CHANNEL_OPTION_WRITE_BUFFER_WATER_MARK = new WriteBufferWaterMark(5120, 10240);
+        DEFAULT_CHANNEL_OPTION_MESSAGE_SIZE_ESTIMATOR = new DefaultMessageSizeEstimator(150);
         final Map<ChannelOption<?>, Object> defaultChannelOptions = new LinkedHashMap<>();
         defaultChannelOptions.put(ChannelOption.SO_REUSEADDR, true);
         defaultChannelOptions.put(ChannelOption.TCP_NODELAY, true);
         defaultChannelOptions.put(ChannelOption.SO_LINGER, -1);
         defaultChannelOptions.put(ChannelOption.CONNECT_TIMEOUT_MILLIS, 15000);
-        defaultChannelOptions.put(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, 5120);
-        defaultChannelOptions.put(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, 10240);
+        defaultChannelOptions.put(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(5120, 10240));
+        /*defaultChannelOptions.put(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, 5120);
+        defaultChannelOptions.put(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, 10240);*/
         defaultChannelOptions.put(ChannelOption.MESSAGE_SIZE_ESTIMATOR, new DefaultMessageSizeEstimator(150));
         DEFAULT_CHANNEL_OPTIONS = ImmutableMap.copyOf(defaultChannelOptions);
         final Set<String> sslProtocols = new LinkedHashSet<>();
@@ -385,7 +401,7 @@ public class TransportClientBuilder {
     }
 
     public TransportClientBuilder withChildConnectionReconnectAttempts(final int
-                                                                               childConnectionReconnectAttempts) {
+                                                                           childConnectionReconnectAttempts) {
 
         if (childConnectionReconnectAttempts < 0) {
             throw new IllegalArgumentException(
@@ -398,7 +414,7 @@ public class TransportClientBuilder {
     }
 
     public TransportClientBuilder withChildConnectionReconnectsResetDelay(final long
-                                                                                  childConnectionReconnectsResetDelay) {
+                                                                              childConnectionReconnectsResetDelay) {
 
         this.childConnectionReconnectsResetDelay = childConnectionReconnectsResetDelay;
         return this;

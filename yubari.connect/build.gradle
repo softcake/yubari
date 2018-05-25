@@ -19,6 +19,7 @@ plugins {
 }
 
 javaModule.name = "org.softcake.yubari.connect"
+javadoc.enabled = false
 description = " The Connect module of the Yubari project."
 
 dependencies {

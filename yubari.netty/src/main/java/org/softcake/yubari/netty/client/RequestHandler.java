@@ -68,22 +68,27 @@ public class RequestHandler {
     }
 
     public Single<ProtocolMessage> sendRequest(final Completable requestMessage,
-                                                   final ProtocolMessage message,
-                                                   final boolean doNotRestartTimerOnInProcessResponse,
-                                                   final long timeout,
-                                                   final TimeUnit timeoutUnits) {
+                                               final ProtocolMessage message,
+                                               final boolean doNotRestartTimerOnInProcessResponse,
+                                               final long timeout,
+                                               final TimeUnit timeoutUnits) {
 
-        return sendRequest(requestMessage, message, doNotRestartTimerOnInProcessResponse, timeout, timeoutUnits,Observable.empty());
+        return sendRequest(requestMessage,
+                           message,
+                           doNotRestartTimerOnInProcessResponse,
+                           timeout,
+                           timeoutUnits,
+                           Observable.empty());
 
 
     }
 
     public Single<ProtocolMessage> sendRequest(final Completable requestMessage,
-                                                   final ProtocolMessage message,
-                                                   final boolean doNotRestartTimerOnInProcessResponse,
-                                                   final long timeout,
-                                                   final TimeUnit timeoutUnits,
-                                                   final Observable requestSent) {
+                                               final ProtocolMessage message,
+                                               final boolean doNotRestartTimerOnInProcessResponse,
+                                               final long timeout,
+                                               final TimeUnit timeoutUnits,
+                                               final Observable<?> requestSent) {
 
         PreCheck.parameterNotNull(requestMessage, "requestMessage");
         PreCheck.parameterNotNull(timeoutUnits, "timeoutUnits");
@@ -97,41 +102,52 @@ public class RequestHandler {
                 requestMessage.doOnComplete(new Action() {
                     @Override
                     public void run() throws Exception {
+
                         RequestHandler.this.observeTimeout(Math.max(timeout, 0L),
                                                            timeoutUnits,
-                                                           doNotRestartTimerOnInProcessResponse).subscribe();
+                                                           doNotRestartTimerOnInProcessResponse)
+                                           .subscribe();
                     }
-                }).subscribe(new Action() {
-                    @Override
-                    public void run() throws Exception {
-                        requestSent.subscribe();
-                    }
-                });
-            }
-        }).doOnError(new Consumer<Throwable>() {
-            @Override
-            public void accept(final Throwable throwable) throws Exception {
-                LOGGER.error("Error... while waiting for response for message: {}",message, throwable);
+                })
+                              .subscribe(new Action() {
+                                  @Override
+                                  public void run() throws Exception {
 
+                                      requestSent.subscribe();
+                                  }
+                              });
             }
-        }));
+        })
+                                        .doOnError(new Consumer<Throwable>() {
+                                            @Override
+                                            public void accept(final Throwable throwable) throws Exception {
+
+                                                LOGGER.error("Error... while waiting for response for message: {}",
+                                                             message,
+                                                             throwable);
+
+                                            }
+                                        }));
     }
 
     private Observable<Long> observeTimeout(final long timeout,
                                             final TimeUnit timeoutUnits,
                                             final boolean doNotRestartTimerOnInProcessResponse) {
 
-        return Observable.timer(timeout, timeoutUnits, Schedulers.from(scheduledExecutorService)).repeatWhen(
-            objectObservable -> {
-                final AtomicLong scheduledTime = new AtomicLong(Long.MIN_VALUE);
-                return objectObservable.takeWhile(o -> shouldRestartTimer(doNotRestartTimerOnInProcessResponse,
-                                                                          timeout,
-                                                                          scheduledTime))
-                                       .flatMap((Function<Object, ObservableSource<?>>) o -> Observable.timer(
-                                           scheduledTime.get(),
-                                           TimeUnit.MILLISECONDS,
-                                           Schedulers.from(scheduledExecutorService)));
-            });
+        return Observable.timer(timeout, timeoutUnits, Schedulers.from(scheduledExecutorService))
+                         .repeatWhen(
+                             objectObservable -> {
+                                 final AtomicLong scheduledTime = new AtomicLong(Long.MIN_VALUE);
+                                 return objectObservable.takeWhile(o -> shouldRestartTimer(
+                                     doNotRestartTimerOnInProcessResponse,
+                                     timeout,
+                                     scheduledTime))
+                                                        .flatMap((Function<Object, ObservableSource<?>>) o ->
+                                                            Observable.timer(
+                                                            scheduledTime.get(),
+                                                            TimeUnit.MILLISECONDS,
+                                                            Schedulers.from(scheduledExecutorService)));
+                             });
     }
 
     private boolean shouldRestartTimer(final boolean doNotRestartTimerOnInProcessResponse,

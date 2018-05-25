@@ -24,9 +24,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class TransportSessionStats implements ISessionStats {
-    private ConcurrentHashMap<Class<?>, StatsStruct> serverMsgDropped = new ConcurrentHashMap();
-    private ConcurrentHashMap<Class<?>, StatsStruct> serverMsgInClientQueue = new ConcurrentHashMap();
-    private ConcurrentHashMap<Class<?>, StatsStruct> serverMsgProcessing = new ConcurrentHashMap();
+    private ConcurrentHashMap<Class<?>, StatsStruct> serverMsgDropped = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<Class<?>, StatsStruct> serverMsgInClientQueue = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<Class<?>, StatsStruct> serverMsgProcessing = new ConcurrentHashMap<>();
 
     public TransportSessionStats() {
     }
@@ -39,7 +39,7 @@ public class TransportSessionStats implements ISessionStats {
     }
 
     public Map<Class<?>, StatsStruct> pollServerMsgInClientQueueStats() {
-        Map<Class<?>, StatsStruct> result = new HashMap();
+        Map<Class<?>, StatsStruct> result = new HashMap<>();
         result.putAll(this.serverMsgInClientQueue);
         this.serverMsgInClientQueue.clear();
         return result;
@@ -53,19 +53,19 @@ public class TransportSessionStats implements ISessionStats {
     }
 
     public Map<Class<?>, StatsStruct> pollServerMsgProcessingStats() {
-        Map<Class<?>, StatsStruct> result = new HashMap();
+        Map<Class<?>, StatsStruct> result = new HashMap<>();
         result.putAll(this.serverMsgProcessing);
         this.serverMsgProcessing.clear();
         return result;
     }
 
     private StatsStruct get(Class<?> clazz, ConcurrentHashMap<Class<?>, StatsStruct> map) {
-        StatsStruct result = (StatsStruct)map.get(clazz);
+        StatsStruct result = map.get(clazz);
         if (result != null) {
             return result;
         } else {
             StatsStruct ss = new StatsStruct();
-            result = (StatsStruct)map.putIfAbsent(clazz, ss);
+            result = map.putIfAbsent(clazz, ss);
             return result == null ? ss : result;
         }
     }
@@ -90,7 +90,7 @@ public class TransportSessionStats implements ISessionStats {
     }
 
     public Map<Class<?>, StatsStruct> pollServerMsgDroppedStats() {
-        Map<Class<?>, StatsStruct> result = new HashMap();
+        Map<Class<?>, StatsStruct> result = new HashMap<>();
         result.putAll(this.serverMsgDropped);
         this.serverMsgDropped.clear();
         return result;

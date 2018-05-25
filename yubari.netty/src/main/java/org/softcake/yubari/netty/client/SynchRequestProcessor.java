@@ -79,7 +79,7 @@ public class SynchRequestProcessor extends SimpleChannelInboundHandler<ProtocolM
                                                             final long timeout,
                                                             final TimeUnit timeoutUnits,
                                                             final boolean doNotRestartTimerOnInProcessResponse,
-                                                            final Observable listener) {
+                                                            final Observable<?> listener) {
 
         final Long syncRequestId = this.getNextRequestId();
         message.setSynchRequestId(syncRequestId);

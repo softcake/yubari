@@ -17,32 +17,24 @@
 package org.softcake.yubari.netty.authorization;
 
 
-import org.softcake.yubari.netty.AuthorizationProviderListener;
-import org.softcake.yubari.netty.mina.IoSessionWrapper;
-
-import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import io.reactivex.functions.Consumer;
+import org.softcake.yubari.netty.client.TransportClientSession;
 
 public interface ClientAuthorizationProvider {
-    void setUserAgent(String var1);
-
-    void authorize(IoSessionWrapper var1);
-   void authorize(final Consumer<Object> ioSession);
-    void messageReceived(IoSessionWrapper var1, ProtocolMessage var2);
+    void setUserAgent(String userAgent);
 
     void cleanUp();
 
-    void setChildConnectionDisabled(boolean var1);
+    void setChildConnectionDisabled(boolean childConnectionDisabled);
 
-    void setDroppableMessageServerTTL(long var1);
+    void setDroppableMessageServerTTL(long droppableMessageServerTTL);
 
-    void setSessionName(String var1);
-    String getSessionName();
-    void setListener(AuthorizationProviderListener var1);
+    void setTransportClientSession(TransportClientSession session);
 
-    String getLogin();
+    void setSessionId(String sessionID);
 
-    String getTicket();
+    void setTicket(String ticket);
 
-    String getSessionId();
+    void setSessionName(String sessionName);
+
+    void setLogin(String username);
 }

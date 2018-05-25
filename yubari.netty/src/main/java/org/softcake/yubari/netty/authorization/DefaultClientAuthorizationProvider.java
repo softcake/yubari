@@ -27,28 +27,35 @@ import com.dukascopy.dds4.transport.msg.system.HaloResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.LoginRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.OkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class AnonymousClientAuthorizationProvider extends AbstractClientAuthorizationProvider {
-    private static final Logger LOGGER = LoggerFactory.getLogger(AnonymousClientAuthorizationProvider.class);
-    private HaloResponseMessage haloResponseMessage;
-    private String login;
-    private TransportClientSession session;
+@ChannelHandler.Sharable
+public class DefaultClientAuthorizationProvider extends AbstractClientAuthorizationProvider {
+    protected static final Logger LOGGER = LoggerFactory.getLogger(DefaultClientAuthorizationProvider.class);
     private String userAgent;
-    private boolean childConnectionDisabled;
-    private long droppableMessageServerTTL;
+    private String login;
     private String sessionId;
     private String ticket;
+    private TransportClientSession session;
+    private long droppableMessageServerTTL;
+    private Boolean childConnectionDisabled;
     private String sessionName;
-    private String username;
 
-    public AnonymousClientAuthorizationProvider() {
-this.login = "anonymous";
+    public DefaultClientAuthorizationProvider(final String login,
+                                              final String ticket,
+                                              final String sessionId,
+                                              final String userAgent) {
+
+        this.login = login;
+        this.sessionId = sessionId;
+        this.ticket = ticket;
+        this.userAgent = userAgent;
     }
 
-    @Override
+
     void handleAuthorization(final ChannelHandlerContext ctx) {
 
         LOGGER.debug("[{}] Calling authorize on authorization provider", this.session.getTransportName());
@@ -64,10 +71,11 @@ this.login = "anonymous";
                             .subscribe();
     }
 
+
     void processAuthorizationMessage(final ChannelHandlerContext ctx,
                                      final ProtocolMessage protocolMessage) {
 
-        if (protocolMessage instanceof OkResponseMessage && this.haloResponseMessage != null) {
+        if (protocolMessage instanceof OkResponseMessage) {
             LOGGER.debug(
                 "[{}] Received AUTHORIZED notification from the authorization provider. SessionId [{}], userName [{}]",
                 this.session.getTransportName(),
@@ -89,53 +97,18 @@ this.login = "anonymous";
 
 
         } else if (protocolMessage instanceof HaloResponseMessage) {
-            this.haloResponseMessage = (HaloResponseMessage) protocolMessage;
-
-            this.ticket = this.haloResponseMessage.getChallenge();
-            this.sessionId = this.haloResponseMessage.getSessionId();
-
-
             final LoginRequestMessage loginRequestMessage = new LoginRequestMessage();
             loginRequestMessage.setUsername(this.login);
             loginRequestMessage.setTicket(this.ticket);
             loginRequestMessage.setSessionId(this.sessionId);
-            loginRequestMessage.setMode(Integer.MIN_VALUE);
+
             DefaultChannelWriter.writeMessage(this.session,
                                               this.session.getClientConnector()
-                                                                .getPrimaryChannel(),
+                                                          .getPrimaryChannel(),
                                               loginRequestMessage)
                                 .subscribe();
-        }else if (this.haloResponseMessage == null) {
-            LOGGER.error("[{}] No HALO RESPONSE MESSAGE received",
-                         this.session.getTransportName());
-            ctx.fireUserEventTriggered(AuthorizationCompletionEvent.failed(new Exception("No halo response message")));
-
         }
     }
-
-    @Override
-    public void setUserAgent(final String userAgent) {
-
-        this.userAgent = userAgent;
-    }
-
-    @Override
-    public void cleanUp() {
-        this.haloResponseMessage = null;
-    }
-
-    @Override
-    public void setChildConnectionDisabled(final boolean childConnectionDisabled) {
-
-        this.childConnectionDisabled = childConnectionDisabled;
-    }
-
-    @Override
-    public void setDroppableMessageServerTTL(final long droppableMessageServerTTL) {
-
-        this.droppableMessageServerTTL = droppableMessageServerTTL;
-    }
-
     @Override
     public void setTransportClientSession(final TransportClientSession session) {
 
@@ -155,14 +128,42 @@ this.login = "anonymous";
     }
 
     @Override
+    public void setLogin(final String username) {
+
+        this.login = username;
+    }
+
+
+    @Override
+    public void setChildConnectionDisabled(final boolean childConnectionDisabled) {
+
+        this.childConnectionDisabled = childConnectionDisabled;
+    }
+
+    @Override
+    public void setDroppableMessageServerTTL(final long droppableMessageServerTTL) {
+
+        this.droppableMessageServerTTL = droppableMessageServerTTL;
+    }
+
+
+    @Override
+    public void setUserAgent(final String userAgent) {
+
+        this.userAgent = userAgent;
+    }
+
+    @Override
+    public void cleanUp() {
+
+
+    }
+
+    @Override
     public void setSessionName(final String sessionName) {
 
         this.sessionName = sessionName;
     }
-
-    @Override
-    public void setLogin(final String username) {
-
-        this.username = username;
-    }
 }
+
+

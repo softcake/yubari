@@ -61,8 +61,8 @@ public class InstrumentManager implements ClientListener {
 
     public InstrumentManager(final ITransportClient transportClient) {
 
-        this.subscribedInstruments = new TreeSet(Instrument.COMPARATOR);
-        this.fullDepthSubscribedInstruments = new TreeSet(Instrument.COMPARATOR);
+        this.subscribedInstruments = new TreeSet<>(Instrument.COMPARATOR);
+        this.fullDepthSubscribedInstruments = new TreeSet<>(Instrument.COMPARATOR);
 
 
         this.lastSubscriptionTimestamp = new AtomicLong(-9223372036854775808L);
@@ -86,8 +86,8 @@ public class InstrumentManager implements ClientListener {
 
     public InstrumentManager() {
 
-        this.subscribedInstruments = new TreeSet(Instrument.COMPARATOR);
-        this.fullDepthSubscribedInstruments = new TreeSet(Instrument.COMPARATOR);
+        this.subscribedInstruments = new TreeSet<>(Instrument.COMPARATOR);
+        this.fullDepthSubscribedInstruments = new TreeSet<>(Instrument.COMPARATOR);
         this.lastSubscriptionTimestamp = new AtomicLong(-9223372036854775808L);
     }
 
@@ -218,7 +218,7 @@ public class InstrumentManager implements ClientListener {
                                                      final boolean subscribeToFullDepth,
                                                      final boolean add) {
 
-        final Set<Instrument> instruments = new HashSet(instrumentsToSubscribe);
+        final Set<Instrument> instruments = new HashSet<>(instrumentsToSubscribe);
         final Set<String> quotes;
         if (!subscribeToFullDepth) {
             instruments.removeAll(this.getSubscribedInstruments());
@@ -273,11 +273,11 @@ public class InstrumentManager implements ClientListener {
             req.setInstruments(quotes);
             req.setSubscribeOnSplits(true);
             if (subscribeToFullDepth && !add) {
-                final Map<String, Boolean> lastTicksConfig = new HashMap();
-                final Iterator var16 = quotes.iterator();
+                final Map<String, Boolean> lastTicksConfig = new HashMap<>();
+                final Iterator<String> var16 = quotes.iterator();
 
                 while (var16.hasNext()) {
-                    final String instrumentName = (String) var16.next();
+                    final String instrumentName = var16.next();
                     lastTicksConfig.put(instrumentName, false);
                 }
 
@@ -294,12 +294,12 @@ public class InstrumentManager implements ClientListener {
 
     private Single<ProtocolMessage> performUnsubscribe(final Set<Instrument> instrumentsToUnsubscribe) {
 
-        final Set<Instrument> instrmuentsToUnsubscribe = new HashSet();
+        final Set<Instrument> instrmuentsToUnsubscribe = new HashSet<>();
         final Set<Instrument> subscribedInstruments = this.getSubscribedInstruments();
-        final Iterator var4 = instrumentsToUnsubscribe.iterator();
+        final Iterator<Instrument> var4 = instrumentsToUnsubscribe.iterator();
 
         while (var4.hasNext()) {
-            final Instrument instrument = (Instrument) var4.next();
+            final Instrument instrument = var4.next();
             if (subscribedInstruments.contains(instrument)) {
                 instrmuentsToUnsubscribe.add(instrument);
             }
@@ -379,12 +379,12 @@ public class InstrumentManager implements ClientListener {
         }
 
         final Map<Instrument, InstrumentSubscriptionResult> result = new HashMap<>();
-        final Iterator var9 = subscriptionResult.keySet()
-                                                .iterator();
+        final Iterator<String> var9 = subscriptionResult.keySet()
+                                                            .iterator();
 
         while (true) {
             while (var9.hasNext()) {
-                final String quote = (String) var9.next();
+                final String quote = var9.next();
                 final Instrument instrument = Instrument.fromString(quote);
                 if (instrument != null) {
                     final SubscribeResult subscribeResult = subscriptionResult.get(quote);

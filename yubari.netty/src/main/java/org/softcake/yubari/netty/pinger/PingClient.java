@@ -121,9 +121,11 @@ public class PingClient {
                                                                                e -> disconnect(DisconnectReason
                                                                                                    .CERTIFICATE_EXCEPTION,
                                                                                                e.getException()),
-                                                                               pingTarget.getAddress().getHostName())
+                                                                               pingTarget.getAddress()
+                                                                                         .getHostName())
                                                                   .createSSLEngine();
-                        final Set<String> sslProtocols = PingClient.this.pingTarget.getEnabledSslProtocols().isEmpty()
+                        final Set<String> sslProtocols = PingClient.this.pingTarget.getEnabledSslProtocols()
+                                                                                   .isEmpty()
                                                          ? TransportClientBuilder.DEFAULT_SSL_PROTOCOLS
                                                          : PingClient.this.pingTarget.getEnabledSslProtocols();
                         engine.setUseClientMode(true);
@@ -131,7 +133,7 @@ public class PingClient {
                         final List<String>
                             enabledCipherSuites
                             = new ArrayList<>(Arrays.asList(engine.getSupportedCipherSuites()));
-                        final Iterator iterator = enabledCipherSuites.iterator();
+                        final Iterator<String> iterator = enabledCipherSuites.iterator();
 
                         label36:
                         while (true) {
@@ -144,12 +146,17 @@ public class PingClient {
                                     break label36;
                                 }
 
-                                cipher = (String) iterator.next();
-                            } while (!cipher.toUpperCase().contains("EXPORT")
-                                     && !cipher.toUpperCase().contains("NULL")
-                                     && !cipher.toUpperCase().contains("ANON")
-                                     && !cipher.toUpperCase().contains("_DES_")
-                                     && !cipher.toUpperCase().contains("MD5"));
+                                cipher = iterator.next();
+                            } while (!cipher.toUpperCase()
+                                            .contains("EXPORT")
+                                     && !cipher.toUpperCase()
+                                               .contains("NULL")
+                                     && !cipher.toUpperCase()
+                                               .contains("ANON")
+                                     && !cipher.toUpperCase()
+                                               .contains("_DES_")
+                                     && !cipher.toUpperCase()
+                                               .contains("MD5"));
 
                             iterator.remove();
                         }

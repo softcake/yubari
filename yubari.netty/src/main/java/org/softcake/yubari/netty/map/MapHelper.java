@@ -26,24 +26,24 @@ public class MapHelper {
     }
 
     public static <K, V> HashMap<K, V> create() {
-        return new HashMap();
+        return new HashMap<>();
     }
 
     public static <K, V> HashMap<K, V> create(K k1, V v1) {
-        HashMap<K, V> map = new HashMap();
+        HashMap<K, V> map = new HashMap<>();
         map.put(k1, v1);
         return map;
     }
 
     public static <K, V> HashMap<K, V> create(K k1, V v1, K k2, V v2) {
-        HashMap<K, V> map = new HashMap();
+        HashMap<K, V> map = new HashMap<>();
         map.put(k1, v1);
         map.put(k2, v2);
         return map;
     }
 
     public static <K, V> HashMap<K, V> create(K k1, V v1, K k2, V v2, K k3, V v3) {
-        HashMap<K, V> map = new HashMap();
+        HashMap<K, V> map = new HashMap<>();
         map.put(k1, v1);
         map.put(k2, v2);
         map.put(k3, v3);
@@ -51,7 +51,7 @@ public class MapHelper {
     }
 
     public static <K, V> HashMap<K, V> create(K k1, V v1, K k2, V v2, K k3, V v3, K k4, V v4) {
-        HashMap<K, V> map = new HashMap();
+        HashMap<K, V> map = new HashMap<>();
         map.put(k1, v1);
         map.put(k2, v2);
         map.put(k3, v3);
@@ -60,7 +60,7 @@ public class MapHelper {
     }
 
     public static <K, V> HashMap<K, V> create(K k1, V v1, K k2, V v2, K k3, V v3, K k4, V v4, K k5, V v5) {
-        HashMap<K, V> map = new HashMap();
+        HashMap<K, V> map = new HashMap<>();
         map.put(k1, v1);
         map.put(k2, v2);
         map.put(k3, v3);
@@ -70,7 +70,7 @@ public class MapHelper {
     }
 
     public static <K, V> MapHelper.Builder<K, V> builder() {
-        return new MapHelper.Builder();
+        return new MapHelper.Builder<>();
     }
 
     public static <K, V> V getAndPutIfAbsent(Map<K, V> map, K key, MapHelper.IValueCreator<V> creator) {
@@ -88,7 +88,7 @@ public class MapHelper {
     }
 
     public static class Builder<K, V> {
-        final HashMap<K, V> map = new HashMap();
+        final HashMap<K, V> map = new HashMap<>();
 
         public Builder() {
         }
@@ -104,10 +104,12 @@ public class MapHelper {
         }
 
         public MapHelper.Builder<K, V> putAll(Map<? extends K, ? extends V> map) {
-            Iterator var2 = map.entrySet().iterator();
+
+            final Iterator<? extends Entry<? extends K, ? extends V>> var2 = map.entrySet()
+                                                                                    .iterator();
 
             while(var2.hasNext()) {
-                Entry<? extends K, ? extends V> entry = (Entry)var2.next();
+                Entry<? extends K, ? extends V> entry = var2.next();
                 this.put(entry.getKey(), entry.getValue());
             }
 

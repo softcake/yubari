@@ -29,7 +29,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
-public class StateMachine<T, E extends Enum, C extends Enum> implements Consumer<E> {
+public class StateMachine<T, E extends Enum<E>, C extends Enum<C>> implements Consumer<E> {
     private static final Logger LOGGER = LoggerFactory.getLogger(StateMachine.class);
     private final T context;
     private final Executor executor;

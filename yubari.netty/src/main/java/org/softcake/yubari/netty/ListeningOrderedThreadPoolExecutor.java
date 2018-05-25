@@ -118,36 +118,36 @@ public class ListeningOrderedThreadPoolExecutor extends OrderedThreadPoolExecuto
     @Override
     public ListenableFuture<?> submit(final Runnable task) {
 
-        return (ListenableFuture) super.submit(task);
+        return (ListenableFuture<?>) super.submit(task);
     }
 
     @Override
     public <T> ListenableFuture<T> submit(final Runnable task, final T result) {
 
-        return (ListenableFuture) super.submit(task, result);
+        return (ListenableFuture<T>) super.submit(task, result);
     }
 
     @Override
     public <T> ListenableFuture<T> submit(final Callable<T> task) {
 
-        return (ListenableFuture) super.submit(task);
+        return (ListenableFuture<T>) super.submit(task);
     }
 
     @Override
     protected final <T> RunnableFuture<T> newTaskFor(final Runnable runnable, final T value) {
 
-        return (RunnableFuture) (runnable instanceof OrderedRunnable
-                                 ? new ListeningOrderedThreadPoolExecutor.ListenableOrderedFutureTask((OrderedRunnable) runnable,
+        return runnable instanceof OrderedRunnable
+                                 ? new ListenableOrderedFutureTask<>((OrderedRunnable) runnable,
                                                                                                       value)
-                                 : ListenableFutureTask.create(runnable, value));
+                                 : ListenableFutureTask.create(runnable, value);
     }
 
     @Override
     protected final <T> RunnableFuture<T> newTaskFor(final Callable<T> callable) {
 
-        return (RunnableFuture) (callable instanceof OrderedCallable
-                                 ? new ListeningOrderedThreadPoolExecutor.ListenableOrderedFutureTask((OrderedCallable) callable)
-                                 : ListenableFutureTask.create(callable));
+        return callable instanceof OrderedCallable
+                                 ? new ListenableOrderedFutureTask<>((OrderedCallable<T>) callable)
+                                 : ListenableFutureTask.create(callable);
     }
 
     protected static class ListenableOrderedFutureTask<T> extends OrderedFutureTask<T>

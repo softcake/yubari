@@ -17,6 +17,14 @@
 package org.softcake.yubari.netty.client;
 
 
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_CONNECT_TIMEOUT_MILLIS;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_MESSAGE_SIZE_ESTIMATOR;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_SO_REUSEADDR;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_SO_SO_LINGER;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_TCP_NODELAY;
+import static org.softcake.yubari.netty.client.TransportClientBuilder.DEFAULT_CHANNEL_OPTION_WRITE_BUFFER_WATER_MARK;
+
+import org.softcake.yubari.netty.AuthorizationProviderListener;
 import org.softcake.yubari.netty.IClientEvent;
 import org.softcake.yubari.netty.ProtocolEncoderDecoder;
 import org.softcake.yubari.netty.ProtocolVersionClientNegotiatorHandler;
@@ -44,7 +52,9 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.DefaultMessageSizeEstimator;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -307,8 +317,8 @@ public class TransportClientSession implements IClientEvent {
         this.syncRequestProcessingPoolTerminationTimeUnitCount = syncRequestProcessingPoolTerminationTimeUnitCount;
         this.syncRequestProcessingPoolTerminationTimeUnit = syncRequestProcessingPoolTerminationTimeUnit;
         this.enabledSslProtocols = enabledSslProtocols;
-        System.setProperty("io.netty.noUnsafe", "false");
-        System.setProperty("io.netty.tryReflectionSetAccessible", "true");
+        System.setProperty("io.netty.noUnsafe", Boolean.TRUE.toString());
+        System.setProperty("io.netty.tryReflectionSetAccessible", "false");
         System.setProperty("io.netty.leakDetectionLevel", "advanced");
 
     }
@@ -340,18 +350,26 @@ public class TransportClientSession implements IClientEvent {
         this.channelBootstrap = new Bootstrap();
         this.channelBootstrap.group(nettyEventLoopGroup);
         this.channelBootstrap.channel(NioSocketChannel.class);
-        this.channelOptions.forEach(new BiConsumer<ChannelOption<?>, Object>() {
-            @Override
-            public void accept(final ChannelOption<?> key, final Object value) {
 
-                TransportClientSession.this.channelBootstrap.option((ChannelOption) key, value);
-            }
-        });
+        this.channelBootstrap.option(ChannelOption.SO_REUSEADDR, DEFAULT_CHANNEL_OPTION_SO_REUSEADDR);
+        this.channelBootstrap.option(ChannelOption.SO_REUSEADDR, DEFAULT_CHANNEL_OPTION_SO_REUSEADDR);
+        this.channelBootstrap.option(ChannelOption.TCP_NODELAY, DEFAULT_CHANNEL_OPTION_TCP_NODELAY);
+        this.channelBootstrap.option(ChannelOption.SO_LINGER, DEFAULT_CHANNEL_OPTION_SO_SO_LINGER);
+        this.channelBootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, DEFAULT_CHANNEL_OPTION_CONNECT_TIMEOUT_MILLIS);
+        this.channelBootstrap.option(ChannelOption.WRITE_BUFFER_WATER_MARK,DEFAULT_CHANNEL_OPTION_WRITE_BUFFER_WATER_MARK);
+        this.channelBootstrap.option(ChannelOption.MESSAGE_SIZE_ESTIMATOR, DEFAULT_CHANNEL_OPTION_MESSAGE_SIZE_ESTIMATOR);
+
+
+
+
+
+
         this.protocolHandler = new ClientProtocolHandler(this);
         this.clientConnector = new ClientConnector(this.address, this.channelBootstrap, this);
 
         this.protocolHandler.setClientConnector(this.clientConnector);
         this.heartbeat = new Heartbeat(this);
+        this.authorizationProvider.setTransportClientSession(this);
         this.synchRequestProcessor = new SynchRequestProcessor(this,
                                                                this.protocolHandler,
                                                                this.scheduledExecutorService);
@@ -386,11 +404,12 @@ public class TransportClientSession implements IClientEvent {
                 pipeline.addLast("frame_handler", new LengthFieldBasedFrameDecoder(maxMessageSizeBytes, 0, 4, 0, 4, true));
                 pipeline.addLast("frame_encoder", new LengthFieldPrepender(4, false));
                 pipeline.addLast("protocol_encoder_decoder", protocolEncoderDecoder);
+                pipeline.addLast("authorization_provider", (ChannelHandler) authorizationProvider);
                 pipeline.addLast("connector_handler", clientConnector);
+
                 pipeline.addLast("heartbeat", heartbeat);
                 pipeline.addLast("traffic_blocker", channelTrafficBlocker);
                 pipeline.addLast("sync_request_handler", synchRequestProcessor);
-
                 pipeline.addLast("handler", protocolHandler);
             }
         });
@@ -516,7 +535,7 @@ public class TransportClientSession implements IClientEvent {
     }
 
 
-    Completable sendMessageAsync(final ProtocolMessage message) {
+    public Completable sendMessageAsync(final ProtocolMessage message) {
 
         if (this.isOnline()) {
             return this.protocolHandler.writeMessage(this.clientConnector.getPrimaryChannel(), message);
@@ -736,7 +755,7 @@ public class TransportClientSession implements IClientEvent {
         return this.serverSessionId;
     }
 
-    void setServerSessionId(final String serverSessionId) {
+    public void setServerSessionId(final String serverSessionId) {
 
         this.serverSessionId = serverSessionId;
     }

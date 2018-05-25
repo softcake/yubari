@@ -94,7 +94,7 @@ subprojects { subProject ->
         // See: https://docs.oracle.com/javase/9/tools/javac.htm#JSWOR627
 
         compileJava.options.compilerArgs += [
-                '-Xlint:cast',
+            /*    '-Xlint:cast',
                 '-Xlint:classfile',
                 '-Xlint:deprecation',
                 '-Xlint:dep-ann',
@@ -112,13 +112,13 @@ subprojects { subProject ->
                 '-Xlint:unchecked',
                 '-Xlint:varargs',
                 '-Xlint:-options',
-                '-Werror'
+                '-Werror'*/
         ]
 
         // See: https://docs.oracle.com/javase/9/tools/javac.htm#JSWOR627
 
         compileTestJava.options.compilerArgs += [
-                '-Xlint:cast',
+              /*  '-Xlint:cast',
                 '-Xlint:classfile',
                 '-Xlint:deprecation',
                 '-Xlint:dep-ann',
@@ -135,7 +135,7 @@ subprojects { subProject ->
                 '-Xlint:unchecked',
                 '-Xlint:varargs',
                 '-Xlint:-options',
-                '-Xlint:-overrides'
+                '-Xlint:-overrides'*/
         ]
 
         compileTestJava {

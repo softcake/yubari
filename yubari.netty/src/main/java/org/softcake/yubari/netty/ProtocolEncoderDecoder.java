@@ -55,6 +55,7 @@ import java.util.Map;
 
 
 @Sharable
+@SuppressWarnings("unchecked")
 public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
     private static final int DEFAULT_PROTOCOL_VERSION = 4;
@@ -295,7 +296,7 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
         }
 
     }
-
+    @SuppressWarnings("unchecked")
     private void processRawData(final ChannelHandlerContext ctx,
                                 final DataOutputStream dataOutputStream,
                                 final RawData rawData,
@@ -311,8 +312,8 @@ public class ProtocolEncoderDecoder extends ChannelDuplexHandler {
 
             for (final Map.Entry<Integer, Class> entry : deferredClassIdPositions.entrySet()) {
                 final ClassInfo<Short> classInfo = sessionProtocolEncoder.getDictionary()
-                                                                         .getClassInfo(entry.getValue(),
-                                                                                       encodingContext);
+                                                                  .getClassInfo(entry.getValue(),
+                                                                                encodingContext);
                 if (classInfo == null) {
                     throw new IllegalArgumentException(String.format("Unable to find %s in dictionary",
                                                                      entry.getValue()));

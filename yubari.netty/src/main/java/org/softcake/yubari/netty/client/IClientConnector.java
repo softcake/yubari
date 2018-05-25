@@ -50,9 +50,6 @@ ClientConnector.ClientState getClientState();
 
     Observable<ClientConnector.ClientState> observeClientState();
 
-    void primaryChannelDisconnected();
-
-    void childChannelDisconnected();
 
     void setPrimarySocketAuthAcceptorMessage(PrimarySocketAuthAcceptorMessage requestMessage);
 

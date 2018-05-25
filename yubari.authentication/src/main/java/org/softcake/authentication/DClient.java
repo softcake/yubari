@@ -21,7 +21,7 @@ package org.softcake.authentication;
 
 import org.softcake.yubari.connect.authorization.AuthorizationPropertiesFactory;
 import org.softcake.yubari.netty.SessionHandler;
-import org.softcake.yubari.netty.authorization.GreedClientAuthorizationProvider;
+import org.softcake.yubari.netty.authorization.DefaultClientAuthorizationProvider;
 import org.softcake.yubari.netty.client.ITransportClient;
 import org.softcake.yubari.netty.client.TransportClient;
 import org.softcake.yubari.netty.client.TransportClientBuilder;
@@ -188,7 +188,7 @@ public class DClient implements ClientListener {
     private DClient.ClientGUIListener clientGUIListener;
     //private volatile ISystemListenerExtended systemListener;
     private TransportClient transportClient;
-    private GreedClientAuthorizationProvider authProvider;
+    private DefaultClientAuthorizationProvider authProvider;
     private boolean initialized = false;
     private boolean live;
     private String accountName;
@@ -725,7 +725,7 @@ public class DClient implements ClientListener {
                     String userAgent = CommonContext.getUserAgent("DDS3_JFOREXSDK");
                     LOGGER.debug("UserAgent: " + userAgent);
                     if (this.authProvider == null) {
-                        this.authProvider = new GreedClientAuthorizationProvider(username, ticket, this.sessionID);
+                        this.authProvider = new DefaultClientAuthorizationProvider(username, ticket, this.sessionID, userAgent);
                     } else {
                         this.authProvider.setSessionId(this.sessionID);
                         this.authProvider.setTicket(ticket);

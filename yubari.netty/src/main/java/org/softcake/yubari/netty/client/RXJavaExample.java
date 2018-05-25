@@ -60,6 +60,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * @author René Neubert
  */
+@SuppressWarnings("unchecked")
 public class RXJavaExample {
 
     public static final int DEFAULT_EVENT_POOL_SIZE = 3;//Math.max(Runtime.getRuntime().availableProcessors() / 2, 10);
@@ -121,7 +122,7 @@ public class RXJavaExample {
 
         Observable.just(words)
                   .subscribe(word->System.out.println(word));
-        Observable.fromArray(words)
+        Observable.<List<String>>fromArray(words)
                   .zipWith(Observable.range(1, Integer.MAX_VALUE), new BiFunction<List<String>, Integer, String>() {
                       @Override
                       public String apply(final List<String> string, final Integer count) throws Exception {
