@@ -16,6 +16,7 @@
 
 package org.softcake.yubari.netty.client.processors;
 
+import org.softcake.yubari.netty.DefaultChannelWriter;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.stream.BlockingBinaryStream;
 import org.softcake.yubari.netty.stream.StreamListener;
@@ -25,8 +26,9 @@ import com.dukascopy.dds4.transport.msg.system.BinaryPartMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamHeaderMessage;
 import com.dukascopy.dds4.transport.msg.system.StreamingStatus;
 import com.dukascopy.dds4.transport.msg.types.StreamState;
-import com.google.common.util.concurrent.ListeningExecutorService;
 import io.netty.channel.ChannelHandlerContext;
+import io.reactivex.Completable;
+import io.reactivex.Scheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,11 +45,11 @@ public class StreamProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(StreamProcessor.class);
     private final Map<String, BlockingBinaryStream> streams = new HashMap<>();
     private final TransportClientSession clientSession;
-    private ListeningExecutorService streamProcessingExecutor;
+    private final Scheduler streamProcessingExecutor;
 
 
     public StreamProcessor(final TransportClientSession clientSession,
-                           final ListeningExecutorService streamProcessingExecutor) {
+                           final Scheduler streamProcessingExecutor) {
 
         this.clientSession = clientSession;
         this.streamProcessingExecutor = streamProcessingExecutor;
@@ -56,73 +58,79 @@ public class StreamProcessor {
 
     private void createStream(final ChannelHandlerContext ctx,
                               final StreamHeaderMessage stream) {
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                final StreamListener streamListener = clientSession.getStreamListener();
+                if (streamListener != null) {
+                    final BlockingBinaryStream bbs = new BlockingBinaryStream(stream.getStreamId(),
+                                                                              ctx,
+                                                                              clientSession.getStreamBufferSize(),
+                                                                              clientSession.getStreamChunkProcessingTimeout());
+                    synchronized (streams) {
+                        streams.put(stream.getStreamId(), bbs);
+                    }
 
-        this.streamProcessingExecutor.submit(() -> {
-
-            final StreamListener streamListener = clientSession.getStreamListener();
-            if (streamListener != null) {
-                final BlockingBinaryStream bbs = new BlockingBinaryStream(stream.getStreamId(),
-                                                                          ctx,
-                                                                          clientSession.getStreamBufferSize(),
-                                                                          clientSession
-                                                                              .getStreamChunkProcessingTimeout());
-                synchronized (streams) {
-                    streams.put(stream.getStreamId(), bbs);
+                    streamListener.handleStream(bbs);
                 }
-
-                streamListener.handleStream(bbs);
             }
-        });
+        };
+        Completable.fromRunnable(runnable).subscribe();
     }
 
     private void streamPartReceived(final ChannelHandlerContext ctx,
                                     final BinaryPartMessage binaryPart) {
 
-        this.streamProcessingExecutor.submit(() -> {
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
 
-            final BlockingBinaryStream stream = getStream(binaryPart.getStreamId());
-            if (stream == null) {
-                final StreamingStatus ss = new StreamingStatus();
-                ss.setStreamId(binaryPart.getStreamId());
-                ss.setState(StreamState.STATE_ERROR);
-                clientSession.getProtocolHandler()
-                             .writeMessage(ctx.channel(), ss)
-                             .subscribe();
-            } else {
-                boolean terminated = false;
+                final BlockingBinaryStream stream = getStream(binaryPart.getStreamId());
+                if (stream == null) {
+                    final StreamingStatus streamingStatus = new StreamingStatus();
+                    streamingStatus.setStreamId(binaryPart.getStreamId());
+                    streamingStatus.setState(StreamState.STATE_ERROR);
+                    DefaultChannelWriter.writeMessage(clientSession, ctx.channel(), streamingStatus)
+                                        .subscribe();
+                } else {
+                    boolean terminated = false;
 
-                try {
-                    stream.binaryPartReceived(binaryPart);
-                } catch (final IOException var6) {
-                    LOGGER.error(var6.getMessage(), var6);
+                    try {
+                        stream.binaryPartReceived(binaryPart);
+                    } catch (final IOException e) {
+                        LOGGER.error("[{}] ", clientSession.getTransportName(), e);
 
-                    terminated = true;
-                    stream.ioTerminate(var6.getMessage());
-                }
+                        terminated = true;
+                        stream.ioTerminate(e.getMessage());
+                    }
 
-                if (binaryPart.isEof() || terminated) {
-                    synchronized (streams) {
-                        streams.remove(binaryPart.getStreamId());
+                    if (binaryPart.isEof() || terminated) {
+                        synchronized (streams) {
+                            streams.remove(binaryPart.getStreamId());
+                        }
                     }
                 }
             }
+        };
+        Completable.fromRunnable(runnable).subscribe();
 
-        });
     }
 
     private void streamStatusReceived(final StreamingStatus status) {
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
 
-        this.streamProcessingExecutor.submit(() -> {
-
-            final BlockingBinaryStream bbs = getStream(status.getStreamId());
-            if (bbs != null) {
-                safeTerminate(bbs, "Server error " + status.getState());
-                synchronized (streams) {
-                    streams.remove(bbs.getStreamId());
+                final BlockingBinaryStream bbs = getStream(status.getStreamId());
+                if (bbs != null) {
+                    safeTerminate(bbs, "Server error " + status.getState());
+                    synchronized (streams) {
+                        streams.remove(bbs.getStreamId());
+                    }
                 }
             }
-
-        });
+        };
+        Completable.fromRunnable(runnable).subscribe();
     }
 
     public void process(final ChannelHandlerContext ctx,

@@ -18,9 +18,13 @@ package org.softcake.yubari.netty.mina;
 
 
 import org.softcake.yubari.netty.ListeningOrderedThreadPoolExecutor;
+import org.softcake.yubari.netty.client.processors.TransportThreadFactory;
 
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.reactivex.Scheduler;
+import io.reactivex.plugins.RxJavaPlugins;
+import io.reactivex.schedulers.Schedulers;
 
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -71,6 +75,45 @@ public class TransportHelper {
                               threadBasicName,
                               prestartAllCoreThreads);
     }
+
+
+    /**
+     * Scheduler that creates and caches a set of thread pools and reuses them if possible.
+     */
+    public static Scheduler createIoScheduler(final String threadNamePrefix){
+
+        final TransportThreadFactory threadFactory = new TransportThreadFactory(threadNamePrefix);
+      return RxJavaPlugins.createIoScheduler(threadFactory);
+    }
+    /**
+     *
+     *
+     *  * A scheduler with a shared, single threaded underlying ScheduledExecutorService.
+     *  * @since 2.0
+     *  *
+     * Create an instance of the default {@link Scheduler} used for {@link Schedulers#single()}
+     * except using {@code threadFactory} for thread creation.
+     * <p>History: 2.0.5 - experimental
+     * @param threadNamePrefix thread factory to use for creating worker threads. Note that this takes precedence over any
+     *                      system properties for configuring new thread creation. Cannot be null.
+     * @return the created Scheduler instance
+     * @since 2.1
+     */
+    public static Scheduler createSingleScheduler(final String threadNamePrefix){
+
+        final TransportThreadFactory threadFactory = new TransportThreadFactory(threadNamePrefix);
+        return RxJavaPlugins.createSingleScheduler(threadFactory);
+    }
+    /**
+     * Create a scheduler with pool size equal to the available processor
+     * count and using least-recent worker selection policy.
+     */
+    public static Scheduler createComputationScheduler(final String threadNamePrefix){
+
+        final TransportThreadFactory threadFactory = new TransportThreadFactory(threadNamePrefix);
+        return RxJavaPlugins.createComputationScheduler(threadFactory);
+    }
+
 
     private static ListeningExecutorService createExecutor(final int poolSize,
                                                            final int maxPoolSize,

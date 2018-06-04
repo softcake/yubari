@@ -103,6 +103,7 @@ public class BlockingBinaryStream extends InputStream {
     public synchronized void binaryPartReceived(final BinaryPartMessage msg) throws IOException {
 
         final byte[] received = msg.getData();
+
         if (received.length > 0) {
             this.receive(received, 0, received.length);
         }
@@ -113,10 +114,13 @@ public class BlockingBinaryStream extends InputStream {
 
         if (this.buffer.length - this.available() > this.buffer.length - received.length * 2) {
             this.ackDelayed = false;
+
             final StreamingStatus ss = new StreamingStatus();
             ss.setStreamId(msg.getStreamId());
             ss.setState(StreamState.STATE_OK);
+
             this.channelHandlerContext.writeAndFlush(ss);
+
         } else {
             this.ackDelayed = true;
         }
@@ -129,18 +133,24 @@ public class BlockingBinaryStream extends InputStream {
         int bytesToTransfer = len;
 
         while (bytesToTransfer > 0) {
+
             if (this.in == this.out) {
                 this.awaitSpace();
             }
 
             int nextTransferAmount = 0;
             if (this.out < this.in) {
+
                 nextTransferAmount = this.buffer.length - this.in;
+
             } else if (this.in < this.out) {
+
                 if (this.in == -1) {
                     this.in = this.out = 0;
                     nextTransferAmount = this.buffer.length - this.in;
+
                 } else {
+
                     nextTransferAmount = this.out - this.in;
                 }
             }
@@ -153,8 +163,10 @@ public class BlockingBinaryStream extends InputStream {
 
             System.arraycopy(b, off, this.buffer, this.in, nextTransferAmount);
             bytesToTransfer -= nextTransferAmount;
+
             off += nextTransferAmount;
             this.in += nextTransferAmount;
+
             if (this.in >= this.buffer.length) {
                 this.in = 0;
             }
@@ -218,6 +230,7 @@ public class BlockingBinaryStream extends InputStream {
 
         this.checkStartTransfer();
         this.checkDelayedAck();
+
         if (this.closedByReader) {
             throw new IOException("Stream closed");
         }
@@ -228,6 +241,7 @@ public class BlockingBinaryStream extends InputStream {
         int timeoutThisRead = this.ioTimeout;
 
         while (this.in < 0) {
+
             if (this.closedByWriter) {
                 this.checkDelayedAck();
                 return -1;
@@ -248,7 +262,9 @@ public class BlockingBinaryStream extends InputStream {
         }
 
         final int ret = this.buffer[this.out] & 255;
+
         this.out++;
+
         if (this.out >= this.buffer.length) {
             this.out = 0;
         }
@@ -339,12 +355,9 @@ public class BlockingBinaryStream extends InputStream {
         int i = 1;
 
         while (this.in >= 0 && len > 1) {
-            int available;
-
-            available = (this.in > this.out)
-                        ? Math.min(this.buffer.length - this.out, this.in - this.out)
-                        : (this.buffer.length - this.out);
-
+            int available = (this.in > this.out)
+                            ? Math.min(this.buffer.length - this.out, this.in - this.out)
+                            : (this.buffer.length - this.out);
 
             if (available > len - 1) {
                 available = len - 1;
@@ -354,6 +367,7 @@ public class BlockingBinaryStream extends InputStream {
             this.out += available;
             i += available;
             len -= available;
+
             if (this.out >= this.buffer.length) {
                 this.out = 0;
             }
@@ -372,10 +386,12 @@ public class BlockingBinaryStream extends InputStream {
 
         if (!this.streamHandled) {
             this.streamHandled = true;
-            final StreamingStatus ss = new StreamingStatus();
-            ss.setStreamId(this.streamId);
-            ss.setState(StreamState.STATE_OK);
-            this.channelHandlerContext.writeAndFlush(ss);
+
+            final StreamingStatus status = new StreamingStatus();
+            status.setStreamId(this.streamId);
+            status.setState(StreamState.STATE_OK);
+
+            this.channelHandlerContext.writeAndFlush(status);
         }
 
     }
@@ -384,10 +400,12 @@ public class BlockingBinaryStream extends InputStream {
 
         if (this.ackDelayed && this.buffer.length - this.available() > 0) {
             this.ackDelayed = false;
-            final StreamingStatus ss = new StreamingStatus();
-            ss.setStreamId(this.streamId);
-            ss.setState(StreamState.STATE_OK);
-            this.channelHandlerContext.writeAndFlush(ss);
+
+            final StreamingStatus status = new StreamingStatus();
+            status.setStreamId(this.streamId);
+            status.setState(StreamState.STATE_OK);
+
+            this.channelHandlerContext.writeAndFlush(status);
         }
 
     }

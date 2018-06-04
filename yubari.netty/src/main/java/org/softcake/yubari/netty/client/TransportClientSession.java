@@ -439,14 +439,14 @@ public class TransportClientSession implements IClientEvent {
             }
         }
 
-        if (this.protocolHandler != null) {
+       /* if (this.protocolHandler != null) {
             this.protocolHandler.terminate();
         }
 
         if (this.scheduledExecutorService != null) {
             this.scheduledExecutorService.shutdownNow();
         }
-
+*/
     }
 
     boolean sendMessageNaive(final ProtocolMessage message) {

@@ -50,7 +50,7 @@ public class RxPublishExample {
     public static final int DEFAULT_CRITICAL_EVENT_QUEUE_SIZE = 50;
     public static final long DEFAULT_EVENT_EXECUTION_WARNING_DELAY = 100L;
     public static final long DEFAULT_EVENT_EXECUTION_ERROR_DELAY = 1000L;
-    private static final Logger LOGGER = getLogger(RXJavaExample.class);
+    private static final Logger LOGGER = getLogger(RxPublishExample.class);
     private static final List<Thread> eventExecutorThreadsForLogging = Collections.synchronizedList(new ArrayList<>());
     private static final int SHORT_MESSAGE_LENGTH = 100;
     private static final long LONGER_SLEEP_TIME = 50L;

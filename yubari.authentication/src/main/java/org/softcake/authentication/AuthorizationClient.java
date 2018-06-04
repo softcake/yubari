@@ -33,6 +33,7 @@ import static org.softcake.authentication.AuthorizationServerResponseCode.UNKNOW
 import static org.softcake.authentication.AuthorizationServerResponseCode.WRONG_AUTH_RESPONSE;
 
 import org.softcake.cherry.core.base.PreCheck;
+import org.softcake.ping.Ping;
 import org.softcake.yubari.netty.SessionHandler;
 import org.softcake.yubari.netty.mina.ApiServerAddress;
 import org.softcake.yubari.netty.mina.ServerAddress;
@@ -66,32 +67,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.StringTokenizer;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -234,12 +228,12 @@ public class AuthorizationClient {
             return apiServerAddress;
         }
 
-        LinkedHashMap<String, InetSocketAddress> addresses = new LinkedHashMap<>();
+
         List<ServerAddress> serverAddresses = new LinkedList<>();
         while (tokenizer.hasMoreTokens()) {
 
             String url = tokenizer.nextToken();
-            addresses.put(url, getInetSocketAddress(url));
+
 
             serverAddresses.add(getServerAddress(url));
         }
@@ -248,10 +242,9 @@ public class AuthorizationClient {
 
         ApiServerAddress apiServerAddress = new ApiServerAddress(bestServer, ticket);
 
-        BestApiServer server = getBestApiServer(addresses);
-
-        Long bestTime = server.getPingTime();
-        String bestURL = server.getUrlAsString();
+        Long bestTime = bestServer.getPingTime();
+        String bestURL = bestServer.toInetSocketAddress()
+                                   .toString();
 
         LOGGER.debug("Best api url [{}] with time [{}]", bestURL, bestTime);
 
@@ -274,68 +267,18 @@ public class AuthorizationClient {
      * @throws IOException
      * @throws InterruptedException
      */
-    private static BestApiServer getBestApiServer(Map<String, InetSocketAddress> addresses)
-        throws IOException, InterruptedException {
-
-        LinkedHashMap<Long, String> pingTimeLinkedMap = new LinkedHashMap<>();
-        Ping.ping(addresses).forEach(new BiConsumer<String, Long[]>() {
-            @Override
-            public void accept(final String s, final Long[] longs) {pingTimeLinkedMap.put(getBestTime(longs), s);}
-        });
-
-        Long bestTime = pingTimeLinkedMap.keySet().stream().min(Long::compareTo).orElse(Long.MAX_VALUE);
-
-        String bestURL = pingTimeLinkedMap.get(bestTime);
-        return new BestApiServer(bestURL, bestTime);
-
-    }
-
-    /**
-     * @param addresses
-     * @return
-     * @throws IOException
-     * @throws InterruptedException
-     */
     private static ServerAddress getBestApiServer(List<ServerAddress> addresses)
         throws IOException, InterruptedException {
 
-
-        final Optional<ServerAddress> min = Ping.ping2(addresses).stream().min(new Comparator<ServerAddress>() {
-            @Override
-            public int compare(final ServerAddress o1, final ServerAddress o2) {
-
-                return o1.getPingTime().compareTo(o2.getPingTime());
-            }
-        });
-        return min.get();
+        return addresses.stream()
+                        .map(serverAddress -> Ping.ping(serverAddress))
+                        .min((o1, o2) -> o1.getPingTime()
+                                           .compareTo(o2.getPingTime()))
+                        .get();
 
 
     }
 
-    /**
-     * @param url
-     * @return
-     */
-    private static InetSocketAddress getInetSocketAddress(final String url) {
-
-        String host;
-        int port;
-        int semicolonIndex = url.indexOf(':');
-        if (semicolonIndex != -1) {
-            host = url.substring(0, semicolonIndex);
-            if (semicolonIndex + 1 >= url.length()) {
-                LOGGER.warn("Port is not set, using default {}", SSL_PORT);
-                port = SSL_PORT;
-            } else {
-                port = Integer.parseInt(url.substring(semicolonIndex + 1));
-            }
-        } else {
-            LOGGER.warn("Port is not set, using default {}", SSL_PORT);
-            host = url;
-            port = SSL_PORT;
-        }
-        return new InetSocketAddress(host, port);
-    }
 
     /**
      * @param url
@@ -362,27 +305,11 @@ public class AuthorizationClient {
         return new ServerAddress(host, port);
     }
 
-    /**
-     * @param pingTimes
-     * @return
-     */
-    private static Long getBestTime(Long[] pingTimes) {
-
-        Long bestTime = 0L;
-        for (Long time : pingTimes) {
-            if (time < 0 || time == Long.MAX_VALUE) {
-                return Long.MAX_VALUE;
-            } else {
-                bestTime += time;
-            }
-        }
-        return bestTime / pingTimes.length;
-    }
-
     private static void addIPAndBestPing(long bestTime, String bestURL) {
 
         if (instance.ipInfoAlsMessageBean != null) {
-            instance.ipInfoAlsMessageBean.addParameter("PING_TIME", bestTime).addParameter("API_IP_ADDRESS", bestURL);
+            instance.ipInfoAlsMessageBean.addParameter("PING_TIME", bestTime)
+                                         .addParameter("API_IP_ADDRESS", bestURL);
             //  PlatformServiceProvider.getInstance().setIpInfoAlsMessageBean(instance.ipInfoAlsMessageBean);
             instance.ipInfoAlsMessageBean = null;
         } else {
@@ -397,7 +324,8 @@ public class AuthorizationClient {
      */
     private static void handleNoAccountSettings(String errorMessage) throws Exception {
 
-        if (errorMessage == null || errorMessage.trim().isEmpty()) {
+        if (errorMessage == null || errorMessage.trim()
+                                                .isEmpty()) {
             errorMessage = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED.getMessage();
         }
 
@@ -535,130 +463,6 @@ public class AuthorizationClient {
 
     }
 
-
-    /**
-     * The report URL.
-     *
-     * @param reportKey the key
-     * @param baseUrl   the url
-     * @param stsToken  the requiered token
-     * @return the report url as String
-     */
-    public String getReportURL(String reportKey, String baseUrl, String stsToken) {
-
-        return UrlProvider.getReportURL(reportKey, baseUrl, stsToken);
-    }
-
-    /**
-     * @param baseUrl
-     * @param stsToken
-     * @param mode
-     * @return
-     */
-    public String getChatURL(String baseUrl, String stsToken, String mode) {
-
-        return UrlProvider.getChatURL(baseUrl, stsToken, mode);
-    }
-
-    /**
-     * @param apello
-     * @param sermo
-     * @param licentio
-     * @return
-     */
-    public AuthorizationServerStsTokenResponse getReportSTSToken(String apello, String sermo, String licentio) {
-
-        return this.getSTSToken(apello, sermo, licentio, FO_REPORTS_ACTION);
-    }
-
-    /**
-     * @param apello
-     * @param sermo
-     * @param licentio
-     * @return
-     */
-    public AuthorizationServerStsTokenResponse getChatSTSToken(String apello, String sermo, String licentio) {
-
-        return this.getSTSToken(apello, sermo, licentio, OPEN_CHAT_ACTION);
-    }
-
-    public AuthorizationServerStsTokenResponse getSTSToken(String apello,
-                                                           String sermo,
-                                                           String licentio,
-                                                           String action) {
-
-        String to = "FO";
-        AuthorizationServerStsTokenResponse authorizationServerStsTokenResponse = null;
-
-        for (int retryCount = 0; retryCount < this.configurationPool.size(); ++retryCount) {
-            try {
-                String baseUrl = this.getBaseUrl().toString();
-                String slash = "";
-                if (!baseUrl.endsWith("/")) {
-                    slash = "/";
-                }
-
-                StringBuilder stsTokenURLBuf = new StringBuilder(256);
-                stsTokenURLBuf.append(baseUrl)
-                              .append(slash)
-                              .append(STS_CONTEXT)
-                              .append("&")
-                              .append("appello=")
-                              .append(apello)
-                              .append("&")
-                              .append("sermo=")
-                              .append(sermo)
-                              .append("&")
-                              .append("licentio=")
-                              .append(licentio)
-                              .append("&")
-                              .append("to=")
-                              .append("FO")
-                              .append("&")
-                              .append("action=")
-                              .append(action);
-
-
-                URL stsTokenURL = new URL(stsTokenURLBuf.toString());
-                String response = null;
-
-                int authorizationServerResponseCode = 0;
-                HttpURLConnection connection = getConnection(stsTokenURL);
-                authorizationServerResponseCode = connection.getResponseCode();
-
-
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                    response = reader.readLine();
-                }
-                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(response,
-                                                                                              authorizationServerResponseCode);
-                if (authorizationServerStsTokenResponse.isOK()) {
-                    return authorizationServerStsTokenResponse;
-                }
-
-                LOGGER.error("Cannot get STS token: {}", stsTokenURLBuf.toString());
-                LOGGER.error(authorizationServerStsTokenResponse.toString());
-            } catch (MalformedURLException e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(
-                    AuthorizationServerResponseCode.BAD_URL);
-                return authorizationServerStsTokenResponse;
-            } catch (IOException e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(ERROR_IO);
-            } catch (Throwable e) {
-                LOGGER.error("Error occurred...", e);
-                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(
-                    AuthorizationServerResponseCode.INTERNAL_ERROR);
-                return authorizationServerStsTokenResponse;
-            }
-
-            this.configurationPool.markLastUsedAsBad();
-        }
-
-        return authorizationServerStsTokenResponse;
-    }
-
     public Map<String, BufferedImage> getImageCaptcha() throws IOException {
 
         return this.getImageCaptcha((CaptchaParametersBean) null);
@@ -670,7 +474,8 @@ public class AuthorizationClient {
         int retryCount = 0;
 
         while (retryCount < this.configurationPool.size() && output == null) {
-            String baseURL = this.getBaseUrl().toString();
+            String baseURL = this.getBaseUrl()
+                                 .toString();
             StringBuilder buf = new StringBuilder(128);
             buf.append(baseURL);
             if (!baseURL.endsWith("/")) {
@@ -842,7 +647,8 @@ public class AuthorizationClient {
 
         while (retryCount++ < this.configurationPool.size()) {
             try {
-                String authorizationUrl = this.getBaseUrl().toString();
+                String authorizationUrl = this.getBaseUrl()
+                                              .toString();
                 Logger var24 = LOGGER;
                 Object[] var10002 = new Object[5];
                 ++i;
@@ -857,9 +663,11 @@ public class AuthorizationClient {
                     (SettingsClientParamsBuilder) ((SettingsClientParamsBuilder) ((SettingsClientParamsBuilder) (
                         (SettingsClientParamsBuilder) ((SettingsClientParamsBuilder) ((SettingsClientParamsBuilder) (
                             (SettingsClientParamsBuilder) builder
-                    .setAuthTransport(new HttpAuthTransport())).setSessionId(sessionId)).setPlatform(JFOREX_PLATFORM)
+                                .setAuthTransport(new HttpAuthTransport())).setSessionId(sessionId)).setPlatform(
+                            JFOREX_PLATFORM)
                         ).setLogin(
-                    login)).setPassword(password)).setPlatformVersion(clientVersion)).setAccountType(AccountType.TRADER))
+                            login)).setPassword(password)).setPlatformVersion(clientVersion)).setAccountType
+                        (AccountType.TRADER))
                     .setUserAgent(USER_AGENT_VALUE)).setZipSettings(true)).setLogger(LOGGER)).setHttpBase(
                     authorizationUrl);
                 SettingsClientParams params = builder.build();
@@ -985,7 +793,8 @@ public class AuthorizationClient {
             }
 
 
-            String authorizationUrl = this.getBaseUrl().toString();
+            String authorizationUrl = this.getBaseUrl()
+                                          .toString();
 
             AbstractBusinessSRPAuthClientParamsBuilder<?, ?> builder = null;
             if (isRememberMeTokenAuthorization) {
@@ -1017,13 +826,21 @@ public class AuthorizationClient {
             }
 
             if (isRememberMeTokenRequest) {
-                ((ApiClientParamsBuilder) builder).setRememberMe(rememberMe).setDeviceId(deviceId).setDeviceName(
-                    deviceName).setDeviceOS(deviceOS).setAccountType(AccountType.TRADER);
+                ((ApiClientParamsBuilder) builder).setRememberMe(rememberMe)
+                                                  .setDeviceId(deviceId)
+                                                  .setDeviceName(
+                                                      deviceName)
+                                                  .setDeviceOS(deviceOS)
+                                                  .setAccountType(AccountType.TRADER);
             }
 
             if (isRememberMeTokenAuthorization) {
-                ((RememberMeClientParamsBuilder) builder).setDeviceId(deviceId).setDeviceName(deviceName).setDeviceOS(
-                    deviceOS).setAccountType(AccountType.TRADER).setPassword(previousRememberMeToken);
+                ((RememberMeClientParamsBuilder) builder).setDeviceId(deviceId)
+                                                         .setDeviceName(deviceName)
+                                                         .setDeviceOS(
+                                                             deviceOS)
+                                                         .setAccountType(AccountType.TRADER)
+                                                         .setPassword(previousRememberMeToken);
             }
 
 
@@ -1043,7 +860,8 @@ public class AuthorizationClient {
                 ServerResponseObject<Step3ServerResponse> result = client.authenticate();
 
                 if (result != null) {
-                    String newRememberMeToken = result.getPasswordServerResponse().getSessionKey();
+                    String newRememberMeToken = result.getPasswordServerResponse()
+                                                      .getSessionKey();
                     this.srp6PlatformSessionKey.set(newRememberMeToken);
                     this.retrieveDataForALS(result);
                     Step3ServerResponse passwordServerResponse = result.getPasswordServerResponse();
@@ -1063,13 +881,14 @@ public class AuthorizationClient {
                     Properties properties = null;
 
                     String fastestAPIAndTicket;
-                    String encodedString = jsonObject.getString(AuthParameterDefinition.SETTINGS.getName(AccountType.TRADER));
+                    String
+                        encodedString
+                        = jsonObject.getString(AuthParameterDefinition.SETTINGS.getName(AccountType.TRADER));
                     byte[] decodedBytes = Base64.decode(encodedString);
 
 
-
-                    try(ObjectInputStream inputStream = new ObjectInputStream(new ByteArrayInputStream(decodedBytes))) {
-
+                    try (ObjectInputStream inputStream = new ObjectInputStream(new ByteArrayInputStream(decodedBytes)
+                    )) {
 
 
                         properties = (Properties) inputStream.readObject();
@@ -1242,9 +1061,10 @@ public class AuthorizationClient {
                 SingleRequestAuthClient
                     client
                     = new SingleRequestAuthClient(new LoginInfoClientProtocol(((LoginInfoParamsBuilder) (
-                        (LoginInfoParamsBuilder) ((LoginInfoParamsBuilder) (new LoginInfoParamsBuilder())
-                    .setAccountType(AccountType.TRADER)).setAuthTransport(new HttpAuthTransport())).setHttpBase(
-                    baseUrlAsString)).setLogin(loginName).build()));
+                    (LoginInfoParamsBuilder) ((LoginInfoParamsBuilder) (new LoginInfoParamsBuilder())
+                        .setAccountType(AccountType.TRADER)).setAuthTransport(new HttpAuthTransport())).setHttpBase(
+                    baseUrlAsString)).setLogin(loginName)
+                                     .build()));
                 SingleServerResponse singleServerResponse = client.getServerResponse();
                 JSONObject responseAsJson = singleServerResponse.getResponse();
                 authorizationServerResponse = new AuthorizationServerPinRequiredResponse(responseAsJson);
@@ -1301,7 +1121,8 @@ public class AuthorizationClient {
 
     public String getLoginUrl() {
 
-        return this.configurationPool.get().toString();
+        return this.configurationPool.get()
+                                     .toString();
     }
 
     public String getVersion() {
@@ -1329,7 +1150,8 @@ public class AuthorizationClient {
         }
 
         if (sessionId == null) {
-            sessionId = UUID.randomUUID().toString();
+            sessionId = UUID.randomUUID()
+                            .toString();
             return sessionId;
             // throw new Exception("The new sessionId is null");
         } else {
@@ -1346,7 +1168,8 @@ public class AuthorizationClient {
             List<String> ipHttpHeaderList = (List) responseHeaderFields.get(IP_HTTP_HEADER);
             if (ipHttpHeaderList != null && ipHttpHeaderList.size() > 0) {
                 clientIpAddress = (String) ipHttpHeaderList.get(0);
-                if (clientIpAddress == null || clientIpAddress.trim().isEmpty()) {
+                if (clientIpAddress == null || clientIpAddress.trim()
+                                                              .isEmpty()) {
                     clientIpAddress = "n/a";
                 }
             }
@@ -1354,7 +1177,8 @@ public class AuthorizationClient {
             List<String> clientCountryList = (List) responseHeaderFields.get(CLIENT_COUNTRY);
             if (clientCountryList != null && clientCountryList.size() > 0) {
                 clientCountry = (String) clientCountryList.get(0);
-                if (clientCountry == null || clientCountry.trim().isEmpty()) {
+                if (clientCountry == null || clientCountry.trim()
+                                                          .isEmpty()) {
                     clientCountry = "n/a";
                 }
             }

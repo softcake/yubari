@@ -28,7 +28,6 @@ import org.softcake.yubari.netty.AbstractConnectingCompletionEvent;
 import org.softcake.yubari.netty.AuthorizationCompletionEvent;
 import org.softcake.yubari.netty.DefaultChannelWriter;
 import org.softcake.yubari.netty.ProtocolVersionNegotiationCompletionEvent;
-import org.softcake.yubari.netty.SslCompletionEvent;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.ClientConnectorStateMachine.Event;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
@@ -116,7 +115,12 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
                                                                           "[%s] TransportClientEventExecutorThread",
                                                                           "DDS2 Standalone Transport Client"))
                                                                       .build();
-
+       /* RxJavaPlugins.setErrorHandler(new Consumer<Throwable>() {
+            @Override
+            public void accept(final Throwable throwable) throws Exception {
+                LOGGER.info("Error in Global Handler", throwable);
+            }
+        });*/
         this.scheduledExecutorService = Executors.newSingleThreadExecutor(threadFactory);
         this.address = address;
         this.channelBootstrap = channelBootstrap;
@@ -150,11 +154,7 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
 
     private void processCompletionEvent(final AbstractConnectingCompletionEvent authorizationEvent) {
 
-        if (authorizationEvent instanceof SslCompletionEvent) {
-            this.sslHandshake(authorizationEvent);
-
-
-        } else if (authorizationEvent instanceof ProtocolVersionNegotiationCompletionEvent) {
+        if (authorizationEvent instanceof ProtocolVersionNegotiationCompletionEvent) {
             this.protocolVersionNegotiation(authorizationEvent);
 
 
@@ -192,9 +192,9 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
 
     }
 
-    private void sslHandshake(final AbstractConnectingCompletionEvent authorizationEvent) {
+    private void sslHandshake(final SslHandshakeCompletionEvent event) {
 
-        if (authorizationEvent.isSuccess()) {
+        if (event.isSuccess()) {
             if (ONLINE != this.getClientState()) {
                 this.sm.accept(Event.SSL_HANDSHAKE_SUCCESSFUL);
             }
@@ -202,8 +202,7 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
         }
         this.disconnect(new ClientDisconnectReason(DisconnectReason.UNKNOWN,
                                                    String.format("SSL handshake failed, reason [%s]",
-                                                                 authorizationEvent.cause()
-                                                                                   .getMessage())));
+                                                                 event.cause().getMessage())));
 
     }
 
@@ -253,7 +252,12 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
                 break;
             case DISCONNECTED:
                 this.logDisconnectReason(this.disconnectReason);
-                shutdown(this.executor, 5000L, TimeUnit.MILLISECONDS);
+               // sm.disconnect();
+
+
+                       // shutdown(executor, 5000L, TimeUnit.MILLISECONDS);
+
+
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported state " + state);
@@ -280,6 +284,12 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
 
     private void processChildSessionOnline() {
 
+        if (isChannelInActive(this.primaryChannel)){
+            return;
+        }
+
+
+
         if (isChannelInActive(this.childChannel) || this.childSocketAuthAcceptorMessage == null) {
 
             if (this.childChannelAttachment.isMaxReconnectAttemptsReached(this.clientSession
@@ -289,9 +299,7 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
                 this.disconnect(new ClientDisconnectReason(DisconnectReason.CONNECTION_PROBLEM,
                                                            "Child session max connection attempts reached"));
 
-            }
-
-            if (this.childChannelAttachment.getLastConnectAttemptTime() + this.clientSession.getReconnectDelay()
+            }else if (this.childChannelAttachment.getLastConnectAttemptTime() + this.clientSession.getReconnectDelay()
                 < System.currentTimeMillis()) {
                 this.connectChildSession()
                     .subscribe();
@@ -407,7 +415,7 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
 
         final Channel channel = isPrimary ? this.primaryChannel : this.childChannel;
 
-        return DefaultChannelWriter.writeMessage(clientSession, channel, msg)
+        return DefaultChannelWriter.writeMessage(this.clientSession, channel, msg)
                                    .doOnError(t -> {
                                        if (t.getCause() instanceof ClosedChannelException || !this.isOnline()) {return;}
 
@@ -420,7 +428,7 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
                                                                                       msg),
                                                                                   t));
                                    })
-                                   .doOnComplete(() -> socketAuthAcceptorMessageSent(isPrimary)
+                                   .doOnComplete(() -> this.socketAuthAcceptorMessageSent(isPrimary)
 
 
                                    );
@@ -526,9 +534,9 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
                         TimeUnit.MILLISECONDS,
                         Schedulers.from(this.executor))
                .takeUntil(c -> SSL_HANDSHAKE == c)
-               .doOnError(e -> disconnect(new ClientDisconnectReason(DisconnectReason.SSL_HANDSHAKE_TIMEOUT,
-                                                                     "SSL handshake timeout",
-                                                                     e)))
+               .doOnError(e -> this.disconnect(new ClientDisconnectReason(DisconnectReason.SSL_HANDSHAKE_TIMEOUT,
+                                                                          "SSL handshake timeout",
+                                                                          e)))
                .subscribe();
     }
 
@@ -602,14 +610,26 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
     public void disconnect(final ClientDisconnectReason reason) {
 
         this.disconnectReason = reason;
+       this.clientSession.terminate();
     }
 
     private void logDisconnectReason(final ClientDisconnectReason reason) {
 
-        PreCheck.notNull(reason, "reason");
-        Single.just(reason)
+        ClientDisconnectReason local = reason;
+
+        if (local == null) {
+            local = new ClientDisconnectReason(DisconnectReason.UNKNOWN, "Unknown client application request");
+        }
+        this.disconnectReason = null;
+        Single.just(local)
               .observeOn(Schedulers.from(this.executor))
-              .subscribe(this::logDisconnectInQueue);
+              .subscribe(new Consumer<ClientDisconnectReason>() {
+                  @Override
+                  public void accept(final ClientDisconnectReason reason1) throws Exception {
+
+                      ClientConnector.this.logDisconnectInQueue(reason1);
+                  }
+              });
     }
 
     private void logDisconnectInQueue(final ClientDisconnectReason reason) {
@@ -649,7 +669,8 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
 
     private void primaryChannelDisconnected() {
 
-        this.sm.accept(Event.DISCONNECTING);
+
+        this.disconnect(new ClientDisconnectReason(DisconnectReason.UNKNOWN, "Unknown client application request"));
     }
 
 
@@ -666,9 +687,11 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
         final ChannelAttachment attachment = attribute.get();
         if (attachment != null) {
             if (attachment.isPrimaryConnection()) {
-                primaryChannelDisconnected();
+                LOGGER.warn("[{}] Primary channel disconnected.", this.clientSession.getTransportName());
+                this.primaryChannelDisconnected();
             } else {
-                childChannelDisconnected();
+                LOGGER.warn("[{}] Child channel disconnected.", this.clientSession.getTransportName());
+                this.childChannelDisconnected();
             }
         }
 
@@ -719,10 +742,10 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
     protected void channelRead0(final ChannelHandlerContext ctx, final ProtocolMessage msg) throws Exception {
 
         if (msg instanceof PrimarySocketAuthAcceptorMessage) {
-            setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage) msg);
+            this.setPrimarySocketAuthAcceptorMessage((PrimarySocketAuthAcceptorMessage) msg);
             ctx.fireUserEventTriggered(msg);
         } else if (msg instanceof ChildSocketAuthAcceptorMessage) {
-            setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) msg);
+            this.setChildSocketAuthAcceptorMessage((ChildSocketAuthAcceptorMessage) msg);
             ctx.fireUserEventTriggered(msg);
         } else {
             ctx.fireChannelRead(msg);
@@ -733,14 +756,13 @@ public class ClientConnector extends SimpleChannelInboundHandler<ProtocolMessage
     public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
 
         super.userEventTriggered(ctx, evt);
+
         if (evt instanceof SslHandshakeCompletionEvent) {
-            processCompletionEvent(((SslHandshakeCompletionEvent) evt).isSuccess()
-                                   ? SslCompletionEvent.success()
-                                   : SslCompletionEvent.failed(((SslHandshakeCompletionEvent) evt).cause()));
+            this.sslHandshake((SslHandshakeCompletionEvent) evt);
         } else if (evt instanceof ProtocolVersionNegotiationCompletionEvent) {
-            processCompletionEvent((ProtocolVersionNegotiationCompletionEvent) evt);
+            this.processCompletionEvent((ProtocolVersionNegotiationCompletionEvent) evt);
         } else if (evt instanceof AuthorizationCompletionEvent) {
-            processCompletionEvent((AuthorizationCompletionEvent) evt);
+            this.processCompletionEvent((AuthorizationCompletionEvent) evt);
         }
     }
 

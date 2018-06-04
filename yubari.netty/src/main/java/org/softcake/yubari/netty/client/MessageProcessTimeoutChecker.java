@@ -77,7 +77,13 @@ public class MessageProcessTimeoutChecker {
     private Disposable getOverFlowObservable() {
 
         final AtomicLong procStartTime = new AtomicLong(System.currentTimeMillis());
-        return Observable.create((ObservableOnSubscribe<ProtocolMessage>) e -> emitter = e)
+        return Observable.create(new ObservableOnSubscribe<ProtocolMessage>() {
+            @Override
+            public void subscribe(final ObservableEmitter<ProtocolMessage> e) throws Exception {
+
+                emitter = e;
+            }
+        })
                          .observeOn(Schedulers.computation())
                          .timeout(5000L, TimeUnit.MILLISECONDS)
                          .subscribe(protocolMessage -> {
@@ -290,7 +296,16 @@ public class MessageProcessTimeoutChecker {
         if (overFlow == null || overFlow.isDisposed()) {
             overFlow = getOverFlowObservable();
         }
-        emitter.serialize().onNext(message);
+
+
+        if (!emitter.isDisposed()) {
+            emitter.serialize().onNext(message);
+        }else {
+            LOGGER.info("is Disposed");
+        }
+
+
+
     }
 
     public synchronized void onDroppable(final ProtocolMessage message) {

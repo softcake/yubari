@@ -1308,8 +1308,8 @@ public class TransportClient implements ITransportClient, IClientEvent {
         MessageProcessTimeoutChecker checker = new MessageProcessTimeoutChecker(this.session, "TC");
 
         return transportMessagePublishSubject.onBackpressureLatest()
-                                             .subscribeOn(Schedulers.from(session.getProtocolHandler()
-                                                                                 .getEventExecutor()))
+                                             .subscribeOn(session.getProtocolHandler()
+                                                                                 .getEventExecutor())
                                              .doOnNext(protocolMessage -> checker.onStart(protocolMessage,
                                                                                           System.currentTimeMillis(),
                                                                                           messageCount
@@ -1318,8 +1318,8 @@ public class TransportClient implements ITransportClient, IClientEvent {
                                                  checker.onOverflow(message);
                                                  LOGGER.info("Overflow {}", messageCount.get());
                                              })
-                                             .observeOn(Schedulers.from(session.getProtocolHandler()
-                                                                               .getEventExecutor()))
+                                             .observeOn(session.getProtocolHandler()
+                                                                               .getEventExecutor())
                                              .filter(holder -> {
 
                                                  final boolean
@@ -1446,8 +1446,8 @@ public class TransportClient implements ITransportClient, IClientEvent {
                                                      return canProcessDroppableMessage;
 
                                                  })
-                                                 .observeOn(Schedulers.from(session.getProtocolHandler()
-                                                                                   .getEventExecutor()))
+                                                 .observeOn(session.getProtocolHandler()
+                                                                                   .getEventExecutor())
                                                  .doAfterNext(checker::onComplete)
                                                  .doOnError(checker::onError);
 
@@ -1482,6 +1482,10 @@ public class TransportClient implements ITransportClient, IClientEvent {
     public void onDisconnected(final DisconnectedEvent event) {
 
         transportDisconnectedPublishSubject.onNext(event);
+        transportDisconnectedPublishSubject.onComplete();
+        transportMessagePublishSubject.onComplete();
+        transportOnlinePublishSubject.onComplete();
+
     }
 
 

@@ -161,7 +161,7 @@ final class JnlpParser {
     private static String getProperty(final AuthorizationPropertiesNames name, final HashMap<String, String> properties)
         throws XMLStreamException {
 
-        String value = properties.get(name.getValue());
+        final String value = properties.get(name.getValue());
         if (Strings.isNullOrEmpty(value)) {
             throw new XMLStreamException(String.format("The jnlp file has an invalid property: %s", name));
         }

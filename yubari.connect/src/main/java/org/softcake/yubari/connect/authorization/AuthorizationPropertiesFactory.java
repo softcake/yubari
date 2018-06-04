@@ -73,10 +73,9 @@ public final class AuthorizationPropertiesFactory {
         AuthorizationProperties properties = null;
         HttpURLConnection connection = null;
         InputStream inputStream = null;
-        URL jnlpUrl;
 
         try {
-            jnlpUrl = new URL(url);
+            final URL jnlpUrl = new URL(url);
             connection = getConnection(jnlpUrl);
             inputStream = connection.getInputStream();
             properties = JnlpParser.parse(inputStream);
@@ -89,7 +88,7 @@ public final class AuthorizationPropertiesFactory {
                 try {
                     inputStream.close();
                 } catch (final IOException e) {
-                    LOGGER.error("Error occurred while closing Inputstream!", e);
+                    LOGGER.error("Error occurred while closing inputstream!", e);
                 }
             }
 

@@ -23,19 +23,17 @@ import org.softcake.yubari.netty.DefaultChannelWriter;
 import org.softcake.yubari.netty.channel.ChannelAttachment;
 import org.softcake.yubari.netty.client.TransportClientSession;
 import org.softcake.yubari.netty.mina.ClientDisconnectReason;
+import org.softcake.yubari.netty.mina.TransportHelper;
 import org.softcake.yubari.netty.pinger.PingManager;
 import org.softcake.yubari.netty.pinger.PingStats;
 import org.softcake.yubari.netty.stream.BlockingBinaryStream;
 
 import com.dukascopy.dds4.ping.IPingListener;
-
-
 import com.dukascopy.dds4.transport.common.mina.DisconnectReason;
 import com.dukascopy.dds4.transport.msg.system.ErrorResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatOkResponseMessage;
 import com.dukascopy.dds4.transport.msg.system.HeartbeatRequestMessage;
 import com.dukascopy.dds4.transport.msg.system.ProtocolMessage;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
@@ -45,16 +43,14 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.util.Attribute;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
+import io.reactivex.Scheduler;
 import io.reactivex.Single;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.functions.Predicate;
 import org.slf4j.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -71,7 +67,7 @@ public class Heartbeat extends ChannelDuplexHandler {
     private static final String PRIMARY = "Primary";
     private static final String CHILD = "Child";
     private final Map<String, BlockingBinaryStream> streams = new HashMap<>();
-    private final ExecutorService executor;
+    private final Scheduler executor;
     private boolean primaryPingStarted = false;
     private boolean childPingStarted = false;
     private Disposable primaryPing;
@@ -87,13 +83,8 @@ public class Heartbeat extends ChannelDuplexHandler {
         this.sendCpuInfoToServer = clientSession.isSendCpuInfoToServer();
         this.pingListener = clientSession.getPingListener();
         this.maxSubsequentPingFailedCount = clientSession.getMaxSubsequentPingFailedCount();
-        final ThreadFactory threadFactory = new ThreadFactoryBuilder().setDaemon(true)
-                                                                      .setNameFormat(String.format(
-                                                                          "[%s] HeartbeatThread",
-                                                                          this.clientSession.getTransportName()))
-                                                                      .build();
 
-        this.executor = Executors.newFixedThreadPool(1, threadFactory);
+        this.executor = TransportHelper.createSingleScheduler("HeartbeatThread");
     }
 
 
@@ -148,12 +139,20 @@ public class Heartbeat extends ChannelDuplexHandler {
         }
         if (channelAttachment.isPrimaryConnection()) {
             isPrimaryActiv.set(Boolean.FALSE);
+            stopPrimaryPing();
+            stopChildPing();
         } else {
             isChildActiv.set(Boolean.FALSE);
+            stopChildPing();
         }
 
         if (!isPrimaryActiv.get() && !isChildActiv.get()) {
-            executor.shutdownNow();
+            /*stopPrimaryPing();
+            stopChildPing();*/
+
+            executor.shutdown();
+
+
         }
         ctx.fireChannelInactive();
     }
@@ -166,8 +165,9 @@ public class Heartbeat extends ChannelDuplexHandler {
      */
     @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object msg) throws Exception {
+
         if (msg instanceof HeartbeatRequestMessage) {
-            process(ctx, (HeartbeatRequestMessage) msg);
+             process(ctx, (HeartbeatRequestMessage) msg);
         }
 
         ctx.fireChannelRead(msg);
@@ -194,14 +194,6 @@ public class Heartbeat extends ChannelDuplexHandler {
         }
     }
 
-    private Channel getChannel(final boolean isPrimary) {
-
-        return isPrimary
-               ? this.clientSession.getClientConnector()
-                                   .getPrimaryChannel()
-               : this.clientSession.getClientConnector()
-                                   .getChildChannel();
-    }
 
     public void stopPrimaryPing() {
 
@@ -222,11 +214,17 @@ public class Heartbeat extends ChannelDuplexHandler {
                                      final ChannelAttachment attachment) {
 
         if (this.primaryPing == null || this.primaryPing.isDisposed()) {
-            Observable.interval(3333L, pingInterval, TimeUnit.MILLISECONDS, Schedulers.from(executor))
+            Observable.interval(3333L, pingInterval, TimeUnit.MILLISECONDS, executor)
                       .doOnError(throwable -> {
 
                       })
-                      .takeWhile(aLong -> channel.isActive())
+                      .takeWhile(new Predicate<Long>() {
+                          @Override
+                          public boolean test(final Long aLong) throws Exception {
+
+                              return channel.isActive();
+                          }
+                      })
                       .filter(aLong -> channel.isWritable())
                       .subscribe(new Observer<Long>() {
                           @Override
@@ -261,7 +259,7 @@ public class Heartbeat extends ChannelDuplexHandler {
                                     final ChannelAttachment attachment) {
 
         if (this.childPing == null || this.childPing.isDisposed()) {
-            Observable.interval(3333L, pingInterval, TimeUnit.MILLISECONDS, Schedulers.from(executor))
+            Observable.interval(3333L, pingInterval, TimeUnit.MILLISECONDS, executor)
                       .doOnError(throwable -> {
 
                       })
@@ -340,20 +338,21 @@ public class Heartbeat extends ChannelDuplexHandler {
         final AtomicLong pingSocketWriteInterval = new AtomicLong(Long.MAX_VALUE);
 
         final Observable<Long> requestObservable = Single.just(startTime)
-                                                  .doOnSuccess(aLong -> {
+                                                         .doOnSuccess(aLong -> {
 
-                                                      LOGGER.debug("[{}] Ping sent in {} channel.",
-                                                                   clientSession.getTransportName(),
-                                                                   (getChannelStringForLogging(attachment))
-                                                                       .toUpperCase());
-                                                      pingSocketWriteInterval.set(System.currentTimeMillis() - aLong);
+                                                             LOGGER.debug("[{}] Ping sent in {} channel.",
+                                                                          clientSession.getTransportName(),
+                                                                          (getChannelStringForLogging(attachment))
+                                                                              .toUpperCase());
+                                                             pingSocketWriteInterval.set(System.currentTimeMillis()
+                                                                                         - aLong);
 
-                                                  })
-                                                  .subscribeOn(Schedulers.from(executor))
-                                                  .toObservable();
+                                                         })
+                                                         .subscribeOn(executor)
+                                                         .toObservable();
 
         this.clientSession.sendRequestAsync(pingRequestMessage, channel, pingTimeout, Boolean.TRUE, requestObservable)
-                          .observeOn(Schedulers.from(executor))
+                          .observeOn(executor)
                           .filter(protocolMessage -> isResponseValid(protocolMessage, attachment, startTime))
                           .cast(HeartbeatOkResponseMessage.class)
                           .doOnSubscribe(disposable -> LOGGER.debug("[{}] Sending {} connection ping request: {}",
@@ -408,7 +407,8 @@ public class Heartbeat extends ChannelDuplexHandler {
             }
 
 
-            LOGGER.debug("[{}] {} synchronization ping response received. time: {}ms message {}, ",this.clientSession.getTransportName(),
+            LOGGER.debug("[{}] {} synchronization ping response received. time: {}ms message {}, ",
+                         this.clientSession.getTransportName(),
                          getChannelStringForLogging(attachment),
                          turnOverTime,
                          message);
@@ -421,8 +421,10 @@ public class Heartbeat extends ChannelDuplexHandler {
 
     public void process(final ChannelHandlerContext ctx,
                         final HeartbeatRequestMessage requestMessage) {
-        final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel().attr(
-            CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
+
+        final Attribute<ChannelAttachment> channelAttachmentAttribute = ctx.channel()
+                                                                           .attr(
+                                                                               CHANNEL_ATTACHMENT_ATTRIBUTE_KEY);
         final ChannelAttachment attachment = channelAttachmentAttribute.get();
 
         try {
@@ -453,7 +455,8 @@ public class Heartbeat extends ChannelDuplexHandler {
             }
 
             if (!this.clientSession.isTerminating()) {
-                DefaultChannelWriter.writeMessage(clientSession, ctx.channel(), okResponseMessage).subscribe();
+                DefaultChannelWriter.writeMessage(clientSession, ctx.channel(), okResponseMessage)
+                                    .subscribe();
             }
         } catch (final Exception e) {
             LOGGER.error("[{}] ", clientSession.getTransportName(), e);
@@ -465,7 +468,8 @@ public class Heartbeat extends ChannelDuplexHandler {
                 e.getMessage()));
             errorMessage.setSynchRequestId(requestMessage.getSynchRequestId());
             if (!this.clientSession.isTerminating()) {
-                DefaultChannelWriter.writeMessage(clientSession, ctx.channel(), errorMessage).subscribe();
+                DefaultChannelWriter.writeMessage(clientSession, ctx.channel(), errorMessage)
+                                    .subscribe();
             }
         }
     }
@@ -486,7 +490,8 @@ public class Heartbeat extends ChannelDuplexHandler {
         attachment.pingFailed();
         pingManager.pingFailed();
         safeNotifyPingFailed();
-        LOGGER.debug("[{}] Server has returned unknown response type for ping request! Time - {}ms",this.clientSession.getTransportName(),
+        LOGGER.debug("[{}] Server has returned unknown response type for ping request! Time - {}ms",
+                     this.clientSession.getTransportName(),
                      (System.currentTimeMillis() - startTime));
         return false;
 

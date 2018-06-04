@@ -46,6 +46,11 @@ public class AuthorizationProperties {
     private final boolean isValid;
     private final List<String> loginUrlStr;
 
+    public AuthorizationProperties() {
+
+        this("", "", "", "", "");
+    }
+
     /**
      * The constructor.
      *
@@ -71,15 +76,15 @@ public class AuthorizationProperties {
         this.isValid = !this.loginUrl.isEmpty() || !this.loginSrpSixUrl.isEmpty();
         this.canUseSrpSix = !this.loginSrpSixUrl.isEmpty();
 
-        this.loginUrlStr = Arrays.asList(loginUrl.split(","));;
+        this.loginUrlStr = Arrays.asList(loginUrl.split(","));
     }
 
     private static List<URL> getUrlsFromString(final String values) {
 
         final List<String> urlArray = Arrays.asList(values.split(","));
-        List<URL> urls = new ArrayList<>(urlArray.size());
+        final List<URL> urls = new ArrayList<>(urlArray.size());
         for (final String url : urlArray) {
-            UrlValidator validator = new UrlValidator(new String[]{"http", "https"});
+            final UrlValidator validator = new UrlValidator(new String[]{"http", "https"});
 
             try {
                 if (validator.isValid(url)) {

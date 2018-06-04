@@ -34,21 +34,21 @@ public class DisconnectedEvent extends EventTask {
     private final Throwable error;
     private final String comments;
 
-    public DisconnectedEvent(ITransportClient client, DisconnectReason reason) {
+    public DisconnectedEvent(final ITransportClient client, final DisconnectReason reason) {
 
         this(client, reason, null, null, null);
     }
 
-    public DisconnectedEvent(ITransportClient client, DisconnectReason reason, Throwable error) {
+    public DisconnectedEvent(final ITransportClient client, final DisconnectReason reason, final Throwable error) {
 
         this(client, reason, null, error, null);
     }
 
-    public DisconnectedEvent(ITransportClient client,
-                             DisconnectReason reason,
-                             DisconnectHint hint,
-                             Throwable error,
-                             String comments) {
+    public DisconnectedEvent(final ITransportClient client,
+                             final DisconnectReason reason,
+                             final DisconnectHint hint,
+                             final Throwable error,
+                             final String comments) {
 
         super(client);
         this.reason = reason;
@@ -61,7 +61,7 @@ public class DisconnectedEvent extends EventTask {
 
         try {
             Thread.sleep(1000L);
-        } catch (InterruptedException var3) {
+        } catch (final InterruptedException var3) {
 
         }
         this.listeners.forEach(new Consumer<ClientListener>() {
@@ -95,7 +95,7 @@ public class DisconnectedEvent extends EventTask {
 
     public String toString() {
 
-        StringBuilder builder = new StringBuilder();
+        final StringBuilder builder = new StringBuilder();
         builder.append("DisconnectedEvent [");
         if (this.reason != null) {
             builder.append("reason=");

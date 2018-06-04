@@ -18,6 +18,7 @@ module org.softcake.yubari.authentication {
     requires JForex.API;
     requires java.sql;
     requires io.reactivex.rxjava2;
+    requires Login.Form;
 
 
     //requires transport.common;

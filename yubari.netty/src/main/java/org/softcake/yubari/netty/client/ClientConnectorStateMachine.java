@@ -20,6 +20,7 @@ import org.softcake.yubari.netty.client.ClientConnector.ClientState;
 
 import io.reactivex.Observable;
 import io.reactivex.Single;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.BiConsumer;
 import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
@@ -37,7 +38,9 @@ public class ClientConnectorStateMachine {
     private final TransportClientSession session;
     StateMachine<SateMachineClient, Event, ClientState> sm;
 
-    public ClientConnectorStateMachine(final SateMachineClient clientSateConnector2, final Executor executor, TransportClientSession session) {
+    public ClientConnectorStateMachine(final SateMachineClient clientSateConnector2,
+                                       final Executor executor,
+                                       TransportClientSession session) {
 
         this.session = session;
         sm = createStates(clientSateConnector2, executor);
@@ -100,10 +103,13 @@ public class ClientConnectorStateMachine {
                    .transition(Event.ONLINE, ONLINE)
                    .transition(Event.DISCONNECTING, DISCONNECTING);
 
-        ONLINE.onEnter((c, s) -> c.onClientStateEnter(s)).transition(Event.DISCONNECTING,
-                                                                                                    DISCONNECTING);
-        DISCONNECTING.onEnter((c, s) -> c.onClientStateEnter(s)).transition(Event.DISCONNECTED, DISCONNECTED);
-        DISCONNECTED.onEnter((c, s) -> c.onClientStateEnter(s)).onExit(log("exit"));
+        ONLINE.onEnter((c, s) -> c.onClientStateEnter(s))
+              .transition(Event.DISCONNECTING,
+                          DISCONNECTING);
+        DISCONNECTING.onEnter((c, s) -> c.onClientStateEnter(s))
+                     .transition(Event.DISCONNECTED, DISCONNECTED);
+        DISCONNECTED.onEnter((c, s) -> c.onClientStateEnter(s))
+                    .onExit(log("exit"));
 
 
         return new StateMachine<>(clientSateConnector2, IDLE, executor, session.getTransportName());
@@ -111,22 +117,24 @@ public class ClientConnectorStateMachine {
 
     }
 
-    public Observable<ClientState> observe(){
+    public Observable<ClientState> observe() {
+
         return sm.observe();
     }
 
 
     public void accept(final Event e) {
 
-        Single.just(e).subscribeOn(Schedulers.from(executor)).subscribe(new Consumer<Event>() {
-            @Override
-            public void accept(final Event event) throws Exception {
+        Disposable disposable = Single.just(e)
+                                      .subscribeOn(Schedulers.from(executor))
+                                      .subscribe(new Consumer<Event>() {
+                                          @Override
+                                          public void accept(final Event event) throws Exception {
 
-                sm.accept(e);
-            }
-        });
+                                              sm.accept(e);
+                                          }
+                                      });
     }
-
 
 
     public ClientState getState() {
@@ -134,9 +142,15 @@ public class ClientConnectorStateMachine {
         return sm.getState();
     }
 
+    void disconnect() {
+
+        sm.disconnect();
+    }
+
     public void connect() {
 
-        sm.connect().subscribe();
+        Disposable subscribe = sm.connect()
+                                 .subscribe();
     }
 
     public enum Event {

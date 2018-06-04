@@ -10,6 +10,7 @@ module org.softcake.yubari.netty {
     requires org.softcake.yubari.connect;
     requires cherry.core;
     requires transport.common;
+    requires Login.Form;
     requires java.sql;
     requires java.prefs;
     requires msg;

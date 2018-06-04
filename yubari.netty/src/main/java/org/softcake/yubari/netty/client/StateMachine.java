@@ -18,6 +18,8 @@ package org.softcake.yubari.netty.client;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.reactivex.Observable;
+import io.reactivex.ObservableEmitter;
+import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.functions.BiConsumer;
 import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
@@ -38,9 +40,10 @@ public class StateMachine<T, E extends Enum<E>, C extends Enum<C>> implements Co
     private final PublishSubject<C> states = PublishSubject.create();
     private volatile State<T, E, C> state;
     private static final String STATE_CHANGED_TO = "[{}] State changed to {}";
+
     protected StateMachine(final T context, final State<T, E, C> initial) {
 
-        this(context, initial, MoreExecutors.directExecutor(),"");
+        this(context, initial, MoreExecutors.directExecutor(), "");
 
     }
 
@@ -50,50 +53,87 @@ public class StateMachine<T, E extends Enum<E>, C extends Enum<C>> implements Co
         this.context = context;
         this.executor = executor;
         this.name = name;
-
     }
 
     public Observable<Void> connect() {
 
-        return Observable.create(sub -> {
+        return Observable.create(new ObservableOnSubscribe<Void>() {
+            @Override
+            public void subscribe(final ObservableEmitter<Void> sub) throws Exception {
 
-            state.enter(context);
-            states.onNext(state.getState());
-            sub.setDisposable(events.collect(() -> context, new BiConsumer<T, E>() {
-                @Override
-                public void accept(final T context, final E event) throws Exception {
-
-                    final State<T, E, C> next = state.next(event);
-                    if (next != null) {
-
-                        state.exit(context);
-                        state = next;
-                        next.enter(context);
-                        states.onNext(next.getState());
-                        LOGGER.info("[{}] State changed to {}", name, next.getState().toString());
-                    } else {
-                        LOGGER.info("Invalid event : {} current state: {}", event, state);
-                    }
+                if (!sub.isDisposed()) {
+                    state.enter(context);
+                    states.onNext(state.getState());
+                } else {
+                    LOGGER.info("is Disposed");
                 }
-            }).subscribeOn(Schedulers.from(executor)).subscribe());
+
+
+                sub.setDisposable(events.collect(() -> context, new BiConsumer<T, E>() {
+                    @Override
+                    public void accept(final T context, final E event) throws Exception {
+
+                        final State<T, E, C> next = state.next(event);
+                        if (next != null) {
+
+                            state.exit(context);
+                            state = next;
+                            next.enter(context);
+                            states.onNext(next.getState());
+                            LOGGER.info("[{}] State changed to {}",
+                                        name,
+                                        next.getState()
+                                            .toString());
+                        } else {
+                            LOGGER.info("Invalid event : {} current state: {}", event, state);
+                        }
+                    }
+                })
+                                        .subscribeOn(Schedulers.from(executor))
+                                        .doOnError(new Consumer<Throwable>() {
+                                            @Override
+                                            public void accept(final Throwable e) throws Exception {
+
+                                                LOGGER.info("Error in State Machine:", e);
+                                            }
+                                        })
+                                        .subscribe());
+            }
         });
     }
 
     @Override
     public void accept(final E event) {
 
-        events.toSerialized().onNext(event);
+        events.toSerialized()
+              .onNext(event);
+
+
     }
 
-    public Observable<C> observe(){
+    public Observable<C> observe() {
 
-       return states.subscribeOn(Schedulers.from(executor)).serialize();
+        return states.subscribeOn(Schedulers.from(executor))
+                     .doOnError(new Consumer<Throwable>() {
+                         @Override
+                         public void accept(final Throwable throwable) throws Exception {
+
+                             LOGGER.error("Error in State Machine", throwable);
+                         }
+                     })
+                     .serialize();
     }
 
 
     public C getState() {
 
         return state.getState();
+    }
+
+    public void disconnect() {
+
+        states.onComplete();
+
     }
 
     public static class State<T, E, C> {

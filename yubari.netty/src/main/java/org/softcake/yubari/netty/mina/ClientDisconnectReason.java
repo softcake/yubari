@@ -30,12 +30,12 @@ public class ClientDisconnectReason {
     public ClientDisconnectReason(final DisconnectReason disconnectReason,
                                   final DisconnectHint disconnectHint,
                                   final String disconnectComments,
-                                  final Throwable error) {
+                                  final Throwable throwable) {
 
         this.disconnectReason = disconnectReason;
         this.disconnectHint = disconnectHint;
         this.disconnectComments = disconnectComments;
-        this.error = error;
+        this.error = throwable;
     }
     public ClientDisconnectReason(final DisconnectReason disconnectReason,
                                   final DisconnectHint disconnectHint,
@@ -45,9 +45,9 @@ public class ClientDisconnectReason {
     }
     public ClientDisconnectReason(final DisconnectReason disconnectReason,
                                   final String disconnectComments,
-                                  final Throwable error) {
+                                  final Throwable throwable) {
 
-        this(disconnectReason, null, disconnectComments, error);
+        this(disconnectReason, null, disconnectComments, throwable);
 
     }
     public ClientDisconnectReason(final DisconnectReason disconnectReason,

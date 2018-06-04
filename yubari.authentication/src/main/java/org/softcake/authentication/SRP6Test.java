@@ -20,6 +20,7 @@ package org.softcake.authentication;
 import org.softcake.yubari.connect.authorization.AuthorizationProperties;
 import org.softcake.yubari.connect.authorization.AuthorizationPropertiesFactory;
 
+import com.dukascopy.login.service.account.DeviceIDBean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,6 +93,20 @@ public class SRP6Test {
 
         String sessionID = UUID.randomUUID().toString();
 
+          /*String username = System.getProperty("DUKA_LIVE_USER");
+          String password = System.getProperty("DUKA_LIVE_PW");*/
+
+                String username = System.getProperty("DUKA_DEMO_USER");
+                String password = System.getProperty("DUKA_DEMO_PW");
+          /*String username = System.getProperty("jnlp.client.username");
+          String password = System.getProperty("jnlp.client.password");*/
+                String instanceId = System.getProperty("jnlp.api.sid");
+                String apiURL = System.getProperty("jnlp.api.url");
+                String ticket = System.getProperty("jnlp.auth.ticket");
+                String authToken = System.getProperty("jnlp.auth.token");
+                String autoLoginUserName = null;
+                DeviceIDBean deviceIDBean = null;
+                String rememberMeToken = null;
 
         if (useDemo) {
             DClient client = new DClient();

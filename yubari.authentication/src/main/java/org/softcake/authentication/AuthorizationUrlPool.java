@@ -35,7 +35,7 @@ import java.util.LinkedList;
  */
 public class AuthorizationUrlPool {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthorizationUrlPool.class);
-    private LinkedList<URL> authServerList = new LinkedList();
+    private final LinkedList<URL> authServerList = new LinkedList<>();
 
     /**
      * Returns the number of {@code URL's} in this pool.
@@ -75,9 +75,7 @@ public class AuthorizationUrlPool {
     public void add(final URL url) {
 
         PreCheck.parameterNotNull(url, "url");
-        if (this.authServerList.contains(url)) {
-            this.authServerList.remove(url);
-        }
+        this.authServerList.remove(url);
         this.authServerList.addLast(url);
     }
 

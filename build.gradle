@@ -156,6 +156,9 @@ allprojects {
             dependency"org.jetbrains:annotations:16.0.1"
            dependency "io.netty:netty-transport:4.1.25.Final"
             dependency "io.netty:netty-handler:4.1.25.Final"
+
+
+            dependency "com.dukascopy.dds2:Login-Form:3.10"
         }
     }
 }
@@ -198,6 +201,7 @@ subprojects { subProject ->
             implementation "commons-codec:commons-codec"
             implementation "io.netty:netty-handler"
             implementation "io.netty:netty-transport"
+            implementation "com.dukascopy.dds2:Login-Form"
         }
 
     } else {
