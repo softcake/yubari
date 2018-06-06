@@ -19,8 +19,10 @@ module org.softcake.yubari.authentication {
     requires java.sql;
     requires io.reactivex.rxjava2;
     requires Login.Form;
+    requires java.jnlp;
 
-
+exports org.softcake.authentication.dds2.greed;
+    exports org.softcake.authentication;
     //requires transport.common;
    // requires netty.transport.client;
     //requires transport.common;

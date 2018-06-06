@@ -17,10 +17,22 @@
 package org.softcake.authentication;
 
 
+import org.softcake.authentication.dds2.greed.CompatibilityUtil;
+import org.softcake.authentication.dds2.greed.LoginDialogFactory;
+import org.softcake.authentication.dds2.greed.PlatformAuthUtil;
+import org.softcake.authentication.dds2.greed.PlatformAuthorizationController;
+import org.softcake.authentication.dds2.greed.PlatformRememberMeAuthBean;
 import org.softcake.yubari.connect.authorization.AuthorizationProperties;
 import org.softcake.yubari.connect.authorization.AuthorizationPropertiesFactory;
 
+import com.dukascopy.login.controller.ILoginDialogController;
+import com.dukascopy.login.controller.IPlatformAuthorizationController;
+import com.dukascopy.login.controller.IPlatformEnvironmentListener;
+import com.dukascopy.login.controller.LoginDialogBean;
+import com.dukascopy.login.controller.LoginDialogMode;
+import com.dukascopy.login.controller.PlatformEnvironment;
 import com.dukascopy.login.service.account.DeviceIDBean;
+import com.dukascopy.login.utils.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,9 +41,12 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.*;
 
@@ -54,24 +69,24 @@ public class SRP6Test {
     static AuthorizationClient authClient;
     public static void main(String[] args) throws Exception {
 
-        System.setProperty("jnlp.login.url",
+       /* System.setProperty("jnlp.login.url",
                            "https://www-cdn-1.dukascopy.com/authorization-1/demo,https://www-cdn-3.dukascopy"
                            + ".com/authorization-2/demo");
         System.setProperty("jnlp.srp6.login.url",
                            "https://login.dukascopy.com/authorization-1/demo,https://login.dukascopy"
-                           + ".com/authorization-2/demo");
-        System.setProperty("jnlp.platform.mode", "jforex");
+                           + ".com/authorization-2/demo");*/
+        /*System.setProperty("jnlp.platform.mode", "jforex");
         System.setProperty("jnlp.client.version", "2.45.47");
-        System.setProperty("jnlp.client.mode", "DEMO");
-        System.setProperty("sun.java2d.d3d", "false");
+      System.setProperty("jnlp.client.mode", "LIVE");
+        System.setProperty("sun.java2d.d3d", "false");*/
         System.setProperty("jnlp.platform.logo.url", "images/logo/dukascopy-sw_32x32.png");
         System.setProperty("jnlp.company.logo.url", "images/dukascopy-sw.png");
-        System.setProperty("jnlp.localize.reg.form.url", "true");
+       /* System.setProperty("jnlp.localize.reg.form.url", "true");
         System.setProperty("jnlp.register.new.demo.url", "https://demo-login.dukascopy.com/fo/register/demo_new");
-        System.setProperty("java.net.preferIPv4Stack", "true");
+        System.setProperty("java.net.preferIPv4Stack", "true");*/
         System.setProperty("jnlp.client.username", "");
         System.setProperty("jnlp.client.password", "");
-        System.setProperty("sendThreadDumpsToALS", "true");
+//        System.setProperty("sendThreadDumpsToALS", "true");
         urlDemo =   "http://platform.dukascopy.com/demo/jforex.jnlp";
       //  urlDemo = "https://platform.dukascopy.com/demo_3/jforex_3.jnlp";
         url = "https://platform.dukascopy.com/live_3/jforex_3.jnlp";
@@ -80,19 +95,23 @@ public class SRP6Test {
         usernameD = System.getenv("DUKA_DEMO_USER");
         passwordD = System.getenv("DUKA_DEMO_PW");
 
-        boolean useDemo = true;
+        boolean useDemo = false;
 
         AuthorizationProperties properties = AuthorizationPropertiesFactory.getAuthorizationProperties(useDemo?urlDemo:url);
 
 
         List<URL> authServerUrls = properties.getLoginSrpSixUrls();
 
-
+        final IPlatformAuthorizationController platformAuthorizationController = new PlatformAuthorizationController();
         authClient = AuthorizationClient.getInstance(authServerUrls, DEFAULT_VERSION);
         AuthorizationServerResponse serverResponse;
 
         String sessionID = UUID.randomUUID().toString();
-
+      //  final Properties platformPropertiesFromAuthServer = authClient.getPlatformPropertiesFromAuthServer(username,
+//                                                                                                           System.getProperty(
+//                                                                                                               "jnlp.client.version"),
+//                                                                                                           sessionID);
+      //  LOGGER.info("PROPERTIES: {}" ,platformPropertiesFromAuthServer);
           /*String username = System.getProperty("DUKA_LIVE_USER");
           String password = System.getProperty("DUKA_LIVE_PW");*/
 
@@ -107,10 +126,149 @@ public class SRP6Test {
                 String autoLoginUserName = null;
                 DeviceIDBean deviceIDBean = null;
                 String rememberMeToken = null;
+        try {
+
+            final AtomicBoolean autologin = new AtomicBoolean(false);
+            final AtomicBoolean autoAuthByRememberMeToken = new AtomicBoolean(false);
+            final AtomicBoolean authByRememberMeTokenIsReady = new AtomicBoolean(false);
+            final ILoginDialogController loginDialogController = LoginDialogFactory.create(null);
+            final PlatformEnvironment demo3 = PlatformEnvironment.DEMO;
+            final PlatformEnvironment live3 = PlatformEnvironment.LIVE;
+
+            List<PlatformEnvironment> environments = new ArrayList<>();
+            environments.add(demo3);
+            environments.add(live3);
+            loginDialogController.setPlatformEnvironments(environments);
+            loginDialogController.addPlatformEnvironmentListener(new IPlatformEnvironmentListener() {
+                @Override
+                public void newEnvironmentSelected(final PlatformEnvironment platformEnvironment,
+                                                   final PlatformEnvironment platformEnvironment1) {
+                    LOGGER.info(platformEnvironment.getEnvironment());
+                }
+            });
+
+
+            SwingUtilities.invokeAndWait(new Runnable() {
+                public void run() {
+
+
+
+
+
+
+                   // loginDialogController.setLoginDialogMode(LoginDialogMode.STAND_ALONE);
+
+                    platformAuthorizationController.setLoginDialogController(loginDialogController);
+
+                    loginDialogController.setPlatformAuthorizationController(platformAuthorizationController);
+                    platformAuthorizationController.initialize();
+                  /*  PlatformInitUtils.initLookAndFeel();
+                    PlatformInitUtils.initStaticValues();*/
+                  /*  if (!GreedContext.isStandaloneInstallation()) {
+                        platformAuthorizationController = GreedContext.getPlatformAuthorizationController();
+                        platformAuthorizationController.initialize();
+                    }*/
+                    String username = System.getenv("DUKA_DEMO_USER");
+                    String password = System.getenv("DUKA_DEMO_PW");
+                   /* String username = System.getProperty("jnlp.client.username");
+                    String password = System.getProperty("jnlp.client.password");*/
+                   LOGGER.info("LOGIN: {} PASSWORD: {}",username,password);
+                    String instanceId = System.getProperty("jnlp.api.sid");
+                    String apiURL = System.getProperty("jnlp.api.url");
+                    String ticket = System.getProperty("jnlp.auth.ticket");
+                    String authToken = System.getProperty("jnlp.auth.token");
+                    String autoLoginUserName = null;
+                    DeviceIDBean deviceIDBean = null;
+                    String rememberMeToken = null;
+                    if (true) {
+                        try {
+                          //  ILoginDialogController loginDialogControllerx = GreedContext.getLoginDialogController();
+                            String platformEnvironment = System.getProperty("jnlp.client.mode");
+                            boolean rememberMeSupported = true; //GreedContext.isRememberMeSupported(platformEnvironment);
+                            if (rememberMeSupported) {
+                                String platformEnvironmentAsString =  System.getProperty("jnlp.client.mode");
+
+
+                                PlatformRememberMeAuthBean
+                                    authByRememberMeTokenBean = PlatformAuthUtil.getAuthByRememberMeTokenBean(platformEnvironmentAsString,
+                                                                                                              loginDialogController);
+                                if (authByRememberMeTokenBean.isAutoLoginIgnore()) {
+                                    loginDialogController.saveAutologinIgnoreFlag(false);
+                                } else if (authByRememberMeTokenBean.autoAuthByRememberMeTokenIsPossible()) {
+                                    autoLoginUserName = authByRememberMeTokenBean.getAutoLoginUserName();
+                                    rememberMeToken = authByRememberMeTokenBean.getRememberMeToken();
+                                    deviceIDBean = authByRememberMeTokenBean.getDeviceIDBean();
+                                    autoAuthByRememberMeToken.set(true);
+                                }
+
+                                if (authByRememberMeTokenBean.authByRememberMeTokenIsPossible()) {
+                                    authByRememberMeTokenIsReady.set(true);
+                                }
+                            }
+                        } catch (Throwable var15) {
+
+                        }
+                    }
+
+                    if (!ObjectUtils.isNullOrEmpty(username) && !ObjectUtils.isNullOrEmpty(password) && false) {
+                        autologin.set(true);
+                      //  GreedClient.this.doAutoLogin();
+                    } else if (!ObjectUtils.isNullOrEmpty(username) && !ObjectUtils.isNullOrEmpty(instanceId) && !ObjectUtils.isNullOrEmpty(apiURL) && !ObjectUtils.isNullOrEmpty(ticket)) {
+                        autologin.set(true);
+                     //   GreedClient.this.doAutoLoginFromBackOffice();
+                    } else if (!ObjectUtils.isNullOrEmpty(authToken)) {
+                        autologin.set(true);
+                     //   GreedClient.this.doAutoLoginFromBackOffice();
+                    } else {
+                        if (autoAuthByRememberMeToken.get()) {
+                            autologin.set(true);
+                          //  GreedClient.doAutoLogin(autoLoginUserName, rememberMeToken, deviceIDBean);
+                        }
+
+                    }
+                }
+            });
+         /*   if (!autologin.get()) {
+
+                loginDialogController.setLoginDialogState(ILoginDialogController.LoginDialogState.AUTHORIZATION_READY);
+                loginDialogController.setVisible(true);
+                loginDialogController.setFocusOnFirstEmptyField(false);
+                boolean dialogWithTwoViews = CompatibilityUtil.isDialogWithTwoViews(ILoginDialogController.class);
+                if (!dialogWithTwoViews) {
+                    LoginDialogBean loginDialogBean = loginDialogController.getLoginDialogBean();
+                    if (!autoAuthByRememberMeToken.get() && !authByRememberMeTokenIsReady.get()) {
+                        if (loginDialogBean.isPinSelected()) {
+                            loginDialogController.obtainCaptcha();
+                        }
+                    } else if (loginDialogBean.isPinSelected()) {
+                        loginDialogController.setPinCheckBoxSelected(false);
+                    }
+                }
+            }
+*/
+
+
+            loginDialogController.setLoginDialogState(ILoginDialogController.LoginDialogState.AUTHORIZATION_READY);
+            loginDialogController.setVisible(true);
+            loginDialogController.setFocusOnFirstEmptyField(false);
+            boolean dialogWithTwoViews = CompatibilityUtil.isDialogWithTwoViews(ILoginDialogController.class);
+            if (!dialogWithTwoViews) {
+                LoginDialogBean loginDialogBean = loginDialogController.getLoginDialogBean();
+                if (!autoAuthByRememberMeToken.get() && !authByRememberMeTokenIsReady.get()) {
+                    if (loginDialogBean.isPinSelected()) {
+                        loginDialogController.obtainCaptcha();
+                    }
+                } else if (loginDialogBean.isPinSelected()) {
+                    loginDialogController.setPinCheckBoxSelected(false);
+                }
+            }
+        } catch (Exception var8) {
+            LOGGER.error(var8.getMessage(), var8);
+        }
 
         if (useDemo) {
-            DClient client = new DClient();
-            client.connect(urlDemo,usernameD,passwordD);
+         /*   DClient client = new DClient();
+            client.connect(urlDemo,usernameD,passwordD);*/
 
            /* Thread.sleep(10000L);
             client.disconnect();
@@ -135,13 +293,13 @@ public class SRP6Test {
 //                                                                        JFOREXSDK_PLATFORM);
         } else {
 
-            String pin = PinDialog.showAndGetPin();
+          /*  String pin = PinDialog.showAndGetPin();
             serverResponse = authClient.getAPIsAndTicketUsingLogin_SRP6(username,
                                                                         password,
                                                                         captchaId,
                                                                         pin,
                                                                         sessionID,
-                                                                        JFOREXSDK_PLATFORM);
+                                                                        JFOREXSDK_PLATFORM);*/
         }
 
 

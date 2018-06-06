@@ -23,12 +23,22 @@ package org.softcake.yubari.connect.authorization;
  */
 public enum AuthorizationPropertiesNames {
 
-
-    JNLP_LOGIN_URL("jnlp.login.url"),
-    JNLP_SRP6_LOGIN_URL("jnlp.srp6.login.url"),
-    JNLP_CLIENT_MODE("jnlp.client.mode"),
+   /* JNLP_PLATFORM_LOGO_URL("jnlp.platform.logo.url"),
+    JNLP_COMPANY_LOGO_URL("jnlp.company.logo.url"),*/
+    JNLP_PLATFORM_MODE("jnlp.platform.mode"),
     JNLP_CLIENT_VERSION("jnlp.client.version"),
-    JAVA_NET_PREFER_IPV4_STACK("java.net.preferIPv4Stack");
+    JNLP_CLIENT_MODE("jnlp.client.mode"),
+    JNLP_PACK_ENABLED("jnlp.packEnabled"),
+    SUN_JAVA2D_D3D("sun.java2d.d3d"),
+    JNLP_PLATFORM_NAME("jnlp.platform.name"),
+    JNLP_LOCALIZE_REG_FORM_URL("jnlp.localize.reg.form.url"),
+    JAVA_NET_PREFER_IPV4_STACK("java.net.preferIPv4Stack"),
+    JNLP_HREF("jnlp.href"),
+   JNLP_LOGIN_URL("jnlp.login.url"),
+    JNLP_SRP6_LOGIN_URL("jnlp.srp6.login.url"),
+    JNLP_REGISTER_NEW_DEMO_URL("jnlp.register.new.demo.url"),
+    JNLP_FORGOTTEN_URL("jnlp.forgotten.url"),
+    JNLP_OPEN_LIVE_URL("jnlp.open.live.url");
 
 
     private final String value;

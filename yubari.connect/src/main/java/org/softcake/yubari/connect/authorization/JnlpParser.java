@@ -19,8 +19,17 @@ package org.softcake.yubari.connect.authorization;
 import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JAVA_NET_PREFER_IPV4_STACK;
 import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_CLIENT_MODE;
 import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_CLIENT_VERSION;
+import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_FORGOTTEN_URL;
+import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_HREF;
+import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_LOCALIZE_REG_FORM_URL;
 import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_LOGIN_URL;
+import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_OPEN_LIVE_URL;
+import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_PACK_ENABLED;
+import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_PLATFORM_MODE;
+import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_PLATFORM_NAME;
+import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_REGISTER_NEW_DEMO_URL;
 import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.JNLP_SRP6_LOGIN_URL;
+import static org.softcake.yubari.connect.authorization.AuthorizationPropertiesNames.SUN_JAVA2D_D3D;
 
 import com.google.common.base.Strings;
 import org.slf4j.Logger;
@@ -130,11 +139,28 @@ final class JnlpParser {
 
                         final HashMap<String, String> prop = parseProperties(streamReader);
 
-                        properties = new AuthorizationProperties(getProperty(JNLP_CLIENT_MODE, prop),
-                                                                 getProperty(JNLP_CLIENT_VERSION, prop),
-                                                                 getProperty(JNLP_LOGIN_URL, prop),
-                                                                 getProperty(JNLP_SRP6_LOGIN_URL, prop),
-                                                                 getProperty(JAVA_NET_PREFER_IPV4_STACK, prop));
+
+                        setSystemProperty(prop, JNLP_PLATFORM_MODE);
+                        setSystemProperty(prop, JNLP_CLIENT_VERSION);
+                        setSystemProperty(prop, JNLP_CLIENT_MODE);
+                        setSystemProperty(prop, JNLP_PACK_ENABLED);
+                        setSystemProperty(prop, SUN_JAVA2D_D3D);
+                        setSystemProperty(prop, JNLP_PLATFORM_NAME);
+                        setSystemProperty(prop, JNLP_LOCALIZE_REG_FORM_URL);
+                        setSystemProperty(prop, JAVA_NET_PREFER_IPV4_STACK);
+                        setSystemProperty(prop, JNLP_HREF);
+                        setSystemProperty(prop, JNLP_LOGIN_URL);
+                        setSystemProperty(prop, JNLP_SRP6_LOGIN_URL);
+                        setSystemProperty(prop, JNLP_REGISTER_NEW_DEMO_URL);
+                        setSystemProperty(prop, JNLP_FORGOTTEN_URL);
+                        setSystemProperty(prop, JNLP_OPEN_LIVE_URL);
+
+
+                        properties = new AuthorizationProperties(System.getProperty(JNLP_CLIENT_MODE.getValue()),
+                                                                 System.getProperty(JNLP_CLIENT_VERSION.getValue()),
+                                                                 System.getProperty(JNLP_LOGIN_URL.getValue()),
+                                                                 System.getProperty(JNLP_SRP6_LOGIN_URL.getValue()),
+                                                                 System.getProperty(JAVA_NET_PREFER_IPV4_STACK.getValue()));
 
                     }
                 }
@@ -156,6 +182,13 @@ final class JnlpParser {
             throw new XMLStreamException("The jnlp file has invalid properties");
         }
         return properties;
+    }
+
+    private static void setSystemProperty(final HashMap<String, String> prop,
+                                          final AuthorizationPropertiesNames jnlpPlatformMode)
+        throws XMLStreamException {
+
+        System.setProperty(jnlpPlatformMode.getValue(), getProperty(jnlpPlatformMode, prop));
     }
 
     private static String getProperty(final AuthorizationPropertiesNames name, final HashMap<String, String> properties)
