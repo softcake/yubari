@@ -26,7 +26,6 @@ import org.slf4j.LoggerFactory;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.security.NoSuchAlgorithmException;
 import java.util.regex.Pattern;
 
 /**
@@ -102,7 +101,59 @@ public final class UrlProvider {
     public static String encodeString(String string) {
         return Hashing.sha1().newHasher().putString(string, Charsets.UTF_8).hash().toString().toUpperCase();
     }
+    public static String getFormedUrl999(final URL baseUrl,
+                                          final String login,
+                                          final String oldTicket,
+                                          final String sessionId,
+                                          final String platform,
+                                          final String ver) throws UnsupportedEncodingException {
 
+        return baseUrl
+               + RELOGIN_AUTH_CONTEXT
+               + PLATFORM_PARAM
+               + "="
+               + platform
+               + "&"
+               + LOGIN_PARAM
+               + "="
+               + URLEncoder.encode(login, "UTF-8")
+               + "&"
+               + TICKET
+               + "="
+               + oldTicket
+               + "&"
+               + SESSION_ID_PARAM
+               + "="
+               + sessionId
+               + "&"
+               + VERSION_PARAM
+               + "="
+               + URLEncoder.encode(ver, "UTF-8")
+               + "&"
+               + WILL_PING_PARAM
+               + "=true";
+    }
+
+    public static String getFormedUrl988(final URL ur, final String ticket, final String login, final String sessionId)
+        throws UnsupportedEncodingException {
+
+        return ur
+               + SETTINGS_CONTEXT
+               + LOGIN_PARAM
+               + "="
+               + URLEncoder.encode(login, "UTF-8")
+               + "&"
+               + TICKET
+               + "="
+               + ticket
+               + "&"
+               + SESSION_ID_PARAM
+               + "="
+               + sessionId
+               + "&"
+               + STNGS_PARAM
+               + "=1";
+    }
 
     /**
      * The report URL.

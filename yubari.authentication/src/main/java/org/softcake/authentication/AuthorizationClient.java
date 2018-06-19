@@ -67,16 +67,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.security.NoSuchAlgorithmException;
+import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -318,6 +321,73 @@ public class AuthorizationClient {
 
     }
 
+    private static AuthorizationServerPropertiesResponse requestPlatformProperties(URL url) throws IOException {
+
+        String propertiesAsString = null;
+        BufferedReader reader = null;
+        int responseCode = 0;
+        AuthorizationServerPropertiesResponse authorizationServerPropertiesResponse = null;
+
+        try {
+            HttpURLConnection connection = getConnection(url);
+
+                responseCode =connection.getResponseCode();
+
+
+            String clientCountry;
+            try {
+                String clientIpAddress = connection.getHeaderField(IP_HTTP_HEADER);
+                if (clientIpAddress == null || clientIpAddress.trim().isEmpty()) {
+                    clientIpAddress = "n/a";
+                }
+
+                clientCountry = connection.getHeaderField(CLIENT_COUNTRY);
+                if (clientCountry == null || clientCountry.trim().isEmpty()) {
+                    clientCountry = "n/a";
+                }
+/*
+                if (authClient.ipInfoAlsMessageBean != null) {
+                    authClient.ipInfoAlsMessageBean.addParameter("CLIENT_IP_ADDRESS", clientIpAddress).addParameter(
+                        "CLIENT_COUNTRY",
+                        clientCountry);
+                    //                    PlatformServiceProvider.getInstance().setIpInfoAlsMessageBean(authClient
+                    // .ipInfoAlsMessageBean);
+                    //                    PlatformServiceProvider.getInstance().setClientCountry(clientCountry);
+                    authClient.ipInfoAlsMessageBean = null;
+                } else {
+                    LOGGER.error("The ipInfoAlsMessageBean is null.");
+                }*/
+            } catch (Throwable var13) {
+                LOGGER.error("Cannot get the Client-IP header field.");
+                LOGGER.error(var13.getMessage(), var13);
+            }
+
+            try {
+                reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                StringBuffer sb = new StringBuffer(8192);
+
+                do {
+                    clientCountry = reader.readLine();
+                    sb.append(clientCountry);
+                } while (clientCountry != null);
+
+                propertiesAsString = sb.toString();
+                propertiesAsString = propertiesAsString.trim();
+            } catch (Throwable var12) {
+                LOGGER.error(var12.getMessage(), var12);
+            }
+        } finally {
+            if (reader != null) {
+                reader.close();
+            }
+
+        }
+
+        authorizationServerPropertiesResponse = new AuthorizationServerPropertiesResponse(responseCode,
+                                                                                          propertiesAsString);
+        return authorizationServerPropertiesResponse;
+    }
+
     /**
      * @param errorMessage
      * @throws Exception
@@ -461,6 +531,130 @@ public class AuthorizationClient {
         this.configurationPool.clear();
         this.configurationPool.addAll(authServerUrls);
 
+    }
+
+
+    /**
+     * The report URL.
+     *
+     * @param reportKey the key
+     * @param baseUrl   the url
+     * @param stsToken  the requiered token
+     * @return the report url as String
+     */
+    public String getReportURL(String reportKey, String baseUrl, String stsToken) {
+
+        return UrlProvider.getReportURL(reportKey, baseUrl, stsToken);
+    }
+
+    /**
+     * @param baseUrl
+     * @param stsToken
+     * @param mode
+     * @return
+     */
+    public String getChatURL(String baseUrl, String stsToken, String mode) {
+
+        return UrlProvider.getChatURL(baseUrl, stsToken, mode);
+    }
+
+    /**
+     * @param apello
+     * @param sermo
+     * @param licentio
+     * @return
+     */
+    public AuthorizationServerStsTokenResponse getReportSTSToken(String apello, String sermo, String licentio) {
+
+        return this.getSTSToken(apello, sermo, licentio, FO_REPORTS_ACTION);
+    }
+
+    /**
+     * @param apello
+     * @param sermo
+     * @param licentio
+     * @return
+     */
+    public AuthorizationServerStsTokenResponse getChatSTSToken(String apello, String sermo, String licentio) {
+
+        return this.getSTSToken(apello, sermo, licentio, OPEN_CHAT_ACTION);
+    }
+
+    public AuthorizationServerStsTokenResponse getSTSToken(String apello,
+                                                           String sermo,
+                                                           String licentio,
+                                                           String action) {
+
+        String to = "FO";
+        AuthorizationServerStsTokenResponse authorizationServerStsTokenResponse = null;
+
+        for (int retryCount = 0; retryCount < this.configurationPool.size(); ++retryCount) {
+            try {
+                String baseUrl = this.getBaseUrl().toString();
+                String slash = "";
+                if (!baseUrl.endsWith("/")) {
+                    slash = "/";
+                }
+
+                StringBuilder stsTokenURLBuf = new StringBuilder(256);
+                stsTokenURLBuf.append(baseUrl)
+                              .append(slash)
+                              .append(STS_CONTEXT)
+                              .append("&")
+                              .append("appello=")
+                              .append(apello)
+                              .append("&")
+                              .append("sermo=")
+                              .append(sermo)
+                              .append("&")
+                              .append("licentio=")
+                              .append(licentio)
+                              .append("&")
+                              .append("to=")
+                              .append("FO")
+                              .append("&")
+                              .append("action=")
+                              .append(action);
+
+
+                URL stsTokenURL = new URL(stsTokenURLBuf.toString());
+                String response = null;
+
+                int authorizationServerResponseCode = 0;
+                HttpURLConnection connection = getConnection(stsTokenURL);
+                authorizationServerResponseCode = connection.getResponseCode();
+
+
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    response = reader.readLine();
+                }
+                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(response,
+                                                                                              authorizationServerResponseCode);
+                if (authorizationServerStsTokenResponse.isOK()) {
+                    return authorizationServerStsTokenResponse;
+                }
+
+                LOGGER.error("Cannot get STS token: {}", stsTokenURLBuf.toString());
+                LOGGER.error(authorizationServerStsTokenResponse.toString());
+            } catch (MalformedURLException e) {
+                LOGGER.error("Error occurred...", e);
+                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(
+                    AuthorizationServerResponseCode.BAD_URL);
+                return authorizationServerStsTokenResponse;
+            } catch (IOException e) {
+                LOGGER.error("Error occurred...", e);
+                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(ERROR_IO);
+            } catch (Throwable e) {
+                LOGGER.error("Error occurred...", e);
+                authorizationServerStsTokenResponse = new AuthorizationServerStsTokenResponse(
+                    AuthorizationServerResponseCode.INTERNAL_ERROR);
+                return authorizationServerStsTokenResponse;
+            }
+
+            this.configurationPool.markLastUsedAsBad();
+        }
+
+        return authorizationServerStsTokenResponse;
     }
 
     public Map<String, BufferedImage> getImageCaptcha() throws IOException {
@@ -1106,11 +1300,187 @@ public class AuthorizationClient {
         return authorizationServerResponse;
     }
 
+    public AuthorizationServerWLBOResponse getResponeForTheWLBOAutoLogin(String authToken) {
+
+        AuthorizationServerWLBOResponse authorizationServerWLBOResponse = null;
+        if (this.configurationPool.size() == 0) {
+            LOGGER.error("No authorization url provided.");
+            authorizationServerWLBOResponse
+                = new AuthorizationServerWLBOResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
+            return authorizationServerWLBOResponse;
+        } else {
+            for (int retryCount = 0; retryCount < this.configurationPool.size(); ++retryCount) {
+                try {
+                    String baseUrl = this.getBaseUrl().toString();
+                    String slash = "";
+                    if (!baseUrl.endsWith("/")) {
+                        slash = "/";
+                    }
+
+                    StringBuilder authURLBuf = new StringBuilder(256);
+                    authURLBuf.append(baseUrl).append(slash).append(STS_WLBO).append("&").append("indicium=").append(
+                        authToken);
+                    LOGGER.debug("Authorization url={}", authURLBuf);
+                    URL stsTokenURL = new URL(authURLBuf.toString());
+                    String response = null;
+                    BufferedReader reader = null;
+                    int authorizationServerResponseCode = 0;
+                    HttpURLConnection connection = getConnection(stsTokenURL);
+
+                        authorizationServerResponseCode =  connection.getResponseCode();
+
+
+                    try {
+                        reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                        response = reader.readLine();
+                    } catch (Throwable var24) {
+                        ;
+                    } finally {
+                        if (reader != null) {
+                            try {
+                                reader.close();
+                            } catch (Throwable e) {
+                                LOGGER.error("Error occurred...", e);
+                            }
+                        }
+
+                    }
+
+                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(response,
+                                                                                          authorizationServerResponseCode);
+                    if (authorizationServerWLBOResponse.isOK()) {
+                        return authorizationServerWLBOResponse;
+                    }
+
+                    LOGGER.error("Wrong response, URL={}, response={}"
+                                 ,authURLBuf,authorizationServerWLBOResponse);
+                } catch (MalformedURLException e) {
+                    LOGGER.error("Error occurred...", e);
+                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(
+                        AuthorizationServerResponseCode.BAD_URL);
+                    return authorizationServerWLBOResponse;
+                } catch (IOException e) {
+                    LOGGER.error("Error occurred...", e);
+                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(ERROR_IO);
+                } catch (Throwable e) {
+                    LOGGER.error("Error occurred...", e);
+                    authorizationServerWLBOResponse = new AuthorizationServerWLBOResponse(
+                        AuthorizationServerResponseCode.INTERNAL_ERROR);
+                    return authorizationServerWLBOResponse;
+                }
+
+                this.configurationPool.markLastUsedAsBad();
+            }
+
+            return authorizationServerWLBOResponse;
+        }
+    }
+
     public String getFeedUrlAndTicket(String login, String platformTicket, String sessionId)
         throws IOException, NoSuchAlgorithmException {
 
         String result = null;
         return (String) result;
+    }
+
+    public Properties getAllProperties(String login, String ticket, String sessionId)
+        throws IOException, NoSuchAlgorithmException, Exception {
+
+        int retryCount = 1;
+        AuthorizationServerPropertiesResponse propertiesResponse = null;
+        SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        String formedUrl = null;
+
+        Properties platformProperties;
+        while (propertiesResponse == null || !propertiesResponse.isOK()) {
+            try {
+
+
+                formedUrl = UrlProvider.getFormedUrl988(this.getBaseUrl(), ticket, login, sessionId);
+                URL url = new URL(formedUrl);
+                LOGGER.info("Account settings request: retry count = {}, time = {}",
+                            retryCount,
+                            DATE_FORMAT.format(System.currentTimeMillis()));
+                LOGGER.debug(">> [{}]", url);
+                propertiesResponse = requestPlatformProperties(url);
+                if (propertiesResponse.isOK()) {
+                    LOGGER.info("Account settings received: retry count = {}, time = {}",
+                                retryCount,
+                                DATE_FORMAT.format(System.currentTimeMillis()));
+                    platformProperties = propertiesResponse.getPlatformProperties();
+                 /*   if (authClient.isSnapshotVersion()) {
+                        LOGGER.debug("Account settings << [{}]", platformProperties);
+                    }*/
+
+                    try {
+                        int[] times = (int[]) ((int[]) platformProperties.get("marketTimes"));
+                        if (times != null) {
+                            LOGGER.debug("MarketTimes from "
+                                         + times[0]
+                                         + ":"
+                                         + times[1]
+                                         + " to "
+                                         + times[2]
+                                         + ":"
+                                         + times[3]);
+                        }
+                    } catch (NullPointerException e) {
+                        LOGGER.error("Error occurred...", e);
+                    }
+                    break;
+                }
+
+                this.configurationPool.markLastUsedAsBad();
+            } catch (IOException e) {
+                LOGGER.info("Cannot get the platform properties, url={}", formedUrl);
+                propertiesResponse = new AuthorizationServerPropertiesResponse(ERROR_IO);
+                this.configurationPool.markLastUsedAsBad();
+                LOGGER.error("Error occurred...", e);
+            } catch (Throwable e) {
+                LOGGER.info("Cannot get the platform properties, url={}", formedUrl);
+                propertiesResponse
+                    = new AuthorizationServerPropertiesResponse(AuthorizationServerResponseCode.INTERNAL_ERROR);
+                this.configurationPool.markLastUsedAsBad();
+                LOGGER.error("Error occurred...", e);
+            }
+
+            if (propertiesResponse.getResponseCode() == AuthorizationServerResponseCode.TICKET_EXPIRED) {
+                handleNoAccountSettings(propertiesResponse.getResponseCode().getError());
+            }
+
+            if (retryCount >= this.configurationPool.size()) {
+                AuthorizationServerResponseCode responseCode = propertiesResponse.getResponseCode();
+                if (responseCode != null) {
+                    String errorMessage = responseCode.getError();
+                    if (responseCode != AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED) {
+                        errorMessage = AuthorizationServerResponseCode.NO_PROPERTIES_RECEIVED.getMessage()
+                                       + ". "
+                                       + errorMessage;
+                    }
+
+                    handleNoAccountSettings(errorMessage);
+                } else {
+                    handleNoAccountSettings((String) null);
+                }
+            }
+
+            ++retryCount;
+
+            try {
+                Thread.sleep(3000L);
+            } catch (Throwable e) {
+                LOGGER.error("Error occurred...", e);
+            }
+        }
+
+        boolean printProperties = false;
+        if (LOGGER.isDebugEnabled() && printProperties && propertiesResponse != null) {
+            propertiesResponse.printProperties();
+        }
+
+        platformProperties = propertiesResponse.getPlatformProperties();
+        //AvailableInstrumentProvider.INSTANCE.init(platformProperties);
+        return platformProperties;
     }
 
 

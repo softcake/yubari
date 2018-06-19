@@ -17,7 +17,6 @@
 package org.softcake.authentication.dds2.greed;
 
 import org.softcake.authentication.AuthorizationClient;
-import org.softcake.authentication.AuthorizationServerResponse;
 import org.softcake.authentication.CaptchaParametersBean;
 import org.softcake.authentication.CommonContext;
 
@@ -135,7 +134,8 @@ public class PlatformAuthorizationController implements IPlatformAuthorizationCo
         loginDialogBean.setPinSelected(true);
         this.loginDialogController.setLoginDialogState(LoginDialogState.AUTHORIZATION_CANCEL_DISABLE);
        // this.loginDialogController.closeLoginDialog();
-      // ConnectAction connectAction = new ConnectAction(captchaId, secureCode, rememberMe, deviceIDBean, rememberMeToken);
+      ConnectAction connectAction = new ConnectAction(this.loginDialogController, captchaId, secureCode, rememberMe, deviceIDBean, rememberMeToken);
+      connectAction.doAction();
        /*  GreedContext.publishEvent(connectAction);*/
     }
 

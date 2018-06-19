@@ -29,7 +29,6 @@ import com.dukascopy.login.controller.ILoginDialogController;
 import com.dukascopy.login.controller.IPlatformAuthorizationController;
 import com.dukascopy.login.controller.IPlatformEnvironmentListener;
 import com.dukascopy.login.controller.LoginDialogBean;
-import com.dukascopy.login.controller.LoginDialogMode;
 import com.dukascopy.login.controller.PlatformEnvironment;
 import com.dukascopy.login.service.account.DeviceIDBean;
 import com.dukascopy.login.utils.ObjectUtils;
@@ -44,7 +43,6 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -107,6 +105,8 @@ public class SRP6Test {
         AuthorizationServerResponse serverResponse;
 
         String sessionID = UUID.randomUUID().toString();
+
+        System.setProperty("SESSION_ID",sessionID);
       //  final Properties platformPropertiesFromAuthServer = authClient.getPlatformPropertiesFromAuthServer(username,
 //                                                                                                           System.getProperty(
 //                                                                                                               "jnlp.client.version"),
