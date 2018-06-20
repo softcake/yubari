@@ -82,7 +82,8 @@ ext {
         (it.name in ["yubari.connect",
                      "yubari.transport",
                      "yubari.authentication",
-                     "yubari.netty"])
+                     "yubari.netty",
+                     "yubari.loginform"])
     }
 
     integTestModules = projectModules.findAll {

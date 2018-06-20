@@ -17,25 +17,18 @@
 package org.softcake.authentication.dds2.greed;
 
 import org.softcake.authentication.CommonContext;
+import org.softcake.yubari.loginform.controller.ILoginDialogController;
+import org.softcake.yubari.loginform.controller.IPlatformEnvironmentListener;
+import org.softcake.yubari.loginform.controller.Language;
+import org.softcake.yubari.loginform.controller.LoginDialogBean;
+import org.softcake.yubari.loginform.controller.PlatformEnvironment;
+import org.softcake.yubari.loginform.resources.IResourcesProvider;
+import org.softcake.yubari.loginform.resources.ResourcesProviderFactory;
+import org.softcake.yubari.loginform.service.AppearanceThemeManager;
+import org.softcake.yubari.loginform.service.AppearanceThemesSettingsStorage;
+import org.softcake.yubari.loginform.service.UICoreServiceProvider;
 
 
-import com.dukascopy.login.controller.ILoginDialogController;
-import com.dukascopy.login.controller.IPlatformEnvironmentListener;
-import com.dukascopy.login.controller.Language;
-import com.dukascopy.login.controller.LoginDialogBean;
-import com.dukascopy.login.controller.PlatformEnvironment;
-import com.dukascopy.login.controller.PlatformEnvironmentParametersBean;
-import com.dukascopy.login.resources.IResourcesProvider;
-import com.dukascopy.login.resources.ResourcesProviderFactory;
-import com.dukascopy.login.service.AppearanceThemeManager;
-import com.dukascopy.login.service.AppearanceThemesSettingsStorage;
-import com.dukascopy.login.service.UICoreServiceProvider;
-import com.dukascopy.login.service.account.UserBean;
-import com.dukascopy.login.service.account.storage.api.IAccountService;
-import com.dukascopy.login.settings.CurrentLoginFormSettins;
-import com.dukascopy.login.settings.DefaultLoginFormSettins;
-import com.dukascopy.login.utils.JNLPObject;
-import com.dukascopy.login.utils.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

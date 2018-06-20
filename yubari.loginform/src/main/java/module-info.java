@@ -1,13 +1,12 @@
 /**
- * @author The softcake authors.
- */
-module org.softcake.yubari.authentication {
+ * @author René Neubert
+ */module org.softcake.yubari.loginform {
     requires auth.protocol.client;
     requires org.slf4j;
     requires srp6a;
     requires json;
     requires java.desktop;
-   requires com.google.common;
+    requires com.google.common;
     requires org.softcake.yubari.connect;
     requires cherry.core;
     requires transport.common;
@@ -18,14 +17,10 @@ module org.softcake.yubari.authentication {
     requires JForex.API;
     requires java.sql;
     requires io.reactivex.rxjava2;
-   requires org.softcake.yubari.loginform;
     requires java.jnlp;
+    requires commons.lang3;
 
-exports org.softcake.authentication.dds2.greed;
-    exports org.softcake.authentication;
-    //requires transport.common;
-   // requires netty.transport.client;
-    //requires transport.common;
-
-
+    exports org.softcake.yubari.loginform.controller;
+    exports org.softcake.yubari.loginform.resources;
+    exports org.softcake.yubari.loginform.service;
 }

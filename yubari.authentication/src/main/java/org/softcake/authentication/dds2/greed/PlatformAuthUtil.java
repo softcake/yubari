@@ -30,44 +30,50 @@ public class PlatformAuthUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(PlatformAuthUtil.class);
 
     public PlatformAuthUtil() {
+
     }
 
-    public static boolean authByRememberMeTokenIsPossible(String platformEnvironmentAsString, ILoginDialogController loginDialogController) {
-        PlatformRememberMeAuthBean authByRememberMeTokenBean = getAuthByRememberMeTokenBean(platformEnvironmentAsString, loginDialogController);
-        boolean authByRememberMeTokenIsPossible = authByRememberMeTokenBean.authByRememberMeTokenIsPossible();
+    public static boolean authByRememberMeTokenIsPossible(final String platformEnvironmentAsString,
+                                                          final ILoginDialogController loginDialogController) {
+
+        final PlatformRememberMeAuthBean authByRememberMeTokenBean = getAuthByRememberMeTokenBean(platformEnvironmentAsString,
+                                                                                                  loginDialogController);
+        final boolean authByRememberMeTokenIsPossible = authByRememberMeTokenBean.authByRememberMeTokenIsPossible();
         return authByRememberMeTokenIsPossible;
     }
 
-    public static PlatformRememberMeAuthBean getAuthByRememberMeTokenBean(String platformEnvironmentAsString, ILoginDialogController loginDialogController) {
-        PlatformRememberMeAuthBean platformRememberMeAuthBean = new PlatformRememberMeAuthBean();
+    public static PlatformRememberMeAuthBean getAuthByRememberMeTokenBean(final String platformEnvironmentAsString,
+                                                                          final ILoginDialogController
+                                                                              loginDialogController) {
+
+        final PlatformRememberMeAuthBean platformRememberMeAuthBean = new PlatformRememberMeAuthBean();
 
         try {
-            boolean rememberMeSupported = true; //GreedContext.isRememberMeSupported(platformEnvironmentAsString);
+            final boolean rememberMeSupported = true; //GreedContext.isRememberMeSupported(platformEnvironmentAsString);
             if (rememberMeSupported) {
                 String autoLoginUserName = null;
                 String rememberMeToken = null;
-                IAccountService accountService = loginDialogController.getAccountService();
+                final IAccountService accountService = loginDialogController.getAccountService();
 
 
-
-                PlatformEnvironment platformEnvironment = PlatformEnvironment.fromValue(platformEnvironmentAsString);
-                UserBean userBean = accountService.getLastLoggedInUserAsRememberMe(platformEnvironment);
-                LoginDialogBean loginDialogBean = loginDialogController.getLoginDialogBean();
-                boolean autoLoginFlag = loginDialogBean.isAutologin();
-                boolean autoLoginIgnore = loginDialogBean.isAutoLoginIgnore();
+                final PlatformEnvironment platformEnvironment = PlatformEnvironment.fromValue(platformEnvironmentAsString);
+                final UserBean userBean = accountService.getLastLoggedInUserAsRememberMe(platformEnvironment);
+                final LoginDialogBean loginDialogBean = loginDialogController.getLoginDialogBean();
+                final boolean autoLoginFlag = loginDialogBean.isAutologin();
+                final boolean autoLoginIgnore = loginDialogBean.isAutoLoginIgnore();
                 if (userBean != null) {
                     autoLoginUserName = userBean.getUserName();
                     rememberMeToken = userBean.getRememberMeToken();
                 }
 
-                DeviceIDBean deviceIDBean = accountService.getDeviceIDBean();
+                final DeviceIDBean deviceIDBean = accountService.getDeviceIDBean();
                 platformRememberMeAuthBean.setAutoLoginIgnore(autoLoginIgnore);
                 platformRememberMeAuthBean.setAutoLoginFlag(autoLoginFlag);
                 platformRememberMeAuthBean.setAutoLoginUserName(autoLoginUserName);
                 platformRememberMeAuthBean.setRememberMeToken(rememberMeToken);
                 platformRememberMeAuthBean.setDeviceIDBean(deviceIDBean);
             }
-        } catch (Throwable var13) {
+        } catch (final Throwable var13) {
             LOGGER.error(var13.getMessage(), var13);
         }
 

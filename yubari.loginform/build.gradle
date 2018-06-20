@@ -1,0 +1,15 @@
+
+plugins {
+    id 'java-library'
+}
+
+javaModule.name = "org.softcake.yubari.loginform"
+javadoc.enabled = false
+description = " The Connect module of the Yubari project."
+
+dependencies {
+    implementation project(':yubari.connect')
+    implementation project(':yubari.netty')
+
+    implementation 'org.softcake.cherry:cherry-core:1.1.0'
+}

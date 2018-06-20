@@ -1,5 +1,3 @@
-
-
 /*
  * Copyright 2018 softcake.org.
  *
@@ -15,24 +13,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Require Java 9 or higher
 
-int javaVersion = Integer.valueOf(JavaVersion.current().getMajorVersion())
-if (javaVersion < 9) {
+package org.softcake.yubari.loginform.ui.laf;
 
-	throw new GradleException("The build requires Java 9 or higher. " +
+import java.util.HashMap;
+import java.util.Map;
 
-		"Currently executing with Java " + javaVersion + ".")
+public class Style {
+    private String id;
+    private Map<String, Object> propertyMap = new HashMap();
 
+    public Style() {
+    }
+
+    public String getId() {
+        return this.id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public Map<String, Object> getPropertyMap() {
+        return this.propertyMap;
+    }
+
+    public void setPropertyMap(Map<String, Object> colorsMap) {
+        this.propertyMap = colorsMap;
+    }
 }
-
-rootProject.name = "yubari"
-
-include "documentation"
-include "yubari.connect"
-include "yubari.transport"
-include "yubari.authentication"
-include "yubari.netty"
-include "yubari.loginform"
-include "example"
-

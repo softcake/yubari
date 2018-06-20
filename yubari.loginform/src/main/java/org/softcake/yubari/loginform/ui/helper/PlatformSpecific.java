@@ -1,5 +1,3 @@
-
-
 /*
  * Copyright 2018 softcake.org.
  *
@@ -15,24 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Require Java 9 or higher
 
-int javaVersion = Integer.valueOf(JavaVersion.current().getMajorVersion())
-if (javaVersion < 9) {
+package org.softcake.yubari.loginform.ui.helper;
 
-	throw new GradleException("The build requires Java 9 or higher. " +
-
-		"Currently executing with Java " + javaVersion + ".")
-
+public interface PlatformSpecific {
+    boolean MACOSX = UIContext.getOperatingSystemType().equals(UIContext.OsType.MACOSX);
+    boolean LINUX = UIContext.getOperatingSystemType().equals(UIContext.OsType.LINUX);
+    boolean WINDOWS = UIContext.getOperatingSystemType().equals(UIContext.OsType.WINDOWS);
+    boolean WIN2000 = UIContext.getOperatingSystemType().equals(UIContext.OsType.WIN2000);
 }
-
-rootProject.name = "yubari"
-
-include "documentation"
-include "yubari.connect"
-include "yubari.transport"
-include "yubari.authentication"
-include "yubari.netty"
-include "yubari.loginform"
-include "example"
-
